@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>SHAP Waterfall Plot</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  </head>
+  <body>
+    <div id="waterfall"></div>
+    <script>
+      const expected_value = -1.429622497678981;
+      const shap_values = [2.39, 1.63, 0.41, 0.37, 0.25, 0.22, -1.34]; // SHAP values
+      const feature_names = [
+        "Peptostreptococcus_stomatis",
+        "Parvimonas_unclassified",
+        "Granulicatella_unclassified",
+        "Lachnospiraceae_bacterium_5_1_63FAA",
+        "Megamonas_funiformis",
+        "Streptococcus_anginosus",
+        "194 other features",
+      ];
+      const baseValue = -1.43; // ค่า base value
+      const cumulative = [baseValue]; // ค่าที่สะสม
+
+      // คำนวณ cumulative impact
+      shap_values.forEach((val, i) => {
+        cumulative.push(cumulative[i] + val);
+      });
+
+      // สร้างข้อมูลสำหรับ Plotly Waterfall
+      const trace = {
+        y: feature_names,
+        x: cumulative.slice(1),
+        type: "waterfall",
+        text: shap_values.map((v) =>
+          v > 0 ? `+${v.toFixed(2)}` : `${v.toFixed(2)}`
+        ),
+        textposition: "outside",
+        decreasing: { line: { color: "blue" } },
+        increasing: { line: { color: "red" } },
+        connector: { line: { color: "gray" } },
+      };
+
+      const layout = {
+        title: "Waterfall Plot for SHAP values",
+        yaxis: {
+          title: "Features",
+        },
+        xaxis: {
+          title: "Cumulative Impact (f(x))",
+        },
+      };
+
+      Plotly.newPlot("waterfall", [trace], layout);
+    </script>
+  </body>
+</html>
