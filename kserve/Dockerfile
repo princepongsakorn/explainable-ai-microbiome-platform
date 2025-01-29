@@ -4,10 +4,6 @@ FROM python:3.12.6-slim
 
 ENV APP_HOME /app
 
-ENV AWS_ACCESS_KEY_ID=
-ENV AWS_SECRET_ACCESS_KEY=
-ENV AWS_DEFAULT_REGION=ap-southeast-1
-
 WORKDIR $APP_HOME
 
 RUN apt-get update && apt-get install -y \
