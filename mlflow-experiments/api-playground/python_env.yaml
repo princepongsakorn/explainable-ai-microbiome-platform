@@ -5,7 +5,6 @@ dependencies:
   - scipy
   - scikit-learn
   - shap
-  - shapmat==0.1.5
   - numpy==2.0.2
   - boto3
   - joblib
