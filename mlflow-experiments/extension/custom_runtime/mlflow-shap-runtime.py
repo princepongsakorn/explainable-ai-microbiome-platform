@@ -12,7 +12,7 @@ class MLflowShapRuntime(Model):
         self.name = name
         self.model = None
         self.explainer = None
-        self.run_id = os.environ.get("RUN_ID", None)  # รับ run_id จาก environment
+        self.run_id = "8912895204284e1780e3953fdbe39929"
 
         if not self.run_id:
             raise ValueError("RUN_ID environment variable is required")
