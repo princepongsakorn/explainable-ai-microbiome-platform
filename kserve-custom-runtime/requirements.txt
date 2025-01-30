@@ -1,0 +1,14 @@
+kserve
+psutil
+xgboost
+mlflow
+cloudpickle
+matplotlib
+numpy
+numba
+pandas
+scikit-learn
+scipy
+shap
+boto3
+joblib
