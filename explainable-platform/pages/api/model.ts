@@ -1,20 +1,24 @@
 import { AxiosProgressEvent } from "axios";
 import { httpClient } from "./httpClient";
-
 export interface IPredictResponse {
-  local_explanation_predictions: LocalExplanationPrediction[];
+  summary: {
+    beeswarm: string; //base64 of beeswarm
+    heatmap: string; //base64 of heatmap
+  };
+  predictions: IPredictions[];
 }
-
-export interface LocalExplanationPrediction {
-  index: number;
-  pred_proba: number;
-  pred_class: number;
-  plot: string;
+export interface IPredictions {
+  id: string;
+  proba: number;
+  class: number;
+  plot: {
+    waterfall: string; //base64 of waterfall
+  };
 }
 export interface IModelPayload {
   dataframe_split: {
-    columns: any;
-    data: any[];
+    columns: string[];
+    data: number[][];
   };
 }
 
