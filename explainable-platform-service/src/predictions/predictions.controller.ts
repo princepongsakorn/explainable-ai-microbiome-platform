@@ -1,6 +1,9 @@
 import {
   Controller,
   Post,
+  Get,
+  Param,
+  Query,
   UploadedFile,
   UseInterceptors,
   Body,
@@ -20,5 +23,19 @@ export class PredictionsController {
     @Body('modelName') modelName: string,
   ) {
     return this.predictionsService.createPrediction(file, modelName);
+  }
+
+  @Get()
+  async getPredictions() {
+    return this.predictionsService.getPredictions();
+  }
+
+  @Get(':predictionId/records')
+  async getPredictionRecords(
+    @Param('predictionId') predictionId: string,
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 10,
+  ) {
+    return this.predictionsService.getPredictionRecords(predictionId, page, limit);
   }
 }
