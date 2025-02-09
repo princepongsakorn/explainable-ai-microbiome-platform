@@ -3,7 +3,7 @@ kind: "InferenceService"
 metadata:
   labels:
     controller-tools.k8s.io: "1.0"
-  name: "kserve-custom-model"
+  name: "kserve-custom-inference-service"
 spec:
   predictor:
     containers:
@@ -17,18 +17,25 @@ spec:
           cpu: "500m"
           env:
       env:
+      - name: MODEL_NAME
+        value: sample-crc
+      - name: MLFLOW_URL
+        valueFrom:
+          secretKeyRef:
+            name: mlflow-secret
+            key: MLFLOW_URL
       - name: AWS_ACCESS_KEY_ID
         valueFrom:
           secretKeyRef:
-            name: aws-secret
+            name: mlflow-secret
             key: AWS_ACCESS_KEY_ID
       - name: AWS_SECRET_ACCESS_KEY
         valueFrom:
           secretKeyRef:
-            name: aws-secret
+            name: mlflow-secret
             key: AWS_SECRET_ACCESS_KEY
       - name: AWS_DEFAULT_REGION
         valueFrom:
           secretKeyRef:
-            name: aws-secret
+            name: mlflow-secret
             key: AWS_DEFAULT_REGION
