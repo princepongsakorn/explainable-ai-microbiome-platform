@@ -1,0 +1,46 @@
+import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Prediction } from '../models/prediction.entity';
+import { PredictionRecord } from '../models/prediction-record.entity';
+import { parseCsv } from '../utils/csv-parser.util';
+import { QueueService } from '../queue/queue.service';
+import { Multer } from 'multer';
+import { v4 as uuidv4 } from 'uuid';
+
+@Injectable()
+export class PredictionsService {
+  constructor(
+    @InjectRepository(Prediction)
+    private predictionsRepository: Repository<Prediction>,
+    @InjectRepository(PredictionRecord)
+    private recordsRepository: Repository<PredictionRecord>,
+    private readonly queueService: QueueService,
+  ) {}
+
+  async createPrediction(file: Multer.File, modelName: string) {
+    const jsonData = await parseCsv(file.buffer.toString());
+
+    const predictionId = uuidv4();
+    const prediction = this.predictionsRepository.create({
+      id: predictionId,
+      modelName,
+      dfColumns: jsonData[0],
+    });
+    await this.predictionsRepository.save(prediction);
+
+    for (const row of jsonData) {
+      const recordId = uuidv4();
+      const record = this.recordsRepository.create({
+        id: recordId,
+        prediction,
+        dfData: row,
+      });
+      await this.recordsRepository.save(record);
+    }
+
+    await this.queueService.addPredictionJob(prediction.id);
+
+    return { message: 'Prediction Created', predictionId: prediction.id };
+  }
+}
