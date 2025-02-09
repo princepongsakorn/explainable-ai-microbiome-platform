@@ -256,27 +256,113 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 @app.route("/v1/explain/beeswarm/<model_name>", methods=["POST"])
-def predict_beeswarm(model_name):
+def explain_beeswarm(model_name):
     model_loader = ModelLoader(model_name)
     model, input_columns, explainer = model_loader.load()
-    return jsonify({"result": "base64"})
+    
+    if model is None:
+        return jsonify({"error": f"Model {model_name} not found"}), 404
+    try:
+        req_json = request.get_json()
+
+        if "dataframe_split" not in req_json or "data" not in req_json["dataframe_split"] or "columns" not in req_json["dataframe_split"]:
+            return jsonify({"error": "Invalid request format. Expecting 'dataframe_split' with 'data' and 'columns'."}), 400
+
+        # Convert input data to DataFrame
+        columns = req_json["dataframe_split"]["columns"]
+        data = req_json["dataframe_split"]["data"]
+
+        input_df = pd.DataFrame(data=data, columns=columns)
+        logger.info(input_df.head())
+        # Transform input DataFrame to match model requirements
+        input_data = transformer(input_df, input_columns)  
+        logger.info(input_data.head())
+
+        shap_object = get_shap_value(explainer, X=input_data)
+        beeswarm = get_beeswarm(shap_object.explanation)
+
+        return jsonify({"beeswarm": beeswarm})
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/v1/explain/heatmap/<model_name>", methods=["POST"])
-def predict_heatmap(model_name):
+def explain_heatmap(model_name):
     model_loader = ModelLoader(model_name)
     model, input_columns, explainer = model_loader.load()
-    return jsonify({"result": "base64"})
+    
+    if model is None:
+        return jsonify({"error": f"Model {model_name} not found"}), 404
+    try:
+        req_json = request.get_json()
+
+        if "dataframe_split" not in req_json or "data" not in req_json["dataframe_split"] or "columns" not in req_json["dataframe_split"]:
+            return jsonify({"error": "Invalid request format. Expecting 'dataframe_split' with 'data' and 'columns'."}), 400
+
+        # Convert input data to DataFrame
+        columns = req_json["dataframe_split"]["columns"]
+        data = req_json["dataframe_split"]["data"]
+
+        input_df = pd.DataFrame(data=data, columns=columns)
+        logger.info(input_df.head())
+        # Transform input DataFrame to match model requirements
+        input_data = transformer(input_df, input_columns)  
+        logger.info(input_data.head())
+
+        shap_object = get_shap_value(explainer, X=input_data)
+        heatmap = get_heatmap(shap_object.explanation)
+
+        return jsonify({"heatmap": heatmap})
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/v1/explain/waterfall/<model_name>", methods=["POST"])
-def predict_waterfall(model_name):
+def explain_waterfall(model_name):
     model_loader = ModelLoader(model_name)
     model, input_columns, explainer = model_loader.load()
-    return jsonify([{"id": "1", "result": "base64"}])
+    
+    if model is None:
+        return jsonify({"error": f"Model {model_name} not found"}), 404
+    try:
+        req_json = request.get_json()
+
+        if "dataframe_split" not in req_json or "data" not in req_json["dataframe_split"] or "columns" not in req_json["dataframe_split"]:
+            return jsonify({"error": "Invalid request format. Expecting 'dataframe_split' with 'data' and 'columns'."}), 400
+
+        # Convert input data to DataFrame
+        columns = req_json["dataframe_split"]["columns"]
+        data = req_json["dataframe_split"]["data"]
+
+        input_df = pd.DataFrame(data=data, columns=columns)
+        logger.info(input_df.head())
+        # Transform input DataFrame to match model requirements
+        input_data = transformer(input_df, input_columns)  
+        logger.info(input_data.head())
+
+        shap_object = get_shap_value(explainer, X=input_data)
+        explain = [
+            {
+                "id": idx,
+                 "waterfall": get_local_waterfall_plot(
+                        subject_id=idx,
+                        shap_value_object=shap_object
+                )
+            }
+            for idx in zip(
+                input_data.index,
+            )
+        ]
+
+        return jsonify({"waterfall": explain})
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/v1/predict/<model_name>", methods=["POST"])
 def predict(model_name):
     model_loader = ModelLoader(model_name)
-    model, input_columns, explainer = model_loader.load()
+    model, input_columns = model_loader.load()
     
     if model is None:
         return jsonify({"error": f"Model {model_name} not found"}), 404
@@ -307,23 +393,11 @@ def predict(model_name):
         y_pred_proba_df = pd.DataFrame(y_pred_proba, index=X_test.index, columns=["Y_proba"])
         y_pred_proba_df["Y_class"] = y_pred_class
 
-        shap_object = get_shap_value(explainer, X=input_data)
-
-        beeswarm = get_beeswarm(shap_object.explanation)
-        heatmap = get_heatmap(shap_object.explanation)
-        
-        summary = {"beeswarm": beeswarm, "heatmap": heatmap}
         predictions = [
             {
                 "id": idx,
                 "proba": pred_proba,
                 "class": pred_class,
-                "plot": {
-                    "waterfall": get_local_waterfall_plot(
-                        subject_id=idx,
-                        shap_value_object=shap_object
-                    )
-                }
             }
             for idx, (pred_proba, pred_class) in zip(
                 y_pred_proba_df.index,
@@ -331,7 +405,7 @@ def predict(model_name):
             )
         ]
 
-        return jsonify({"summary": summary, "predictions": predictions})
+        return jsonify({predict: predictions})
     
     except Exception as e:
         return jsonify({"error": str(e)}), 500
