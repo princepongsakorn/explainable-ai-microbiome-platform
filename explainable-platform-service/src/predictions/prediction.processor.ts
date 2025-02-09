@@ -4,8 +4,8 @@ import { Job } from 'bull';
 import { HttpService } from '@nestjs/axios';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Prediction } from '../models/prediction.entity';
-import { PredictionRecord } from '../models/prediction-record.entity';
+import { Prediction } from '../entity/prediction.entity';
+import { PredictionRecord } from '../entity/prediction-record.entity';
 import { StorageService } from '../storage/storage.service';
 import { ConfigService } from '@nestjs/config';
 import {
