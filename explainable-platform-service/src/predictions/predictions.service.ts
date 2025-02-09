@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Prediction } from '../models/prediction.entity';
@@ -42,5 +42,38 @@ export class PredictionsService {
     await this.queueService.addPredictionJob(prediction.id);
 
     return { message: 'Prediction Created', predictionId: prediction.id };
+  }
+
+  async getPredictions() {
+    return this.predictionsRepository.find({
+      select: ['id', 'modelName', 'heatmap', 'beeswarm'],
+    });
+  }
+
+  async getPredictionRecords(
+    predictionId: string,
+    page: number,
+    limit: number,
+  ) {
+    const prediction = await this.predictionsRepository.findOne({
+      where: { id: predictionId },
+    });
+    if (!prediction)
+      throw new NotFoundException(`Prediction ID ${predictionId} not found`);
+
+    const [records, total] = await this.recordsRepository.findAndCount({
+      where: { prediction: { id: predictionId } },
+      select: ['id', 'proba', 'class', 'waterfall'],
+      take: limit,
+      skip: (page - 1) * limit,
+    });
+
+    return {
+      totalRecords: total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      data: records,
+    };
   }
 }
