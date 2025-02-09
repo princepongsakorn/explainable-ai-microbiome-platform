@@ -45,7 +45,7 @@ y = train_metadata['CRC']
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
 mlflow.set_tracking_uri("http://ec2-3-1-102-14.ap-southeast-1.compute.amazonaws.com:5000")
-mlflow.set_experiment("sample-gb-crc")
+mlflow.set_experiment("sample-gradient-boosting-crc")
 
 def objective(params):
     with mlflow.start_run() as run:
@@ -81,7 +81,7 @@ def objective(params):
         mlflow.sklearn.log_model( 
             sk_model=model,
             artifact_path="model",
-            registered_model_name="sample-xgb-crc",
+            registered_model_name="sample-gradient-boosting-crc",
             input_example = X_test[:3],
             signature = infer_signature(X_test[:3], model.predict(X_test[:3]))
         )

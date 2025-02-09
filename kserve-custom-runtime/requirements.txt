@@ -12,3 +12,5 @@ scipy
 shap
 boto3
 joblib
+flask
+xgboost==2.1.3
