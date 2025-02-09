@@ -19,17 +19,17 @@ export class PredictionsService {
   ) {}
 
   async createPrediction(file: Multer.File, modelName: string) {
-    const jsonData = await parseCsv(file.buffer.toString());
-
+    const { dfColumns, dfDataRows } = await parseCsv(file);
+    console.log({ dfColumns, dfDataRows })
     const predictionId = uuidv4();
     const prediction = this.predictionsRepository.create({
       id: predictionId,
       modelName,
-      dfColumns: jsonData[0],
+      dfColumns: dfColumns,
     });
     await this.predictionsRepository.save(prediction);
 
-    for (const row of jsonData) {
+    for (const row of dfDataRows) {
       const recordId = uuidv4();
       const record = this.recordsRepository.create({
         id: recordId,

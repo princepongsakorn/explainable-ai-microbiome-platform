@@ -1,11 +1,19 @@
-import * as csv from 'csv-parser';
+import { Multer } from 'multer';
+import { Readable } from 'stream';
+import Papa from 'papaparse';
 
-export async function parseCsv(csvData: string): Promise<any[]> {
-  return new Promise((resolve, reject) => {
-    const results = [];
-    csvData.split('\n').forEach((line) => {
-      results.push(line.split(','));
+export async function parseCsv(
+  file: Multer.File,
+): Promise<{ dfColumns: string[]; dfDataRows: any[][] }> {
+  return new Promise((resolve) => {
+    const stream = Readable.from(file.buffer);
+    Papa.parse(stream, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (result) => {
+        const csvData = result?.data;
+        resolve({ dfColumns: csvData[0], dfDataRows: csvData.slice(1) });
+      },
     });
-    resolve(results);
   });
 }
