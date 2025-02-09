@@ -16,6 +16,6 @@ COPY requirements.txt ./
 RUN python -m pip install --upgrade pip && pip install --no-cache-dir -r ./requirements.txt
 
 # Copy local code to container image
-COPY kserve-shap-modelserver.py ./
+COPY kserve-shap-multi-modelserver.py ./
 
-CMD ["python", "kserve-shap-modelserver.py"]
+CMD ["python", "kserve-shap-multi-modelserver.py"]
