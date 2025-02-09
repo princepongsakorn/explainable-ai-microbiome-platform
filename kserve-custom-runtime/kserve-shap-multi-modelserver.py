@@ -281,7 +281,7 @@ def explain_beeswarm(model_name):
         shap_object = get_shap_value(explainer, X=input_data)
         beeswarm = get_beeswarm(shap_object.explanation)
 
-        return jsonify({"beeswarm": beeswarm})
+        return jsonify({"explain": beeswarm})
     
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -312,7 +312,7 @@ def explain_heatmap(model_name):
         shap_object = get_shap_value(explainer, X=input_data)
         heatmap = get_heatmap(shap_object.explanation)
 
-        return jsonify({"heatmap": heatmap})
+        return jsonify({"explain": heatmap})
     
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -354,7 +354,7 @@ def explain_waterfall(model_name):
             )
         ]
 
-        return jsonify({"waterfall": explain})
+        return jsonify({"explain": explain})
     
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -405,7 +405,7 @@ def predict(model_name):
             )
         ]
 
-        return jsonify({predict: predictions})
+        return jsonify({"predict": predictions})
     
     except Exception as e:
         return jsonify({"error": str(e)}), 500
