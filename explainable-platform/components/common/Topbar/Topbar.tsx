@@ -4,6 +4,7 @@ import cn from "classnames";
 import Link from "next/link";
 
 import { NavigatorProps } from "@/components/common/Layout/Layout";
+import Image from "next/image";
 
 interface TopbarProps {
   navigatorList?: NavigatorProps;
@@ -96,8 +97,15 @@ const Topbar: FC<TopbarProps> = (props: TopbarProps) => {
           })}
         </div>
       </div>
-      <div className="flex justify-end mr-12">
-        <div className="w-[40px] h-[40px] rounded-full bg-gray-300" />
+      <div className="flex justify-end mr-3">
+        <div className="w-[40px] h-[40px] rounded-full bg-[#fbfbfb] border-solid border-[1px] border-[#E4E7EC] shadow-sm">
+          <img
+            src="/assets/profile/profile-1.png"
+            alt="Profile Picture"
+            width="40"
+            height="40"
+          />
+        </div>
       </div>
     </div>
   );
