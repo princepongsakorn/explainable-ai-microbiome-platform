@@ -3,8 +3,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bull';
 import { PredictionsController } from './predictions.controller';
 import { PredictionsService } from './predictions.service';
-import { Prediction } from '../models/prediction.entity';
-import { PredictionRecord } from '../models/prediction-record.entity';
+import { Prediction } from '../entity/prediction.entity';
+import { PredictionRecord } from '../entity/prediction-record.entity';
 import { PredictionProcessor } from './prediction.processor';
 import { StorageService } from '../storage/storage.service';
 

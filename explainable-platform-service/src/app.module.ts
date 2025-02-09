@@ -5,6 +5,7 @@ import { BullModule } from '@nestjs/bull';
 import { PredictionsModule } from './predictions/predictions.module';
 import { QueueModule } from './queue/queue.module';
 import { StorageModule } from './storage/storage.module';
+import { ModelsModule } from './models/models.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { StorageModule } from './storage/storage.module';
         port: Number(process.env.REDIS_PORT),
       },
     }),
+    ModelsModule,
     PredictionsModule,
     QueueModule,
     StorageModule,

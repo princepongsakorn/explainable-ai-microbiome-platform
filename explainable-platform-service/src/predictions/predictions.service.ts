@@ -1,8 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Prediction } from '../models/prediction.entity';
-import { PredictionRecord } from '../models/prediction-record.entity';
+import { Prediction } from '../entity/prediction.entity';
+import { PredictionRecord } from '../entity/prediction-record.entity';
 import { parseCsv } from '../utils/csv-parser.util';
 import { QueueService } from '../queue/queue.service';
 import { Multer } from 'multer';
