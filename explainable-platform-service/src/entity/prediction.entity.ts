@@ -22,6 +22,6 @@ export class Prediction {
   @Column({ nullable: true })
   beeswarm: string;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;
 }

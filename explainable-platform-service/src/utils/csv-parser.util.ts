@@ -1,6 +1,6 @@
 import { Multer } from 'multer';
 import { Readable } from 'stream';
-import Papa from 'papaparse';
+import * as Papa from 'papaparse';
 
 export async function parseCsv(
   file: Multer.File,
@@ -8,8 +8,6 @@ export async function parseCsv(
   return new Promise((resolve) => {
     const stream = Readable.from(file.buffer);
     Papa.parse(stream, {
-      header: true,
-      skipEmptyLines: true,
       complete: (result) => {
         const csvData = result?.data;
         resolve({ dfColumns: csvData[0], dfDataRows: csvData.slice(1) });

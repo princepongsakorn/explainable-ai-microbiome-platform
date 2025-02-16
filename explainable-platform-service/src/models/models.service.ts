@@ -27,6 +27,7 @@ export class ModelsService {
           },
         ),
       );
+      console.log('response.data', response.data)
       return response.data;
     } catch (error) {
       console.error(`Failed to fetch models`, error);

@@ -1,6 +1,11 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn } from 'typeorm';
 import { Prediction } from './prediction.entity';
 
+export enum PredictionStatus {
+  PENDING = 'PENDING',
+  SUCCESS = 'SUCCESS',
+  ERROR = 'ERROR',
+}
 @Entity()
 export class PredictionRecord {
   @PrimaryGeneratedColumn('uuid')
@@ -12,7 +17,7 @@ export class PredictionRecord {
   @Column('jsonb')
   dfData: number[];
 
-  @Column({ nullable: true })
+  @Column({ type: 'decimal', precision: 10, scale: 4, nullable: true })
   proba?: number;
 
   @Column({ nullable: true })
@@ -20,4 +25,10 @@ export class PredictionRecord {
 
   @Column({ nullable: true })
   waterfall?: string;
+
+  @CreateDateColumn({ type: 'timestamp' })
+  createdAt: Date;
+
+  @Column({ type: 'enum', enum: PredictionStatus, default: PredictionStatus.PENDING })
+  status: PredictionStatus;
 }

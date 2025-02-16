@@ -4,7 +4,7 @@ import React, { FC, useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import AuthenticationCheck from "@/hoc/AuthenticationCheck";
 import Sidebar from "@/components/common/Sidebar";
-import { VariableIcon } from "@heroicons/react/outline";
+import { VariableIcon, ArchiveIcon } from "@heroicons/react/outline";
 import Topbar from "../Topbar";
 
 interface Props {
@@ -32,19 +32,27 @@ export interface SubNavigatorProps {
 const navigatorList: NavigatorProps[] = [
   {
     icon: <VariableIcon className="w-5" />,
-    pathName: "investor-management",
-    slug: "/investor-management",
-    name: "Investor management",
+    pathName: "predict",
+    slug: "/predict",
+    name: "predict",
     subMenu: [
       {
-        slug: "/investor-list",
-        pathName: ["investor-list", "update-investor"],
-        name: "Investor management",
+        slug: "/",
+        pathName: [""],
+        name: "Upload file",
       },
+    ],
+  },
+  {
+    icon: <ArchiveIcon className="w-5" />,
+    pathName: "history",
+    slug: "/history",
+    name: "Prediction History",
+    subMenu: [
       {
-        slug: "/draft-investor-list",
-        pathName: ["draft-investor-list", "create"],
-        name: "Draft investor management",
+        slug: "/",
+        pathName: [""],
+        name: "Prediction History",
       },
     ],
   },

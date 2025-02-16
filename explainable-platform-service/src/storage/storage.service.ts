@@ -12,22 +12,39 @@ export class StorageService {
       accessKeyId: this.configService.get<string>('AWS_ACCESS_KEY_ID'),
       secretAccessKey: this.configService.get<string>('AWS_SECRET_ACCESS_KEY'),
       region: this.configService.get<string>('AWS_REGION'),
+      signatureVersion: 'v4',
     });
     this.bucketName = this.configService.get<string>('AWS_S3_BUCKET') ?? '';
   }
 
-  async uploadToS3(base64Data: string, fileName: string): Promise<string> {
+  async uploadToS3(
+    base64Data: string,
+    path: string,
+    fileName: string,
+  ): Promise<string> {
     const buffer = Buffer.from(base64Data, 'base64');
-
+    const key = `predictions/${path}/${fileName}`;
     const params: AWS.S3.PutObjectRequest = {
       Bucket: this.bucketName,
-      Key: `predictions/${fileName}`,
+      Key: `predictions/${path}/${fileName}`,
       Body: buffer,
       ContentType: 'image/png',
-      ACL: 'public-read',
     };
+    try {
+      await this.s3.upload(params).promise();
+      return key;
+    } catch (error) {
+      console.log('[StorageService] uploadToS3', error);
+      return '';
+    }
+  }
 
-    const result = await this.s3.upload(params).promise();
-    return result.Location;
+  async getPresignedUrl(key: string): Promise<string> {
+    const params = {
+      Bucket: this.bucketName,
+      Key: key,
+      Expires: 3600,
+    };
+    return this.s3.getSignedUrlPromise('getObject', params);
   }
 }

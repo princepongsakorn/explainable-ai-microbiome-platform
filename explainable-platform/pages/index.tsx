@@ -5,7 +5,7 @@ import {
 } from "@heroicons/react/outline";
 import { ChangeEvent, useEffect, useState } from "react";
 import Papa from "papaparse";
-import { getModelsList, postModelPredict } from "./api/model";
+import { getModelsList } from "./api/model";
 import {
   IMetrics,
   IModelInfo,
@@ -13,6 +13,7 @@ import {
   IPredictResponse,
 } from "@/components/model/model.interface";
 import { Dropdown } from "flowbite-react";
+import { postModelPredict } from "./api/predict";
 
 const PlotLoading = () => {
   const getRandomNumber = (min = 80, max = 200) => {
@@ -159,7 +160,7 @@ const PredictionPlot = (props: { prediction: IPredictions }) => {
 export function Home() {
   const [models, setModelName] = useState<IModelInfo[]>([]);
   const [process, setProcess] = useState<number>(0);
-  const [csv, setCsv] = useState<any[]>();
+  const [csv, setCsv] = useState<File>();
   const [model, setModel] = useState<IModelInfo>();
   const [responseBody, setResponseBody] = useState<IPredictResponse>();
   const [isPloting, setIsPloting] = useState(false);
@@ -186,38 +187,21 @@ export function Home() {
 
   const handleFileSelect = (event: ChangeEvent<HTMLInputElement>) => {
     if (event?.target?.files?.length) {
-      Papa.parse(event.target.files[0], {
-        complete: async (result) => {
-          setCsv(result?.data);
-        },
-      });
+      setCsv(event.target.files[0]);
     }
   };
 
   const handleSubmit = async () => {
     if (csv && model) {
       try {
-        const csvData = csv;
-        const headers = csvData[0].slice(1);
-        const data = csvData.slice(1);
-        const numericData = data.map((row) =>
-          row.slice(1).map((cell: any) => parseFloat(cell) || 0)
-        );
-        const payload = {
-          dataframe_split: {
-            columns: headers,
-            data: numericData,
-          },
-        };
-
         setResponseBody(undefined);
         setIsLoading(true);
         setIsPloting(false);
         setProcess(0);
 
         const predictData = await postModelPredict(
+          csv,
           model.model_name,
-          payload,
           (progressEvent) => {
             const percent = Math.round(
               (progressEvent.loaded * 100) / (progressEvent.total ?? 0)

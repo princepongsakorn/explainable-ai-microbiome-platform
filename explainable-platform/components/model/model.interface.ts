@@ -28,11 +28,24 @@ export interface IPredictResponse {
   predictions: IPredictions[];
 }
 
+// export interface IPredictions {
+//   id: string;
+//   proba: number;
+//   class: number;
+//   plot: {
+//     waterfall: string; //base64 of waterfall
+//   };
+// }
+
 export interface IPredictions {
   id: string;
-  proba: number;
-  class: number;
-  plot: {
-    waterfall: string; //base64 of waterfall
+  modelName: string;
+  records: {
+    total: number;
+    success: number;
+    error: number;
   };
+  createdAt: string;
+  heatmap?: string;
+  beeswarm?: string;
 }

@@ -12,6 +12,7 @@
     "@heroicons/react": "1.0.6",
     "@types/js-cookie": "3.0.6",
     "axios": "1.7.9",
+    "dayjs": "^1.11.13",
     "flowbite-react": "0.10.2",
     "js-cookie": "3.0.5",
     "jwt-decode": "4.0.0",
@@ -20,7 +21,8 @@
     "next": "12.3.4",
     "papaparse": "^5.5.2",
     "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "react-dom": "18.3.1",
+    "react-modern-drawer": "^1.4.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "3",
