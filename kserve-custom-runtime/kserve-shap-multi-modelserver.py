@@ -362,7 +362,7 @@ def explain_waterfall(model_name):
 @app.route("/v1/predict/<model_name>", methods=["POST"])
 def predict(model_name):
     model_loader = ModelLoader(model_name)
-    model, input_columns = model_loader.load()
+    model, input_columns, explainer = model_loader.load()
     
     if model is None:
         return jsonify({"error": f"Model {model_name} not found"}), 404

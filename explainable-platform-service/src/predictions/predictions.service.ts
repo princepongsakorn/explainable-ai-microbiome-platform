@@ -2,11 +2,12 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Prediction } from '../entity/prediction.entity';
-import { PredictionRecord } from '../entity/prediction-record.entity';
+import { PredictionRecord, PredictionStatus } from '../entity/prediction-record.entity';
 import { parseCsv } from '../utils/csv-parser.util';
 import { QueueService } from '../queue/queue.service';
 import { Multer } from 'multer';
 import { v4 as uuidv4 } from 'uuid';
+import { StorageService } from 'src/storage/storage.service';
 
 @Injectable()
 export class PredictionsService {
@@ -16,11 +17,11 @@ export class PredictionsService {
     @InjectRepository(PredictionRecord)
     private recordsRepository: Repository<PredictionRecord>,
     private readonly queueService: QueueService,
+    private storageService: StorageService,
   ) {}
 
   async createPrediction(file: Multer.File, modelName: string) {
     const { dfColumns, dfDataRows } = await parseCsv(file);
-    console.log({ dfColumns, dfDataRows })
     const predictionId = uuidv4();
     const prediction = this.predictionsRepository.create({
       id: predictionId,
@@ -45,9 +46,47 @@ export class PredictionsService {
   }
 
   async getPredictions() {
-    return this.predictionsRepository.find({
-      select: ['id', 'modelName', 'heatmap', 'beeswarm'],
+    const predictions = await this.predictionsRepository.find({
+      select: ['id', 'modelName', 'heatmap', 'beeswarm', 'createdAt'],
     });
+
+    return Promise.all(
+      predictions.map(async (prediction) => {
+        const predictionId = prediction.id
+        const totalRecords = await this.recordsRepository.count({
+          where: { prediction: { id: predictionId } },
+        });
+        const successRecords = await this.recordsRepository.count({
+          where: {
+            prediction: { id: predictionId },
+            status: PredictionStatus.SUCCESS,
+          },
+        });
+        const errorRecords = await this.recordsRepository.count({
+          where: {
+            prediction: { id: predictionId },
+            status: PredictionStatus.ERROR,
+          },
+        });
+
+        return {
+          id: prediction.id,
+          modelName: prediction.modelName,
+          records: {
+            total: totalRecords,
+            success: successRecords,
+            error: errorRecords
+          },
+          createdAt: prediction.createdAt,
+          heatmap: prediction.heatmap
+            ? await this.storageService.getPresignedUrl(prediction.heatmap)
+            : null,
+          beeswarm: prediction.beeswarm
+            ? await this.storageService.getPresignedUrl(prediction.beeswarm)
+            : null,
+        };
+      }),
+    );
   }
 
   async getPredictionRecords(
