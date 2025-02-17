@@ -4,7 +4,7 @@ import React, { FC, useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import AuthenticationCheck from "@/hoc/AuthenticationCheck";
 import Sidebar from "@/components/common/Sidebar";
-import { VariableIcon, ArchiveIcon } from "@heroicons/react/outline";
+import { VariableIcon, TableCellsIcon } from "@heroicons/react/24/outline";
 import Topbar from "../Topbar";
 
 interface Props {
@@ -38,21 +38,21 @@ const navigatorList: NavigatorProps[] = [
     subMenu: [
       {
         slug: "/",
-        pathName: [""],
+        pathName: ["prediction"],
         name: "Upload file",
       },
     ],
   },
   {
-    icon: <ArchiveIcon className="w-5" />,
-    pathName: "history",
-    slug: "/history",
-    name: "Prediction History",
+    icon: <TableCellsIcon className="w-5" />,
+    pathName: "prediction",
+    slug: "/prediction",
+    name: "Prediction List",
     subMenu: [
       {
         slug: "/",
-        pathName: [""],
-        name: "Prediction History",
+        pathName: ["prediction"],
+        name: "Prediction List",
       },
     ],
   },
@@ -64,7 +64,7 @@ const Layout: FC<Props> = ({ children, pageProps }: Props) => {
   const [subNavigator, setSubNavigator] = useState<NavigatorProps>();
 
   const splitPathUrl = router.pathname.split("/");
-
+  console.log('splitPathUrl', splitPathUrl)
   useEffect(() => {
     SetMainNavigate(
       navigatorList

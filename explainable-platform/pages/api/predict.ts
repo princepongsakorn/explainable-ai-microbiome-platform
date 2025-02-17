@@ -3,9 +3,14 @@ import { httpClient } from "./httpClient";
 import {
   IModelInfo,
   IModelPayload,
+  IPredictionRecords,
   IPredictions,
   IPredictResponse,
 } from "@/components/model/model.interface";
+import {
+  IPagination,
+  IPaginationRequestParams,
+} from "@/components/model/pagination.interface";
 
 export const postModelPredict = async (
   dataFile: File,
@@ -25,7 +30,16 @@ export const postModelPredict = async (
   return data;
 };
 
-export const getPredictions = async () => {
-  const { data } = await httpClient.get<IPredictions[]>(`/predict`);
+export const getPredictions = async (params: IPaginationRequestParams) => {
+  const { data } = await httpClient.get<IPagination<IPredictions>>(`/predict`, {
+    params: { page: params.page },
+  });
+  return data;
+};
+
+export const getPredictionRecords = async (id: string, params: IPaginationRequestParams) => {
+  const { data } = await httpClient.get<IPagination<IPredictionRecords>>(`/predict/${id}/records`, {
+    params,
+  });
   return data;
 };

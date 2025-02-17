@@ -20,23 +20,13 @@ export interface IModelPayload {
   };
 }
 
-export interface IPredictResponse {
-  summary: {
-    beeswarm: string; //base64 of beeswarm
-    heatmap: string; //base64 of heatmap
-  };
-  predictions: IPredictions[];
+export interface IPredictionRecords {
+  id: string;
+  proba?: number;
+  class?: number;
+  waterfall?: string;
+  status?: PredictionStatus
 }
-
-// export interface IPredictions {
-//   id: string;
-//   proba: number;
-//   class: number;
-//   plot: {
-//     waterfall: string; //base64 of waterfall
-//   };
-// }
-
 export interface IPredictions {
   id: string;
   modelName: string;
@@ -48,4 +38,16 @@ export interface IPredictions {
   createdAt: string;
   heatmap?: string;
   beeswarm?: string;
+}
+
+export enum PredictionClass {
+  ALL = "ALL",
+  POSITIVE = "POSITIVE",
+  NEGATIVE = "NEGATIVE"
+}
+
+export enum PredictionStatus {
+  PENDING = 'PENDING',
+  SUCCESS = 'SUCCESS',
+  ERROR = 'ERROR',
 }

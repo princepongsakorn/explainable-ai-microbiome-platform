@@ -1,11 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn } from 'typeorm';
 import { Prediction } from './prediction.entity';
-
-export enum PredictionStatus {
-  PENDING = 'PENDING',
-  SUCCESS = 'SUCCESS',
-  ERROR = 'ERROR',
-}
+import { PredictionStatus } from 'src/interface/prediction-class.enum';
 @Entity()
 export class PredictionRecord {
   @PrimaryGeneratedColumn('uuid')

@@ -5,7 +5,7 @@ import Link from "next/link";
 
 // import { useUser } from "@/contexts/auth/user-context";
 import { NavigatorProps } from "../Layout/Layout";
-import { MinusCircleIcon } from "@heroicons/react/outline";
+import { MinusCircleIcon } from "@heroicons/react/24/outline";
 import { Logo } from "../Logo";
 
 interface SidebarProps {
