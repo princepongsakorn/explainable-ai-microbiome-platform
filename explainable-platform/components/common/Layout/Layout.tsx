@@ -4,7 +4,7 @@ import React, { FC, useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import AuthenticationCheck from "@/hoc/AuthenticationCheck";
 import Sidebar from "@/components/common/Sidebar";
-import { VariableIcon, TableCellsIcon } from "@heroicons/react/24/outline";
+import { ArrowUpTrayIcon, TableCellsIcon } from "@heroicons/react/24/outline";
 import Topbar from "../Topbar";
 
 interface Props {
@@ -31,7 +31,7 @@ export interface SubNavigatorProps {
 
 const navigatorList: NavigatorProps[] = [
   {
-    icon: <VariableIcon className="w-5" />,
+    icon: <ArrowUpTrayIcon className="w-5" />,
     pathName: "predict",
     slug: "/predict",
     name: "predict",
@@ -64,7 +64,7 @@ const Layout: FC<Props> = ({ children, pageProps }: Props) => {
   const [subNavigator, setSubNavigator] = useState<NavigatorProps>();
 
   const splitPathUrl = router.pathname.split("/");
-  console.log('splitPathUrl', splitPathUrl)
+  console.log("splitPathUrl", splitPathUrl);
   useEffect(() => {
     SetMainNavigate(
       navigatorList

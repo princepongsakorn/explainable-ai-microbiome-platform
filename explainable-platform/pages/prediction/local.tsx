@@ -1,5 +1,5 @@
 import Layout from "@/components/common/Layout";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   IPredictionRecords,
   PredictionClass,
@@ -18,7 +18,14 @@ import {
 import { useRouter } from "next/router";
 import { queryToString } from "../utils/queryToString";
 import { isNull } from "lodash";
-import { ArrowPathIcon, ChevronLeftIcon } from "@heroicons/react/24/outline";
+import {
+  ArrowPathIcon,
+  ChevronLeftIcon,
+  EllipsisHorizontalIcon,
+} from "@heroicons/react/24/outline";
+import { Popover } from "flowbite-react";
+import Drawer from "react-modern-drawer";
+import { ShapLabel } from "@/components/ui/ShapLabel/ShapLabel";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -69,10 +76,75 @@ const StatusBox = (status?: PredictionStatus) => {
   }
 };
 
+const DataTable = (props: { selectPrediction: IPredictionRecords }) => {
+  const selectPrediction = props.selectPrediction;
+  const [filter, setFilter] = useState("");
+
+  const filteredColumnIndices = selectPrediction?.dfColumns
+    ?.map((col, index) => ({ col, index }))
+    .filter(({ col }) => col.toLowerCase().includes(filter.toLowerCase()));
+
+  return (
+    <>
+      <div className="flex flex-row justify-between items-center bg-gray-50 px-4 py-2 rounded-lg my-4">
+        <div className="font-bold ">Data</div>
+        <div>
+          <div className="w-60">
+            <div className="absolute inset-y-0 start-0 flex items-center ps-3 pointer-events-none"></div>
+            <input
+              type="text"
+              id="col-search"
+              className="bg-gray-10 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full"
+              placeholder="Search columns..."
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+            />
+          </div>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm text-left rtl:text-right text-gray-500 w-full">
+          <thead className="text-gray-700 bg-gray-50 ">
+            <tr className="">
+              {filteredColumnIndices?.map(({ col, index }) => (
+                <th
+                  key={`col-${col}-${index}`}
+                  scope="col"
+                  className={`font-medium px-6 py-3 whitespace-nowrap italic`}
+                >
+                  {col.replaceAll("_", " ")}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="">
+              {filteredColumnIndices?.map(({ index }) => (
+                <td
+                  key={`row-${index}`}
+                  scope="row"
+                  className="px-6 py-5 font-medium text-black whitespace-nowrap"
+                >
+                  {selectPrediction.dfData?.[index] || "-"}
+                </td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+};
+
 export function History() {
   const router = useRouter();
   const [predictions, setPredictions] =
     useState<IPagination<IPredictionRecords>>();
+  const [isOpen, setIsOpen] = useState(false);
+  const [selectPrediction, setSelectPrediction] =
+    useState<IPredictionRecords>();
+  const [currentImage, setCurrentImage] = useState<string>();
+  const [isViewerOpen, setIsViewerOpen] = useState<boolean>(false);
 
   const predictionClass = usePredictionClass();
   const predictionId = router.query.id as string;
@@ -99,6 +171,17 @@ export function History() {
       const data = await getPredictionRecords(predictionId, params);
       setPredictions(data);
     }
+  };
+
+  const openImageViewer = (url: string) => {
+    console.log("openImageViewer");
+    setCurrentImage(url);
+    setIsViewerOpen(true);
+  };
+
+  const closeImageViewer = () => {
+    setCurrentImage(undefined);
+    setIsViewerOpen(false);
   };
 
   useEffect(() => {
@@ -161,11 +244,36 @@ export function History() {
                 </a>
               </li>
             </ul>
-            <div
-              className="flex flex-row gap-2 text-sm cursor-pointer px-4 py-2 rounded-full hover:text-gray-900 hover:bg-gray-100 border-[1px] border-[#EAEAEA]"
-              onClick={getPredictionsList}
-            >
-              Refresh <ArrowPathIcon className="w-5" />
+            <div className="flex flex-row gap-3">
+              <div
+                className="flex flex-row gap-2 text-sm cursor-pointer px-4 py-2 rounded-full hover:text-gray-900 hover:bg-gray-100 border-[1px] border-[#EAEAEA]"
+                onClick={getPredictionsList}
+              >
+                Refresh <ArrowPathIcon className="w-5" />
+              </div>
+              <Popover
+                aria-labelledby="default-popover"
+                arrow={false}
+                className="outline-none bg-white border-[1px] border-[#EAEAEA] rounded-md shadow-sm popover-left"
+                content={
+                  <div className="w-52 text-sm text-gray-500 p-2">
+                    <div
+                      className="px-3 py-2 hover:text-gray-900 hover:bg-gray-100 rounded-md cursor-pointer"
+                      onClick={() => {
+                        console.log(
+                          "TODO: Make a function of rerun failed job"
+                        );
+                      }}
+                    >
+                      <p>Rerun-all failed jobs</p>
+                    </div>
+                  </div>
+                }
+              >
+                <div className="p-2 rounded-full hover:text-gray-900 hover:bg-gray-100 border-[1px] border-[#EAEAEA] cursor-pointer">
+                  <EllipsisHorizontalIcon className="w-5" />{" "}
+                </div>
+              </Popover>
             </div>
           </div>
           <div className="flex flex-col w-full">
@@ -182,23 +290,27 @@ export function History() {
                     Probability
                   </th>
                   <th scope="col" className="font-medium px-6 py-3">
-                    Class
+                    Classification
                   </th>
                   <th scope="col" className="font-medium px-6 py-3">
                     Predict At
                   </th>
-                  <th scope="col" className="font-medium px-6 py-3">
-                    Status
-                  </th>
                   <th
                     scope="col"
                     className="font-medium rounded-r-lg px-6 py-3"
-                  ></th>
+                  >
+                    Status
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {predictions?.items.map((prediction) => (
-                  <tr className="bg-white hover:bg-gray-50 cursor-pointer">
+                  <tr
+                    className="bg-white hover:bg-gray-50"
+                    onClick={() => {
+                      setIsOpen(true), setSelectPrediction(prediction);
+                    }}
+                  >
                     <th
                       scope="row"
                       className="px-6 py-5 font-medium text-black whitespace-nowrap"
@@ -213,20 +325,18 @@ export function History() {
                     <td className="text-black px-6 py-5">
                       {!isNull(prediction.class)
                         ? prediction.class === 0
-                          ? "Unlikely to have condition"
-                          : "Likely to have condition"
+                          ? "Probability of negative class"
+                          : "Probability of positive class"
                         : "-"}
                     </td>
                     <td className="text-black px-6 py-5">
+                      -
                       {/* {dayjs(prediction.createdAt)
                         .tz("Asia/Bangkok")
                         .format("DD-MM-YYYY HH:mm")} */}
                     </td>
                     <td className="text-black px-6 py-5">
                       {StatusBox(prediction.status)}
-                    </td>
-                    <td className="text-black px-6 py-5 underline font-medium">
-                      View
                     </td>
                   </tr>
                 ))}
@@ -243,6 +353,69 @@ export function History() {
             onChange={onHandleChangePage}
           />
         </div>
+        <Drawer
+          open={isOpen}
+          onClose={() => setIsOpen(false)}
+          direction="right"
+          className="shadow-2xs max-w-4xl overflow-y-auto"
+          duration={150}
+          size={"60vw"}
+        >
+          <div className="p-[40px] pt-[40px]">
+            <div className="flex flex-row justify-between items-center">
+              <p className="text-xl font-medium text-gray-800">
+                {selectPrediction?.id}
+              </p>
+            </div>
+            <div className="font-bold bg-gray-50 px-4 py-2 rounded-lg my-4">
+              General Information
+            </div>
+            <div className="flex flex-row justify-between mb-3">
+              <p className="font-medium">Probability</p>
+              <p>
+                {!isNull(selectPrediction?.proba)
+                  ? `${(Number(selectPrediction?.proba) * 100).toFixed(1)}%`
+                  : "-"}
+              </p>
+            </div>
+            <div className="flex flex-row justify-between">
+              <p className="font-medium">Classification </p>
+              <p>
+                {!isNull(selectPrediction?.class)
+                  ? selectPrediction?.class === 0
+                    ? "Probability of negative class"
+                    : "Probability of positive class"
+                  : "-"}
+              </p>
+            </div>
+            <div className="font-bold bg-gray-50 px-4 py-2 rounded-lg my-4">
+              Waterfall plot
+            </div>
+            <div className="flex flex-col mb-3 mt-3 ">
+              <div className="text-sm pb-3 text-gray-500">
+                This SHAP waterfall plot illustrates how each factor (listed on
+                the left) influences the predicted outcome. Blue bars indicate a
+                decrease in the likelihood of disease, while red bars indicate
+                an increase. By summing these contributions, you can see which
+                factors drive the final prediction, offering a clear
+                interpretation of the model’s decision.
+              </div>
+              <ShapLabel />
+              <div
+                onClick={() => {
+                  console.log("click");
+                  selectPrediction?.waterfall &&
+                    openImageViewer(selectPrediction?.waterfall);
+                }}
+              >
+                <img src={selectPrediction?.waterfall} />
+              </div>
+            </div>
+            {selectPrediction?.dfColumns && selectPrediction?.dfData && (
+              <DataTable selectPrediction={selectPrediction} key={selectPrediction.id}/>
+            )}
+          </div>
+        </Drawer>
       </div>
     </>
   );
