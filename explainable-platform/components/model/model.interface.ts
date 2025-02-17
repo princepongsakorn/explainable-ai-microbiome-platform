@@ -26,6 +26,8 @@ export interface IPredictionRecords {
   class?: number;
   waterfall?: string;
   status?: PredictionStatus
+  dfColumns?: string[]
+  dfData?: string[]
 }
 export interface IPredictions {
   id: string;

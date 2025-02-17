@@ -141,7 +141,7 @@ export function History() {
         duration={150}
         size={"60vw"}
       >
-        <div className="p-[60px] pt-[40px] overflow-y-auto">
+        <div className="p-[40px] pt-[40px] overflow-y-auto">
           <div className="flex flex-row justify-between items-center">
             <p className="text-xl font-medium text-gray-800">
               {selectPrediction?.id}
