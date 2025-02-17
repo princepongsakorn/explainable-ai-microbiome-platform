@@ -21,16 +21,17 @@ interface TopbarLinkProps {
 
 const TopbarLinkComponent = React.forwardRef((props: TopbarLinkProps, ref) => {
   const { onClick, href, item, currentSubMenu, pathName } = props;
+  console.log(pathName, currentSubMenu)
   return (
     <a onClick={onClick} href={href}>
       <div
         className={`flex items-center justify-center h-full relative px-1 hover:font-bold ${
-          pathName.includes(currentSubMenu) ? "font-bold" : ""
+          !currentSubMenu || pathName.includes(currentSubMenu) ? "font-bold" : ""
         }`}
       >
         {item.name}
         {(!currentSubMenu || pathName.includes(currentSubMenu)) && (
-          <div className="w-full h-[4px] bg-token-purple absolute bottom-0 rounded-topbar"></div>
+          <div className="w-full h-[2px] bg-black absolute bottom-0 rounded-topbar"></div>
         )}
       </div>
     </a>
@@ -61,7 +62,7 @@ const Topbar: FC<TopbarProps> = (props: TopbarProps) => {
   return (
     <div
       className={cn(
-        `grid grid-cols-3 items-center h-[66px] sticky top-0 z-30 transition-all duration-150 border-solid border-b-[1px] border-[#E4E7EC] bg-white`,
+        `grid grid-cols-3 items-center h-[66px] sticky top-0 z-30 transition-all duration-150 border-solid border-b-[1px] border-[#E4E7EC] bg-[#F0F3F7]`,
         { "shadow-magical": hasScrolled }
       )}
     >

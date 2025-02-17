@@ -22,8 +22,8 @@ export interface IPredictResponse {
 }
 
 export interface IDataframeSplitRequest {
-    dataframe_split: {
-      columns: string[];
-      data: number[][];
-    };
-  }
+  dataframe_split: {
+    columns: string[];
+    data: number[][];
+  };
+}
