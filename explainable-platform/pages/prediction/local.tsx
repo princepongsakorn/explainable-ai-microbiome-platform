@@ -5,7 +5,11 @@ import {
   PredictionClass,
   PredictionStatus,
 } from "@/components/model/model.interface";
-import { getPredictionRecords, postCancelPredict, postRePredict } from "../api/predict";
+import {
+  getPredictionRecords,
+  postCancelPredict,
+  postRePredict,
+} from "../api/predict";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -213,14 +217,12 @@ export function History() {
   };
 
   const onRepredict = async () => {
-    await postRePredict(predictionId)
+    await postRePredict(predictionId);
   };
 
   const onCancel = async () => {
-    await postCancelPredict(predictionId)
+    await postCancelPredict(predictionId);
   };
-
-  
 
   useEffect(() => {
     getPredictionsList();
@@ -485,6 +487,18 @@ export function History() {
                 {selectPrediction?.id}
               </p>
             </div>
+            {selectPrediction?.status === PredictionStatus.ERROR && (
+              <>
+                <div className="font-bold bg-red-50 px-4 py-2 rounded-lg my-4 text-red-700">
+                  Error
+                </div>
+                <div className="flex flex-row justify-between mb-6">
+                  <p className="font-medium text-red-700">
+                    {selectPrediction.errorMsg ?? "Unknown error occurred"}
+                  </p>
+                </div>
+              </>
+            )}
             <div className="font-bold bg-gray-50 px-4 py-2 rounded-lg my-4">
               General Information
             </div>

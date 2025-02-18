@@ -173,7 +173,7 @@ export class PredictionsService {
 
     const [items, totalItems] = await this.recordsRepository.findAndCount({
       where: whereCondition,
-      select: ['id', 'proba', 'class', 'waterfall', 'status', 'dfData'],
+      select: ['id', 'proba', 'class', 'waterfall', 'status', 'errorMsg', 'dfData'],
       take: limit,
       skip: (page - 1) * limit,
     });
