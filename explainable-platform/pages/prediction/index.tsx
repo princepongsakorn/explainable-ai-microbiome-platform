@@ -2,14 +2,8 @@
 
 import Layout from "@/components/common/Layout";
 import { ChevronRightIcon } from "@heroicons/react/24/outline";
-import { ChangeEvent, useEffect, useState } from "react";
-import Papa from "papaparse";
-import { getModelsList } from "../api/model";
-import {
-  IMetrics,
-  IModelInfo,
-  IPredictions,
-} from "@/components/model/model.interface";
+import { useEffect, useState } from "react";
+import { IPredictions } from "@/components/model/model.interface";
 import Drawer from "react-modern-drawer";
 import { getPredictions } from "../api/predict";
 import dayjs from "dayjs";
@@ -23,7 +17,6 @@ import {
 } from "@/components/model/pagination.interface";
 import { useRouter } from "next/router";
 import { queryToString } from "../utils/queryToString";
-import { ShapLabel } from "@/components/ui/ShapLabel/ShapLabel";
 import { ShapPlotPlaceholder } from "@/components/ui/ImageEmpty/ImageEmpty";
 
 dayjs.extend(utc);
@@ -32,7 +25,6 @@ dayjs.extend(timezone);
 export function History() {
   const router = useRouter();
   const [predictions, setPredictions] = useState<IPagination<IPredictions>>();
-  const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [selectPrediction, setSelectPrediction] = useState<IPredictions>();
   const currentPage = Number(router.query.page) || 1;
@@ -185,7 +177,11 @@ export function History() {
               each feature’s effect, highlighting the most influential drivers
               in the dataset.
             </div>
-            <ShapPlotPlaceholder src={selectPrediction?.beeswarm} plotName="Beeswarm plot" showShapLabel />
+            <ShapPlotPlaceholder
+              src={selectPrediction?.beeswarm}
+              plotName="Beeswarm plot"
+              showShapLabel
+            />
           </div>
           <div className="flex flex-col mb-3 mt-3 border-t-[1px] border-[#EAEAEA] pt-3">
             <div className="font-medium">Heatmap plot</div>
@@ -195,7 +191,11 @@ export function History() {
               feature’s contribution to the model’s predictions, revealing
               distinct subpopulations within the dataset.
             </div>
-            <ShapPlotPlaceholder src={selectPrediction?.heatmap} plotName="Heatmap plot" showShapLabel />
+            <ShapPlotPlaceholder
+              src={selectPrediction?.heatmap}
+              plotName="Heatmap plot"
+              showShapLabel
+            />
           </div>
         </div>
       </Drawer>
