@@ -62,9 +62,8 @@ const Layout: FC<Props> = ({ children, pageProps }: Props) => {
   const router = useRouter();
   const [mainNavigate, SetMainNavigate] = useState<NavigatorProps[]>([]);
   const [subNavigator, setSubNavigator] = useState<NavigatorProps>();
-
   const splitPathUrl = router.pathname.split("/");
-  console.log("splitPathUrl", splitPathUrl);
+  
   useEffect(() => {
     SetMainNavigate(
       navigatorList

@@ -7,7 +7,6 @@ import { Repository } from 'typeorm';
 import { Prediction } from '../entity/prediction.entity';
 import {
   PredictionRecord,
-  PredictionStatus,
 } from '../entity/prediction-record.entity';
 import { StorageService } from '../storage/storage.service';
 import { ConfigService } from '@nestjs/config';
@@ -18,6 +17,7 @@ import {
   IPredictResponse,
   IWaterfallResponse,
 } from 'src/interface/prediction-api.interface';
+import { PredictionStatus } from 'src/interface/prediction-class.enum';
 
 @Processor('predictionQueue')
 export class PredictionProcessor {
