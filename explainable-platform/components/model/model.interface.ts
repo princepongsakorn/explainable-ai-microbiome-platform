@@ -33,6 +33,7 @@ export interface IPredictionRecords {
   status?: PredictionStatus
   dfColumns?: string[]
   dfData?: string[]
+  errorMsg?: string
 }
 export interface IPredictions {
   id: string;
