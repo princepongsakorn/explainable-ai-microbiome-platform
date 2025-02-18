@@ -5,7 +5,7 @@ import {
   PredictionClass,
   PredictionStatus,
 } from "@/components/model/model.interface";
-import { getPredictionRecords, postRePredict } from "../api/predict";
+import { getPredictionRecords, postCancelPredict, postRePredict } from "../api/predict";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -216,6 +216,12 @@ export function History() {
     await postRePredict(predictionId)
   };
 
+  const onCancel = async () => {
+    await postCancelPredict(predictionId)
+  };
+
+  
+
   useEffect(() => {
     getPredictionsList();
   }, []);
@@ -364,11 +370,7 @@ export function History() {
                       </div>
                       <div
                         className="px-3 py-2 hover:text-gray-900 hover:bg-gray-100 rounded-md cursor-pointer"
-                        onClick={() => {
-                          console.log(
-                            "TODO: Make a function of rerun failed job"
-                          );
-                        }}
+                        onClick={onCancel}
                       >
                         <p className="text-red-500">
                           Cancel all in-progress jobs

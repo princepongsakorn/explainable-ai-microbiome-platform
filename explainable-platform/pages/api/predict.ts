@@ -37,6 +37,13 @@ export const postRePredict = async (id: string) => {
   return data;
 };
 
+export const postCancelPredict = async (id: string) => {
+  const { data } = await httpClient.post<ICreatePredictions>(
+    `/predict/${id}/cancel`
+  );
+  return data;
+};
+
 export const getPredictions = async (params: IPaginationRequestParams) => {
   const { data } = await httpClient.get<IPagination<IPredictions>>(`/predict`, {
     params: { page: params.page },

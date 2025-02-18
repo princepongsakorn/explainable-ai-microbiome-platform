@@ -29,15 +29,34 @@ export class QueueService {
     const jobs: Job[] = await this.predictionQueue.getJobs([
       'active',
       'waiting',
+      'delayed',
     ]);
 
     for (const job of jobs) {
       const jobData = job.data as { predictionId: string; recordId?: string };
       if (jobData.predictionId === predictionId && jobData.recordId) {
-        await job.remove();
-        console.log(
-          `[QueueService] Canceled Job: ${job.id} (PredictionID: ${predictionId}, RecordID: ${jobData.recordId || 'ALL'})`,
-        );
+        try {
+          const jobInstance = await this.predictionQueue.getJob(job.id);
+          if (!jobInstance) {
+            console.warn(`[QueueService] cancelPredictionJob: Job ${job.id} does not exist.`);
+            continue;
+          }
+
+          const isActive = await jobInstance.isActive();
+          const isWaiting = await jobInstance.isWaiting();
+          const isDelayed = await jobInstance.isDelayed();
+
+          if (isActive || isWaiting || isDelayed) {
+            await jobInstance.remove();
+            console.log(
+              `[QueueService] cancelPredictionJob: Canceled Job: ${job.id} (PredictionID: ${predictionId}, RecordID: ${jobData.recordId})`,
+            );
+          } else {
+            console.warn(`[QueueService] cancelPredictionJob: ${job.id} is already completed or failed.`);
+          }
+        } catch (error) {
+          console.error(`[QueueService] cancelPredictionJob: error removing job ${job.id}:`, error.message);
+        }
       }
     }
 
