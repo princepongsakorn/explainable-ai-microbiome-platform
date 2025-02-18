@@ -11,7 +11,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { PredictionsService } from './predictions.service';
 import { Multer } from 'multer';
-import { PredictionClass } from 'src/interface/prediction-class.enum';
+import { PredictionClass, PredictionStatus } from 'src/interface/prediction-class.enum';
 
 @Controller('predict')
 export class PredictionsController {
@@ -24,6 +24,16 @@ export class PredictionsController {
     @Body('modelName') modelName: string,
   ) {
     return this.predictionsService.createPrediction(file, modelName);
+  }
+
+  @Post(':predictionId/re-predict')
+  async rePredictRecords(@Param('predictionId') predictionId: string) {
+    return this.predictionsService.rePredictRecords(predictionId);
+  }
+
+  @Post(':predictionId/cancel')
+  async cancelPrediction(@Param('predictionId') predictionId: string) {
+    return this.predictionsService.cancelPrediction(predictionId);
   }
 
   @Get()
@@ -40,12 +50,14 @@ export class PredictionsController {
     @Query('page') page: number = 1,
     @Query('limit') limit: number = 10,
     @Query('class') predictionClass: PredictionClass = PredictionClass.ALL,
+    @Query('status') predictionStatus: PredictionStatus = PredictionStatus.ALL,
   ) {
     return this.predictionsService.getPredictionRecords(
       predictionId,
       Number(page),
       Number(limit),
-      predictionClass
+      predictionClass,
+      predictionStatus
     );
   }
 }

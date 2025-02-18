@@ -5,7 +5,7 @@ import {
   PredictionClass,
   PredictionStatus,
 } from "@/components/model/model.interface";
-import { getPredictionRecords } from "../api/predict";
+import { getPredictionRecords, postRePredict } from "../api/predict";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -25,7 +25,6 @@ import {
 } from "@heroicons/react/24/outline";
 import { Popover } from "flowbite-react";
 import Drawer from "react-modern-drawer";
-import { ShapLabel } from "@/components/ui/ShapLabel/ShapLabel";
 import { ShapPlotPlaceholder } from "@/components/ui/ImageEmpty/ImageEmpty";
 
 dayjs.extend(utc);
@@ -45,6 +44,20 @@ function usePredictionClass(): PredictionClass {
   return PredictionClass.ALL;
 }
 
+function usePredictionStatus(): PredictionStatus {
+  const router = useRouter();
+  const { status: queryStatus } = router.query;
+
+  if (
+    typeof queryStatus === "string" &&
+    Object.values(PredictionStatus).includes(queryStatus as PredictionStatus)
+  ) {
+    return queryStatus as PredictionStatus;
+  }
+
+  return PredictionStatus.ALL;
+}
+
 const StatusBox = (status?: PredictionStatus) => {
   switch (status) {
     case PredictionStatus.SUCCESS:
@@ -62,6 +75,15 @@ const StatusBox = (status?: PredictionStatus) => {
           <div className="justify-center flex gap-2 items-center">
             <div className="w-1 h-1 bg-red-800 rounded-full" />
             <div>{status}</div>
+          </div>
+        </div>
+      );
+    case PredictionStatus.IN_PROGRESS:
+      return (
+        <div className="w-fit px-4 py-2 rounded-full font-medium text-xs bg-red-100 text-red-800 items-center">
+          <div className="justify-center flex gap-2 items-center">
+            <div className="w-1 h-1 bg-red-800 rounded-full" />
+            <div>In Progress</div>
           </div>
         </div>
       );
@@ -146,6 +168,7 @@ export function History() {
     useState<IPredictionRecords>();
 
   const predictionClass = usePredictionClass();
+  const predictionStatus = usePredictionStatus();
   const predictionId = router.query.id as string;
   const currentPage = Number(router.query.page) || 1;
 
@@ -156,7 +179,23 @@ export function History() {
   };
 
   const onHandleChangeClass = (_class: PredictionClass) => {
-    const params = { id: predictionId, page: 1, class: _class };
+    const params = {
+      id: predictionId,
+      page: 1,
+      class: _class,
+      status: predictionStatus,
+    };
+    const queryString = queryToString(params);
+    router.replace(`?${queryString}`, undefined, { shallow: true });
+  };
+
+  const onHandleChangeStatus = (status: PredictionStatus) => {
+    const params = {
+      id: predictionId,
+      page: 1,
+      class: predictionClass,
+      status,
+    };
     const queryString = queryToString(params);
     router.replace(`?${queryString}`, undefined, { shallow: true });
   };
@@ -166,10 +205,15 @@ export function History() {
       const params: IPaginationRequestParams = {
         page: currentPage,
         class: predictionClass,
+        status: predictionStatus,
       };
       const data = await getPredictionRecords(predictionId, params);
       setPredictions(data);
     }
+  };
+
+  const onRepredict = async () => {
+    await postRePredict(predictionId)
   };
 
   useEffect(() => {
@@ -193,45 +237,152 @@ export function History() {
         </div>
         <div className="mt-6 pt-4 overflow-hidden border-solid bg-white border-t-[1px] border-[#EAEAEA] w-full">
           <div className="mb-4 flex flex-row justify-between">
-            <ul className="flex flex-wrap text-sm font-medium text-center text-gray-500">
-              <li className="me-2">
-                <a
-                  onClick={() => onHandleChangeClass(PredictionClass.ALL)}
-                  className={`cursor-pointer inline-block px-6 py-2 rounded-full ${
-                    predictionClass === PredictionClass.ALL
-                      ? "text-white bg-blue-600"
-                      : "hover:text-gray-900 hover:bg-gray-100 border-[1px] border-[#EAEAEA]"
-                  }`}
-                  aria-current="page"
+            <div className="flex flex-row gap-4">
+              <ul className="flex flex-wrap gap-2 text-sm font-medium text-center text-gray-500">
+                <li>
+                  <a
+                    onClick={() => onHandleChangeClass(PredictionClass.ALL)}
+                    className={`cursor-pointer inline-block px-6 py-2 rounded-full ${
+                      predictionClass === PredictionClass.ALL
+                        ? "text-white bg-blue-600"
+                        : "hover:text-gray-900 hover:bg-gray-100 border-[1px] border-[#EAEAEA]"
+                    }`}
+                    aria-current="page"
+                  >
+                    All
+                  </a>
+                </li>
+                <li>
+                  <a
+                    onClick={() =>
+                      onHandleChangeClass(PredictionClass.POSITIVE)
+                    }
+                    className={`cursor-pointer inline-block px-4 py-2 rounded-full ${
+                      predictionClass === PredictionClass.POSITIVE
+                        ? "text-white bg-blue-600"
+                        : "hover:text-gray-900 hover:bg-gray-100 border-[1px] border-[#EAEAEA]"
+                    }`}
+                  >
+                    Positive
+                  </a>
+                </li>
+                <li>
+                  <a
+                    onClick={() =>
+                      onHandleChangeClass(PredictionClass.NEGATIVE)
+                    }
+                    className={`cursor-pointer inline-block px-4 py-2 rounded-full ${
+                      predictionClass === PredictionClass.NEGATIVE
+                        ? "text-white bg-blue-600"
+                        : "hover:text-gray-900 hover:bg-gray-100 border-[1px] border-[#EAEAEA]"
+                    }`}
+                  >
+                    Negative
+                  </a>
+                </li>
+              </ul>
+              <div className="w-[1px] h-full bg-gray-200" />
+              <ul className="flex flex-wrap gap-2 text-sm font-medium text-center text-gray-500">
+                <li>
+                  <a
+                    onClick={() => onHandleChangeStatus(PredictionStatus.ALL)}
+                    className={`cursor-pointer inline-block px-4 py-2 rounded-full ${
+                      predictionStatus === PredictionStatus.ALL
+                        ? "text-white bg-blue-600"
+                        : "hover:text-gray-900 hover:bg-gray-100 border-[1px] border-[#EAEAEA]"
+                    }`}
+                  >
+                    All
+                  </a>
+                </li>
+                <li>
+                  <a
+                    onClick={() =>
+                      onHandleChangeStatus(PredictionStatus.SUCCESS)
+                    }
+                    className={`cursor-pointer inline-block px-4 py-2 rounded-full ${
+                      predictionStatus === PredictionStatus.SUCCESS
+                        ? "text-white bg-blue-600"
+                        : "hover:text-gray-900 hover:bg-gray-100 border-[1px] border-[#EAEAEA]"
+                    }`}
+                  >
+                    Success
+                  </a>
+                </li>
+                <li>
+                  <a
+                    onClick={() =>
+                      onHandleChangeStatus(PredictionStatus.PENDING)
+                    }
+                    className={`cursor-pointer inline-block px-4 py-2 rounded-full ${
+                      predictionStatus === PredictionStatus.PENDING
+                        ? "text-white bg-blue-600"
+                        : "hover:text-gray-900 hover:bg-gray-100 border-[1px] border-[#EAEAEA]"
+                    }`}
+                  >
+                    Pending
+                  </a>
+                </li>
+                <li>
+                  <a
+                    onClick={() =>
+                      onHandleChangeStatus(PredictionStatus.IN_PROGRESS)
+                    }
+                    className={`cursor-pointer inline-block px-4 py-2 rounded-full ${
+                      predictionStatus === PredictionStatus.IN_PROGRESS
+                        ? "text-white bg-blue-600"
+                        : "hover:text-gray-900 hover:bg-gray-100 border-[1px] border-[#EAEAEA]"
+                    }`}
+                  >
+                    In progress
+                  </a>
+                </li>
+                <li>
+                  <a
+                    onClick={() => onHandleChangeStatus(PredictionStatus.ERROR)}
+                    className={`cursor-pointer inline-block px-6 py-2 rounded-full ${
+                      predictionStatus === PredictionStatus.ERROR
+                        ? "text-white bg-blue-600"
+                        : "hover:text-gray-900 hover:bg-gray-100 border-[1px] border-[#EAEAEA]"
+                    }`}
+                    aria-current="page"
+                  >
+                    Error
+                  </a>
+                </li>
+                <Popover
+                  aria-labelledby="default-popover"
+                  arrow={false}
+                  className="outline-none bg-white border-[1px] border-[#EAEAEA] rounded-md shadow-sm"
+                  content={
+                    <div className="w-60 text-sm text-gray-500 p-2 text-left">
+                      <div
+                        className="px-3 py-2 hover:text-gray-900 hover:bg-gray-100 rounded-md cursor-pointer"
+                        onClick={onRepredict}
+                      >
+                        <p>Re-run all failed jobs</p>
+                      </div>
+                      <div
+                        className="px-3 py-2 hover:text-gray-900 hover:bg-gray-100 rounded-md cursor-pointer"
+                        onClick={() => {
+                          console.log(
+                            "TODO: Make a function of rerun failed job"
+                          );
+                        }}
+                      >
+                        <p className="text-red-500">
+                          Cancel all in-progress jobs
+                        </p>
+                      </div>
+                    </div>
+                  }
                 >
-                  All
-                </a>
-              </li>
-              <li className="me-2">
-                <a
-                  onClick={() => onHandleChangeClass(PredictionClass.POSITIVE)}
-                  className={`cursor-pointer inline-block px-4 py-2 rounded-full ${
-                    predictionClass === PredictionClass.POSITIVE
-                      ? "text-white bg-blue-600"
-                      : "hover:text-gray-900 hover:bg-gray-100 border-[1px] border-[#EAEAEA]"
-                  }`}
-                >
-                  Positive
-                </a>
-              </li>
-              <li className="me-2">
-                <a
-                  onClick={() => onHandleChangeClass(PredictionClass.NEGATIVE)}
-                  className={`cursor-pointer inline-block px-4 py-2 rounded-full ${
-                    predictionClass === PredictionClass.NEGATIVE
-                      ? "text-white bg-blue-600"
-                      : "hover:text-gray-900 hover:bg-gray-100 border-[1px] border-[#EAEAEA]"
-                  }`}
-                >
-                  Negative
-                </a>
-              </li>
-            </ul>
+                  <div className="p-2 rounded-full hover:text-gray-900 hover:bg-gray-100 border-[1px] border-[#EAEAEA] cursor-pointer">
+                    <EllipsisHorizontalIcon className="w-5" />{" "}
+                  </div>
+                </Popover>
+              </ul>
+            </div>
             <div className="flex flex-row gap-3">
               <div
                 className="flex flex-row gap-2 text-sm cursor-pointer px-4 py-2 rounded-full hover:text-gray-900 hover:bg-gray-100 border-[1px] border-[#EAEAEA]"
@@ -239,29 +390,6 @@ export function History() {
               >
                 Refresh <ArrowPathIcon className="w-5" />
               </div>
-              <Popover
-                aria-labelledby="default-popover"
-                arrow={false}
-                className="outline-none bg-white border-[1px] border-[#EAEAEA] rounded-md shadow-sm popover-left"
-                content={
-                  <div className="w-52 text-sm text-gray-500 p-2">
-                    <div
-                      className="px-3 py-2 hover:text-gray-900 hover:bg-gray-100 rounded-md cursor-pointer"
-                      onClick={() => {
-                        console.log(
-                          "TODO: Make a function of rerun failed job"
-                        );
-                      }}
-                    >
-                      <p>Rerun-all failed jobs</p>
-                    </div>
-                  </div>
-                }
-              >
-                <div className="p-2 rounded-full hover:text-gray-900 hover:bg-gray-100 border-[1px] border-[#EAEAEA] cursor-pointer">
-                  <EllipsisHorizontalIcon className="w-5" />{" "}
-                </div>
-              </Popover>
             </div>
           </div>
           <div className="flex flex-col w-full">
