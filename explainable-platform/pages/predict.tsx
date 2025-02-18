@@ -1,170 +1,96 @@
 import Layout from "@/components/common/Layout";
-import {
-  ArrowRightIcon,
-  InformationCircleIcon,
-} from "@heroicons/react/outline";
+import { ArrowRightIcon } from "@heroicons/react/24/outline";
 import { ChangeEvent, useEffect, useState } from "react";
-import Papa from "papaparse";
 import { getModelsList } from "./api/model";
 import {
+  ICreatePredictions,
   IMetrics,
   IModelInfo,
-  IPredictions,
-  IPredictResponse,
 } from "@/components/model/model.interface";
 import { Dropdown } from "flowbite-react";
 import { postModelPredict } from "./api/predict";
+import { Modal } from "flowbite-react";
+import { useRouter } from "next/router";
+import { queryToString } from "./utils/queryToString";
 
-const PlotLoading = () => {
-  const getRandomNumber = (min = 80, max = 200) => {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
+const UploadModal = (props: {
+  isOpen: boolean;
+  setIsOpen: any;
+  onOk: any;
+  onCancel: any;
+}) => {
+  const onOK = () => {
+    props.onOk();
+    props.setIsOpen(false);
   };
+
+  const onCancel = () => {
+    props.onCancel();
+    props.setIsOpen(false);
+  };
+
   return (
-    <div
-      role="status"
-      className="mt-4 animate-pulse border-solid bg-white border-[1px] border-[#EAEAEA] rounded-md max-w-4xl w-4/5 p-4"
+    <Modal
+      theme={{
+        content: {
+          base: "relative h-full w-full md:w-[500px] p-4 md:h-1/2",
+          inner:
+            "relative flex max-h-[90dvh] flex-col rounded-lg bg-white shadow",
+        },
+        footer: {
+          base: "flex items-center space-x-2 rounded-b border-t border-gray-200 p-6 justify-end",
+        },
+      }}
+      show={props.isOpen}
+      size="md"
+      onClose={onCancel}
+      className="z-[9999] bg-black/20"
+      popup
     >
-      <div className="w-full p-4 mx-auto">
-        <div className="h-2.5 bg-gray-200 rounded-full w-32 mb-2.5"></div>
-        <div className="w-48 h-2 mb-10 bg-gray-200 rounded-full"></div>
-
-        <div className="space-y-3">
-          {Array(8)
-            .fill(0)
-            .map((_, index) => (
-              <div key={index} className="flex items-center space-x-2">
-                <div className="justify-items-end w-[200px]">
-                  <div
-                    style={{ width: getRandomNumber() }}
-                    className={`h-4 bg-gray-200 animate-pulse rounded`}
-                  ></div>
-                </div>
-
-                <div className="flex flex-1">
-                  <div
-                    style={{
-                      width: `${getRandomNumber(10, 20)}%`,
-                      marginLeft: `${(8 - index) * 10}%`,
-                    }}
-                    className="h-6 bg-gray-200 animate-pulse rounded"
-                  ></div>
-                </div>
-              </div>
-            ))}
-        </div>
-
-        <div className="mt-4 w-full flex">
-          <div className={`w-[200px]`} />
-          <div className="flex flex-1 justify-between">
-            {Array(4)
-              .fill(0)
-              .map((_, index) => (
-                <div
-                  key={index}
-                  className="h-3 w-10 bg-gray-200 animate-pulse rounded"
-                ></div>
-              ))}
+      <Modal.Header />
+      <Modal.Body>
+        <div className="px-2">
+          <div className="text-center font-medium text-lg mb-4">
+            Upload Successful & Prediction Created
+          </div>
+          <div className="text-center text-gray-500">
+            Your file has been successfully uploaded, and a prediction request
+            has been created. You may proceed to the results page or continue
+            uploading additional files.
           </div>
         </div>
-      </div>
-    </div>
-  );
-};
-
-const SummaryPlot = (props: { heatmap?: string; beeswarm?: string }) => {
-  enum SummaryType {
-    Heatmap = "Heatmap",
-    Beeswarm = "Beeswarm",
-  }
-  const [selected, setSelected] = useState<SummaryType>(SummaryType.Beeswarm);
-
-  return (
-    <div className="overflow-hidden border-solid bg-white border-[1px] border-[#EAEAEA] rounded-md w-full mb-8">
-      <div className="flex flex-row gap-4 items-center border-solid bg-white border-b-[1px] border-[#EAEAEA] w-full mb-4 p-4 justify-between">
-        <div className="font-xl font-semibold text-black">Summary</div>
-        <div className="inline-flex rounded-md shadow-xs" role="group">
-          {Object.values(SummaryType).map((type, index) => (
-            <button
-              key={type}
-              type="button"
-              className={`inline-flex items-center px-4 py-2 text-sm font-medium border border-gray-200 hover:text-blue-700 ${
-                index === 0 ? "rounded-s-lg" : "border-l-[0px] rounded-e-lg"
-              } ${
-                type === selected
-                  ? "text-blue-700 bg-white"
-                  : "text-gray-900 bg-[#F2F4F7]"
-              }`}
-              onClick={() => setSelected(type)}
-            >
-              {type}
-            </button>
-          ))}
+      </Modal.Body>
+      <Modal.Footer>
+        <div className="flex flex-row gap-4">
+          <button
+            type="button"
+            className="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5focus:outline-none"
+            onClick={onOK}
+          >
+            <div>View Prediction</div>
+          </button>
+          <button
+            type="button"
+            className="py-2.5 px-5 text-sm font-medium text-gray-900 focus:outline-none bg-white rounded-lg border border-gray-200 hover:bg-gray-100 hover:text-blue-700 focus:z-10 focus:ring-4 focus:ring-gray-100"
+            onClick={onCancel}
+          >
+            <div>Close</div>
+          </button>
         </div>
-      </div>
-      <div>
-        <div className="ml-4 flex flex-row gap-4">
-          <div className="flex flex-row gap-1 items-center">
-            <div className="w-2 h-2 rounded-full bg-[#FF0051]" />
-            <p>Positive</p>
-          </div>
-          <div className="flex flex-row gap-1 items-center">
-            <div className="w-2 h-2 rounded-full bg-[#008BFB]" />
-            <p>Negative</p>
-          </div>
-        </div>
-        <img
-          src={`data:image/png;base64,${
-            selected === SummaryType.Heatmap ? props.heatmap : props.beeswarm
-          }`}
-        />
-      </div>
-    </div>
-  );
-};
-
-const PredictionPlot = (props: { prediction: IPredictions }) => {
-  return (
-    <div className="overflow-hidden border-solid bg-white border-[1px] border-[#EAEAEA] rounded-md w-full mb-8">
-      <div className="flex flex-row gap-4 items-center border-solid bg-white border-b-[1px] border-[#EAEAEA] w-full mb-4 p-4">
-        <div className="font-xl font-semibold text-black">
-          Subject {props.prediction.id}
-        </div>
-        <div className="h-[32px] border-solid border-l-[1px] border-[#EAEAEA] " />
-        <div>
-          <div className="font-semibold text-black">
-            Prediction Probability: {(props.prediction.proba * 100).toFixed(1)}%{" "}
-          </div>
-          <div className="text-[#667085]">
-            {props.prediction.class === 0
-              ? "Unlikely to have condition"
-              : "Likely to have condition"}
-          </div>
-        </div>
-      </div>
-      <div>
-        <div className="ml-4 flex flex-row gap-4">
-          <div className="flex flex-row gap-1 items-center">
-            <div className="w-2 h-2 rounded-full bg-[#FF0051]" />
-            <p>Positive</p>
-          </div>
-          <div className="flex flex-row gap-1 items-center">
-            <div className="w-2 h-2 rounded-full bg-[#008BFB]" />
-            <p>Negative</p>
-          </div>
-        </div>
-        <img src={`data:image/png;base64,${props.prediction.plot.waterfall}`} />
-      </div>
-    </div>
+      </Modal.Footer>
+    </Modal>
   );
 };
 export function Home() {
+  const router = useRouter();
+  const [key, setKey] = useState<string>(Math.random().toString(36));
   const [models, setModelName] = useState<IModelInfo[]>([]);
   const [process, setProcess] = useState<number>(0);
   const [csv, setCsv] = useState<File>();
   const [model, setModel] = useState<IModelInfo>();
-  const [responseBody, setResponseBody] = useState<IPredictResponse>();
-  const [isPloting, setIsPloting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [openModal, setOpenModal] = useState(false);
+  const [predictData, setPredictData] = useState<ICreatePredictions>();
 
   useEffect(() => {
     const getModels = async () => {
@@ -194,11 +120,8 @@ export function Home() {
   const handleSubmit = async () => {
     if (csv && model) {
       try {
-        setResponseBody(undefined);
         setIsLoading(true);
-        setIsPloting(false);
         setProcess(0);
-
         const predictData = await postModelPredict(
           csv,
           model.model_name,
@@ -207,25 +130,40 @@ export function Home() {
               (progressEvent.loaded * 100) / (progressEvent.total ?? 0)
             );
             setProcess(percent);
-            if (percent === 100) {
-              setIsPloting(true);
-            }
           }
         );
+        setOpenModal(true)
+        setPredictData(predictData);
         setIsLoading(false);
-        setIsPloting(false);
-        setResponseBody(predictData);
       } catch (err) {
         setIsLoading(false);
-        setResponseBody(undefined);
       }
     }
   };
 
+  const onModalCancel = () => {
+    setKey(Math.random().toString(36))
+    setPredictData(undefined);
+    setCsv(undefined);
+    setModel(undefined);
+  };
+
+  const onModalOk = () => {
+    const id = predictData?.predictionId;
+    if (id) {
+      const params = { id };
+      const queryString = queryToString(params);
+      router.push(`prediction/local/?${queryString}`, undefined, {
+        shallow: true,
+      });
+    }
+  };
+
   return (
-    <div className="p-8 justify-items-center">
+    <div className="pt-8 justify-items-center">
       <div
         className={`overflow-hidden border-solid bg-white border-[1px] border-[#EAEAEA] max-w-5xl rounded-md w-4/5`}
+        key={key}
       >
         <div className="w-full px-[34px] pt-[30px] pb-[24px]">
           <div className="flex flex-row gap-5 w-full">
@@ -237,12 +175,14 @@ export function Home() {
                   type="file"
                   onChange={handleFileSelect}
                   disabled={isLoading}
+                  accept=".csv"
                 />
               </div>
               <Dropdown
                 theme={{
                   floating: {
-                    target: "items-center font-medium border-gray-300",
+                    target:
+                      "items-center font-medium border-gray-300 text-black",
                   },
                 }}
                 label={
@@ -251,7 +191,7 @@ export function Home() {
                     : "Choose a model"
                 }
                 arrowIcon={false}
-                className="shadow-sm rounded-lg overflow-hidden"
+                className="shadow-sm rounded-lg overflow-hidden dark:bg-white"
               >
                 {models.map((model, index) => (
                   <Dropdown.Item
@@ -295,27 +235,12 @@ export function Home() {
           }`}
         />
       </div>
-      {isPloting ? (
-        <>
-          <PlotLoading />
-          <PlotLoading />
-        </>
-      ) : (
-        <div className="max-w-4xl w-4/5">
-          {responseBody?.summary && (
-            <>
-              <div className="border-solid bg-white border-t-[1px] border-[#EAEAEA] w-full my-4" />
-              <SummaryPlot
-                heatmap={responseBody?.summary.heatmap}
-                beeswarm={responseBody?.summary.beeswarm}
-              />
-            </>
-          )}
-          {responseBody?.predictions.map((prediction) => (
-            <PredictionPlot prediction={prediction} />
-          ))}
-        </div>
-      )}
+      <UploadModal
+        isOpen={openModal}
+        setIsOpen={setOpenModal}
+        onCancel={onModalCancel}
+        onOk={onModalOk}
+      />
     </div>
   );
 }

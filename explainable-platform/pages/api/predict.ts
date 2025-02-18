@@ -5,7 +5,7 @@ import {
   IModelPayload,
   IPredictionRecords,
   IPredictions,
-  IPredictResponse,
+  ICreatePredictions,
 } from "@/components/model/model.interface";
 import {
   IPagination,
@@ -20,7 +20,7 @@ export const postModelPredict = async (
   const formData = new FormData();
   formData.append("file", dataFile);
   formData.append("modelName", modelName);
-  const { data } = await httpClient.post<IPredictResponse>(
+  const { data } = await httpClient.post<ICreatePredictions>(
     `/predict`,
     formData,
     {

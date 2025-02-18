@@ -20,6 +20,11 @@ export interface IModelPayload {
   };
 }
 
+export interface ICreatePredictions {
+  message: string
+  predictionId: string
+}
+
 export interface IPredictionRecords {
   id: string;
   proba?: number;
