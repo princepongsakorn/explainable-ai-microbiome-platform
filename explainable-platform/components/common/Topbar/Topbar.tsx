@@ -21,7 +21,6 @@ interface TopbarLinkProps {
 
 const TopbarLinkComponent = React.forwardRef((props: TopbarLinkProps, ref) => {
   const { onClick, href, item, currentSubMenu, pathName } = props;
-  console.log(pathName, currentSubMenu)
   return (
     <a onClick={onClick} href={href}>
       <div

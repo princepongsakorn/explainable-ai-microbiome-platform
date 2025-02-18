@@ -26,6 +26,7 @@ import {
 import { Popover } from "flowbite-react";
 import Drawer from "react-modern-drawer";
 import { ShapLabel } from "@/components/ui/ShapLabel/ShapLabel";
+import { ShapPlotPlaceholder } from "@/components/ui/ImageEmpty/ImageEmpty";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -143,8 +144,6 @@ export function History() {
   const [isOpen, setIsOpen] = useState(false);
   const [selectPrediction, setSelectPrediction] =
     useState<IPredictionRecords>();
-  const [currentImage, setCurrentImage] = useState<string>();
-  const [isViewerOpen, setIsViewerOpen] = useState<boolean>(false);
 
   const predictionClass = usePredictionClass();
   const predictionId = router.query.id as string;
@@ -171,17 +170,6 @@ export function History() {
       const data = await getPredictionRecords(predictionId, params);
       setPredictions(data);
     }
-  };
-
-  const openImageViewer = (url: string) => {
-    console.log("openImageViewer");
-    setCurrentImage(url);
-    setIsViewerOpen(true);
-  };
-
-  const closeImageViewer = () => {
-    setCurrentImage(undefined);
-    setIsViewerOpen(false);
   };
 
   useEffect(() => {
@@ -400,19 +388,17 @@ export function History() {
                 factors drive the final prediction, offering a clear
                 interpretation of the model’s decision.
               </div>
-              <ShapLabel />
-              <div
-                onClick={() => {
-                  console.log("click");
-                  selectPrediction?.waterfall &&
-                    openImageViewer(selectPrediction?.waterfall);
-                }}
-              >
-                <img src={selectPrediction?.waterfall} />
-              </div>
+              <ShapPlotPlaceholder
+                src={selectPrediction?.waterfall}
+                plotName="Waterfall plot"
+                showShapLabel
+              />
             </div>
             {selectPrediction?.dfColumns && selectPrediction?.dfData && (
-              <DataTable selectPrediction={selectPrediction} key={selectPrediction.id}/>
+              <DataTable
+                selectPrediction={selectPrediction}
+                key={selectPrediction.id}
+              />
             )}
           </div>
         </Drawer>

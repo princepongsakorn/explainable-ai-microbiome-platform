@@ -2,16 +2,17 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindManyOptions, Repository } from 'typeorm';
 import { Prediction } from '../entity/prediction.entity';
-import {
-  PredictionRecord,
-} from '../entity/prediction-record.entity';
+import { PredictionRecord } from '../entity/prediction-record.entity';
 import { parseCsv } from '../utils/csv-parser.util';
 import { QueueService } from '../queue/queue.service';
 import { Multer } from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 import { StorageService } from 'src/storage/storage.service';
 import { PaginationMeta } from 'src/interface/pagination.interface';
-import { PredictionClass, PredictionStatus } from 'src/interface/prediction-class.enum';
+import {
+  PredictionClass,
+  PredictionStatus,
+} from 'src/interface/prediction-class.enum';
 
 @Injectable()
 export class PredictionsService {
@@ -129,10 +130,22 @@ export class PredictionsService {
 
     const [items, totalItems] = await this.recordsRepository.findAndCount({
       where: whereCondition,
-      select: ['id', 'proba', 'class', 'waterfall', 'status'],
+      select: ['id', 'proba', 'class', 'waterfall', 'status', 'dfData'],
       take: limit,
       skip: (page - 1) * limit,
     });
+
+    const predictions = await Promise.all(
+      items.map(async (predictionRow) => {
+        return {
+          ...predictionRow,
+          dfColumns: prediction.dfColumns,
+          waterfall: predictionRow.waterfall
+            ? await this.storageService.getPresignedUrl(predictionRow.waterfall)
+            : null,
+        };
+      }),
+    );
 
     const meta: PaginationMeta = {
       totalItems,
@@ -142,6 +155,6 @@ export class PredictionsService {
       currentPage: page,
     };
 
-    return { items, meta };
+    return { items: predictions, meta };
   }
 }

@@ -1,9 +1,7 @@
 "use client";
 
 import Layout from "@/components/common/Layout";
-import {
-  ChevronRightIcon
-} from "@heroicons/react/24/outline";
+import { ChevronRightIcon } from "@heroicons/react/24/outline";
 import { ChangeEvent, useEffect, useState } from "react";
 import Papa from "papaparse";
 import { getModelsList } from "../api/model";
@@ -26,6 +24,7 @@ import {
 import { useRouter } from "next/router";
 import { queryToString } from "../utils/queryToString";
 import { ShapLabel } from "@/components/ui/ShapLabel/ShapLabel";
+import { ShapPlotPlaceholder } from "@/components/ui/ImageEmpty/ImageEmpty";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -48,7 +47,9 @@ export function History() {
     if (id) {
       const params = { id };
       const queryString = queryToString(params);
-      router.push(`prediction/local/?${queryString}`, undefined, { shallow: true });
+      router.push(`prediction/local/?${queryString}`, undefined, {
+        shallow: true,
+      });
     }
   };
 
@@ -151,7 +152,9 @@ export function History() {
               className="py-2.5 px-5 text-sm font-medium text-gray-900 focus:outline-none bg-white rounded-lg border border-gray-200 hover:bg-gray-100 hover:text-blue-700 focus:z-10 focus:ring-4 focus:ring-gray-100"
               onClick={() => onViewAll(selectPrediction?.id)}
             >
-              <div className="flex flex-row gap-2">View All <ChevronRightIcon className="w-4" /></div>
+              <div className="flex flex-row gap-2">
+                View All <ChevronRightIcon className="w-4" />
+              </div>
             </button>
           </div>
           <div className="font-bold bg-gray-50 px-4 py-2 rounded-lg my-4">
@@ -182,8 +185,7 @@ export function History() {
               each feature’s effect, highlighting the most influential drivers
               in the dataset.
             </div>
-            <ShapLabel />
-            <img src={selectPrediction?.beeswarm} />
+            <ShapPlotPlaceholder src={selectPrediction?.beeswarm} plotName="Beeswarm plot" showShapLabel />
           </div>
           <div className="flex flex-col mb-3 mt-3 border-t-[1px] border-[#EAEAEA] pt-3">
             <div className="font-medium">Heatmap plot</div>
@@ -193,8 +195,7 @@ export function History() {
               feature’s contribution to the model’s predictions, revealing
               distinct subpopulations within the dataset.
             </div>
-            <ShapLabel />
-            <img src={selectPrediction?.heatmap} />
+            <ShapPlotPlaceholder src={selectPrediction?.heatmap} plotName="Heatmap plot" showShapLabel />
           </div>
         </div>
       </Drawer>
