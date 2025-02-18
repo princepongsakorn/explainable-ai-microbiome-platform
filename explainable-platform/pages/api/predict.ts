@@ -30,6 +30,13 @@ export const postModelPredict = async (
   return data;
 };
 
+export const postRePredict = async (id: string) => {
+  const { data } = await httpClient.post<ICreatePredictions>(
+    `/predict/${id}/re-predict`
+  );
+  return data;
+};
+
 export const getPredictions = async (params: IPaginationRequestParams) => {
   const { data } = await httpClient.get<IPagination<IPredictions>>(`/predict`, {
     params: { page: params.page },
@@ -37,9 +44,15 @@ export const getPredictions = async (params: IPaginationRequestParams) => {
   return data;
 };
 
-export const getPredictionRecords = async (id: string, params: IPaginationRequestParams) => {
-  const { data } = await httpClient.get<IPagination<IPredictionRecords>>(`/predict/${id}/records`, {
-    params,
-  });
+export const getPredictionRecords = async (
+  id: string,
+  params: IPaginationRequestParams
+) => {
+  const { data } = await httpClient.get<IPagination<IPredictionRecords>>(
+    `/predict/${id}/records`,
+    {
+      params,
+    }
+  );
   return data;
 };

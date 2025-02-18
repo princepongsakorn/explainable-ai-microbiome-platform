@@ -54,7 +54,9 @@ export enum PredictionClass {
 }
 
 export enum PredictionStatus {
+  ALL = 'ALL',
   PENDING = 'PENDING',
+  IN_PROGRESS = 'IN_PROGRESS',
   SUCCESS = 'SUCCESS',
   ERROR = 'ERROR',
 }

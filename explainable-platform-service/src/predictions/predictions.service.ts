@@ -33,8 +33,8 @@ export class PredictionsService {
       modelName,
       dfColumns: dfColumns,
     });
-    await this.predictionsRepository.save(prediction);
 
+    await this.predictionsRepository.save(prediction);
     for (const row of dfDataRows) {
       const recordId = uuidv4();
       const record = this.recordsRepository.create({
@@ -46,8 +46,40 @@ export class PredictionsService {
     }
 
     await this.queueService.addPredictionJob(prediction.id);
+    const records = await this.recordsRepository.find({
+      where: { prediction: { id: predictionId } },
+    });
+    for (const record of records) {
+      await this.queueService.addPredictionRecordJob(predictionId, record.id);
+    }
 
     return { message: 'Prediction Created', predictionId: prediction.id };
+  }
+
+  async rePredictRecords(predictionId: string) {
+    const failedRecords = await this.recordsRepository.find({
+      where: {
+        prediction: { id: predictionId },
+        status: PredictionStatus.ERROR,
+      },
+    });
+
+    if (failedRecords.length === 0) {
+      throw new NotFoundException('No failed records found for re-prediction.');
+    }
+
+    for (const record of failedRecords) {
+      await this.queueService.addPredictionRecordJob(predictionId, record.id);
+    }
+
+    return {
+      message: `Re-prediction started for ${failedRecords.length} failed records.`,
+    };
+  }
+
+  async cancelPrediction(predictionId: string) {
+    await this.queueService.cancelPredictionJob(predictionId);
+    return { message: `Prediction job for ${predictionId} was canceled.` };
   }
 
   async getPredictions(page: number = 1, limit: number = 10) {
@@ -111,6 +143,7 @@ export class PredictionsService {
     page: number = 1,
     limit: number = 10,
     predictionClass: PredictionClass = PredictionClass.ALL,
+    predictionStatus: PredictionStatus = PredictionStatus.ALL,
   ) {
     const prediction = await this.predictionsRepository.findOne({
       where: { id: predictionId },
@@ -126,6 +159,16 @@ export class PredictionsService {
       whereCondition['class'] = 1;
     } else if (predictionClass === PredictionClass.NEGATIVE) {
       whereCondition['class'] = 0;
+    }
+
+    if (predictionStatus === PredictionStatus.PENDING) {
+      whereCondition['status'] = PredictionStatus.PENDING;
+    } else if (predictionStatus === PredictionStatus.ERROR) {
+      whereCondition['status'] = PredictionStatus.ERROR;
+    } else if (predictionStatus === PredictionStatus.SUCCESS) {
+      whereCondition['status'] = PredictionStatus.SUCCESS;
+    } else if (predictionStatus === PredictionStatus.IN_PROGRESS) {
+      whereCondition['status'] = PredictionStatus.IN_PROGRESS;
     }
 
     const [items, totalItems] = await this.recordsRepository.findAndCount({

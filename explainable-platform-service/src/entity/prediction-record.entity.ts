@@ -26,4 +26,7 @@ export class PredictionRecord {
 
   @Column({ type: 'enum', enum: PredictionStatus, default: PredictionStatus.PENDING })
   status: PredictionStatus;
+
+  @Column({ type: 'text', nullable: true })
+  errorMsg?: string | null;
 }

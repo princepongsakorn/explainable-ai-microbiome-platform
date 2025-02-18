@@ -5,9 +5,7 @@ import { HttpService } from '@nestjs/axios';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Prediction } from '../entity/prediction.entity';
-import {
-  PredictionRecord,
-} from '../entity/prediction-record.entity';
+import { PredictionRecord } from '../entity/prediction-record.entity';
 import { StorageService } from '../storage/storage.service';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -50,7 +48,9 @@ export class PredictionProcessor {
       return;
     }
 
-    console.log(`Processing Prediction ID: ${predictionId}`);
+    console.log(
+      `[PredictionProcessor] processing prediction ID: ${predictionId}`,
+    );
     const records = await this.recordsRepository.find({
       where: { prediction: { id: predictionId } },
       relations: ['prediction'],
@@ -101,79 +101,112 @@ export class PredictionProcessor {
 
     await this.predictionsRepository.save(prediction);
 
-    // Process Each Record for Prediction
-    for (const record of records) {
-      try {
-        console.log(`[PredictionProcessor] processing Record ID: ${record.id}`);
-        const dataframe_split: IDataframeSplitRequest = {
-          dataframe_split: {
-            columns: prediction.dfColumns,
-            data: [record.dfData],
-          },
-        };
+    console.log(
+      `[PredictionProcessor] Prediction ID ${predictionId} processing completed.`,
+    );
+  }
 
-        // Prediction (Proba & Class)
-        try {
-          const predictionObservable = this.httpService.post<IPredictResponse>(
-            `${this.inferenceServiceURL}/v1/predict/${prediction.modelName}`,
-            dataframe_split,
-            { headers: { Host: this.hostHeader } },
-          );
+  @Process('processPredictionRecord')
+  async handlePredictionRecord(
+    job: Job<{ predictionId: string; recordId: string }>,
+  ) {
+    const { recordId } = job.data;
+    const record = await this.recordsRepository.findOne({
+      where: { id: recordId },
+      relations: ['prediction'],
+    });
 
-          const predictionResponse = await lastValueFrom(predictionObservable);
-          record.proba = parseFloat(
-            predictionResponse?.data.predict[0].proba.toFixed(4),
-          );
-          record.class = predictionResponse?.data.predict[0].class;
-        } catch (error) {
-          console.error(
-            `[PredictionProcessor] error: prediction API failed for Record ID ${record.id}:`,
-            error.message,
-          );
-          record.status = PredictionStatus.ERROR;
-          await this.recordsRepository.save(record);
-          continue;
-        }
+    if (!record) {
+      console.error(
+        `[PredictionProcessor] error: Prediction ID ${recordId} not found.`,
+      );
+      return;
+    }
 
-        // POST Generate Waterfall
-        try {
-          const waterfallObservable = this.httpService.post<IWaterfallResponse>(
-            `${this.inferenceServiceURL}/v1/explain/waterfall/${prediction.modelName}`,
-            dataframe_split,
-            { headers: { Host: this.hostHeader } },
-          );
-
-          const waterfallResponse = await lastValueFrom(waterfallObservable);
-          if (waterfallResponse?.data) {
-            const waterfallUrl = await this.storageService.uploadToS3(
-              waterfallResponse.data.explain[0].waterfall,
-              predictionId,
-              `waterfall_${record.id}.png`,
-            );
-            record.waterfall = waterfallUrl;
-          }
-        } catch (error) {
-          console.error(
-            `[PredictionProcessor] error: waterfall API failed for Record ID ${record.id}:`,
-            error.message,
-          );
-          record.status = PredictionStatus.ERROR;
-          await this.recordsRepository.save(record);
-          continue;
-        }
-        record.status = PredictionStatus.SUCCESS;
+    try {
+      console.log(`[PredictionProcessor] processing Record ID: ${record.id}`);
+      record.status = PredictionStatus.IN_PROGRESS;
+      await this.recordsRepository.save(record);
+      const activeJob = await job.queue.getJob(job.id);
+      if (!activeJob) {
+        console.log(
+          `[PredictionProcessor] Job was terminated for Record ID: ${record.id}`,
+        );
+        record.status = PredictionStatus.ERROR;
+        record.errorMsg = 'Job was terminated';
         await this.recordsRepository.save(record);
+        return;
+      }
+      const prediction = record.prediction
+      const dataframe_split: IDataframeSplitRequest = {
+        dataframe_split: {
+          columns: record.prediction.dfColumns,
+          data: [record.dfData],
+        },
+      };
+
+      // Prediction (Proba & Class)
+      try {
+        const predictionObservable = this.httpService.post<IPredictResponse>(
+          `${this.inferenceServiceURL}/v1/predict/${prediction.modelName}`,
+          dataframe_split,
+          { headers: { Host: this.hostHeader } },
+        );
+
+        const predictionResponse = await lastValueFrom(predictionObservable);
+        record.proba = parseFloat(
+          predictionResponse?.data.predict[0].proba.toFixed(4),
+        );
+        record.class = predictionResponse?.data.predict[0].class;
       } catch (error) {
         console.error(
-          `[PredictionProcessor] error: unexpected error processing Record ID ${record.id}:`,
+          `[PredictionProcessor] error: prediction API failed for Record ID ${record.id}:`,
           error.message,
         );
         record.status = PredictionStatus.ERROR;
+        record.errorMsg = error.message;
         await this.recordsRepository.save(record);
-        continue;
       }
+
+      // POST Generate Waterfall
+      try {
+        const waterfallObservable = this.httpService.post<IWaterfallResponse>(
+          `${this.inferenceServiceURL}/v1/explain/waterfall/${prediction.modelName}`,
+          dataframe_split,
+          { headers: { Host: this.hostHeader } },
+        );
+
+        const waterfallResponse = await lastValueFrom(waterfallObservable);
+        if (waterfallResponse?.data) {
+          const waterfallUrl = await this.storageService.uploadToS3(
+            waterfallResponse.data.explain[0].waterfall,
+            prediction.id,
+            `waterfall_${record.id}.png`,
+          );
+          record.waterfall = waterfallUrl;
+        }
+      } catch (error) {
+        console.error(
+          `[PredictionProcessor] error: waterfall API failed for Record ID ${record.id}:`,
+          error.message,
+        );
+        record.status = PredictionStatus.ERROR;
+        record.errorMsg = error.message;
+        await this.recordsRepository.save(record);
+      }
+      record.status = PredictionStatus.SUCCESS;
+      record.errorMsg = null;
+      await this.recordsRepository.save(record);
+    } catch (error) {
+      console.error(
+        `[PredictionProcessor] error: unexpected error processing Record ID ${record.id}:`,
+        error.message,
+      );
+      record.status = PredictionStatus.ERROR;
+      record.errorMsg = error.message;
+      await this.recordsRepository.save(record);
     }
 
-    console.log(`✅ Prediction ID ${predictionId} processing completed.`);
+    console.log(`[PredictionProcessor] Prediction ID ${recordId} processing completed.`);
   }
 }

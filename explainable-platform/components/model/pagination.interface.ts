@@ -1,8 +1,9 @@
-import { PredictionClass } from "./model.interface";
+import { PredictionClass, PredictionStatus } from "./model.interface";
 
 export interface IPaginationRequestParams {
   page?: number | undefined;
   class?: PredictionClass
+  status?: PredictionStatus
 }
 
 export interface IPaginationMeta {
