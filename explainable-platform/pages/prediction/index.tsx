@@ -18,6 +18,7 @@ import {
 import { useRouter } from "next/router";
 import { queryToString } from "../utils/queryToString";
 import { ShapPlotPlaceholder } from "@/components/ui/ImageEmpty/ImageEmpty";
+import { Dropdown } from "@/components/ui/Dropdown/Dropdown";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -156,6 +157,10 @@ export function History() {
             <p className="font-medium">Model</p>
             <p>{selectPrediction?.modelName}</p>
           </div>
+          <div className="flex flex-row justify-between mb-3">
+            <p className="font-medium">Record</p>
+            <p>{selectPrediction?.records.total}</p>
+          </div>
           <div className="flex flex-row justify-between">
             <p className="font-medium">Predict at</p>
             <p>
@@ -168,7 +173,9 @@ export function History() {
             Summary
           </div>
           <div className="flex flex-col mb-3 mt-3 ">
-            <div className="font-medium">Beeswarm plot</div>
+            <div>
+              <div className="font-medium">Beeswarm plot</div>
+            </div>
             <div className="text-sm py-2 text-gray-500">
               This SHAP beeswarm plot visualizes the impact of each feature on
               the model’s predictions. Each dot represents an individual SHAP

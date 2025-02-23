@@ -15,6 +15,7 @@ import json
 
 from flask import Flask, request, jsonify
 from joblib import Memory
+from mlflow.exceptions import MlflowException
 
 class ShapValueObject:
     def __init__(self, base_value, shap_df, explanation):
@@ -446,5 +447,90 @@ def get_mlflow_tracking_uri():
     mlflow_url = os.environ.get("MLFLOW_URL", None)
     return jsonify({"url": mlflow_url})
 
+@app.route("/v1/mlflow/experiments", methods=["GET"])
+def get_mlflow_experiments():
+    mlflow_url = os.environ.get("MLFLOW_URL", None)
+    mlflow.set_tracking_uri(mlflow_url)
+    client = mlflow.tracking.MlflowClient()
+    experiments = client.list_experiments()
+    return jsonify({"experiments": experiments})
+
+@app.route("/v1/mlflow/experiment/<experiment_id>", methods=["GET"])
+def get_experiment_runs(experiment_id):
+    order_by = request.args.get("order_by", "metrics.accuracy DESC")
+    page_token = request.args.get("page_token", None)
+    
+    mlflow_url = os.environ.get("MLFLOW_URL", None)
+    mlflow.set_tracking_uri(mlflow_url)
+    client = mlflow.tracking.MlflowClient()
+    runs = client.search_runs(
+        experiment_ids=[experiment_id],
+        order_by=[order_by],
+        max_results=100,
+        page_token=page_token
+    )
+    
+    result = {
+        "itemCount": len(runs),
+        "items": []
+    }
+
+    for run in runs:
+        model_stage = "Unknown"
+        models = client.search_model_versions(f"run_id='{run.info.run_id}'")
+        if models:
+            model_stage = models[0].current_stage
+        
+        result["items"].append({
+            "run_id": run.info.run_id,
+            "model_stage": model_stage,
+            "data": run.data.to_dictionary(),
+            "info": run.info.to_dictionary(),
+        })
+
+    return jsonify({"experiment": result})
+
+@app.route("/v1/mlflow/run/<run_id>", methods=["GET"])
+def get_mlflow_run(run_id):
+    mlflow_url = os.environ.get("MLFLOW_URL", None)
+    mlflow.set_tracking_uri(mlflow_url)
+    client = mlflow.tracking.MlflowClient()
+    run = client.get_run(run_id)
+    result = {
+            "run_id": run.info.run_id,
+            "run": run.info.to_dictionary()
+    }
+
+    return jsonify({"run": result})
+
+@app.route("/v1/mlflow/run/<run_id>/stage", methods=["PUT"])
+def update_model_stage_by_run_id(run_id):
+    data = request.get_json()
+    stage = data.get("stage", None)
+    archive_existing_versions = data.get("archive_existing_versions", False)
+
+    if stage not in ["None", "Staging", "Production", "Archived"]:
+        return jsonify({"status": "error", "message": "Invalid stage value"}), 400
+    
+    mlflow_url = os.environ.get("MLFLOW_URL", None)
+    mlflow.set_tracking_uri(mlflow_url)
+    client = mlflow.tracking.MlflowClient()
+
+    models = client.search_model_versions(f"run_id='{run_id}'")
+    if not models:
+        return {"status": "error", "message": f"No model found for Run ID: {run_id}"}
+    try:
+        model_name = models[0].name
+        version = models[0].version
+        client.transition_model_version_stage(
+            name=model_name,
+            version=version,
+            stage=stage,
+            archive_existing_versions=archive_existing_versions
+        )
+        return jsonify({"status": "success", "message": f"Model '{model_name}' version '{version}' transitioned to '{stage}'."})
+    except MlflowException as e:
+        return {"status": "error", "message": str(e)}
+    
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)

@@ -80,7 +80,6 @@ def objective(params):
         mlflow.sklearn.log_model( 
             sk_model=model,
             artifact_path="model",
-            registered_model_name="sample-crc",
             input_example = X_test[:3],
             signature = infer_signature(X_test[:3], model.predict(X_test[:3]))
         )
