@@ -4,7 +4,7 @@ import React, { FC, useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import AuthenticationCheck from "@/hoc/AuthenticationCheck";
 import Sidebar from "@/components/common/Sidebar";
-import { ArrowUpTrayIcon, TableCellsIcon } from "@heroicons/react/24/outline";
+import { ArrowUpTrayIcon, TableCellsIcon, CodeBracketIcon } from "@heroicons/react/24/outline";
 import Topbar from "../Topbar";
 
 interface Props {
@@ -51,8 +51,21 @@ const navigatorList: NavigatorProps[] = [
     subMenu: [
       {
         slug: "/",
-        pathName: ["prediction"],
+        pathName: ["prediction", "local"],
         name: "Prediction List",
+      },
+    ],
+  },
+  {
+    icon: <CodeBracketIcon className="w-5" />,
+    pathName: "develop",
+    slug: "/develop",
+    name: "Develop",
+    subMenu: [
+      {
+        slug: "/",
+        pathName: ["develop"],
+        name: "Develop",
       },
     ],
   },

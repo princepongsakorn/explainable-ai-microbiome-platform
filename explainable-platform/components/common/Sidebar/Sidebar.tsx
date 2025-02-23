@@ -50,7 +50,7 @@ const Sidebar: FC<SidebarProps> = (props: SidebarProps) => {
           })}
         </div>
       </div>
-      <div className="flex w-full justify-center items-center relative h-10 w-10 rounded-md hover:bg-[#F8F8F8] hover:text-[#081226] text-[#898989] cursor-pointer">
+      <div className="flex justify-center items-center relative h-10 w-10 rounded-md hover:bg-[#F8F8F8] hover:text-[#081226] text-[#898989] cursor-pointer">
         <MinusCircleIcon className="w-5" />
       </div>
     </div>
