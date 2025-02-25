@@ -31,14 +31,14 @@ export const getRunById = async (id: string) => {
 
 export const putPublicModelByRunId = async (id: string) => {
   const { data } = await httpClient.put<IRunResponse>(
-    `/experiments/run/public-model/${id}`
+    `/experiments/run/publish-model/${id}`
   );
   return data;
 };
 
 export const putUnPublicModelByRunId = async (id: string) => {
   const { data } = await httpClient.put<IRunResponse>(
-    `/experiments/run/unpublic-model/${id}`
+    `/experiments/run/unpublish-model/${id}`
   );
   return data;
 };
