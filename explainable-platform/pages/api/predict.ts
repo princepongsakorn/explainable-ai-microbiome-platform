@@ -1,8 +1,6 @@
 import { AxiosProgressEvent } from "axios";
 import { httpClient } from "./httpClient";
 import {
-  IModelInfo,
-  IModelPayload,
   IPredictionRecords,
   IPredictions,
   ICreatePredictions,

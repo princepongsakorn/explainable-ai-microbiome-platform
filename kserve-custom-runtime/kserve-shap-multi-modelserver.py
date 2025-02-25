@@ -256,6 +256,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
+# Model and prediction api
 @app.route("/v1/explain/beeswarm/<model_name>", methods=["POST"])
 def explain_beeswarm(model_name):
     model_loader = ModelLoader(model_name)
@@ -452,14 +453,21 @@ def get_mlflow_experiments():
     mlflow_url = os.environ.get("MLFLOW_URL", None)
     mlflow.set_tracking_uri(mlflow_url)
     client = mlflow.tracking.MlflowClient()
-    experiments = client.list_experiments()
-    return jsonify({"experiments": experiments})
+    experiments = client.search_experiments()
+    experiment_list = [
+        {k.lstrip("_"): v for k, v in exp.__dict__.items()}
+        for exp in experiments
+    ]
+    return jsonify({"experiments": experiment_list})
 
 @app.route("/v1/mlflow/experiment/<experiment_id>", methods=["GET"])
 def get_experiment_runs(experiment_id):
-    order_by = request.args.get("order_by", "metrics.accuracy DESC")
+    order_by = request.args.get("order_by", "start_time DESC")
     page_token = request.args.get("page_token", None)
-    
+
+    if not order_by:
+        order_by = "start_time DESC"
+        
     mlflow_url = os.environ.get("MLFLOW_URL", None)
     mlflow.set_tracking_uri(mlflow_url)
     client = mlflow.tracking.MlflowClient()
@@ -470,25 +478,19 @@ def get_experiment_runs(experiment_id):
         page_token=page_token
     )
     
-    result = {
-        "itemCount": len(runs),
-        "items": []
-    }
-
+    result = []
     for run in runs:
-        model_stage = "Unknown"
-        models = client.search_model_versions(f"run_id='{run.info.run_id}'")
-        if models:
-            model_stage = models[0].current_stage
-        
-        result["items"].append({
-            "run_id": run.info.run_id,
-            "model_stage": model_stage,
-            "data": run.data.to_dictionary(),
-            "info": run.info.to_dictionary(),
+        metrics = {k: v for k, v in run.data.metrics.items()}
+        parameters = {k: v for k, v in run.data.params.items()}
+        result.append({
+            "data": {
+                "metrics": metrics,
+                "parameters": parameters
+            },
+            "info": {k.lstrip("_"): v for k, v in run.info.__dict__.items()}
         })
 
-    return jsonify({"experiment": result})
+    return jsonify({"runs": result, "nextPageToken": runs.token})
 
 @app.route("/v1/mlflow/run/<run_id>", methods=["GET"])
 def get_mlflow_run(run_id):
@@ -496,9 +498,10 @@ def get_mlflow_run(run_id):
     mlflow.set_tracking_uri(mlflow_url)
     client = mlflow.tracking.MlflowClient()
     run = client.get_run(run_id)
+    run_dict = {k.lstrip("_"): v for k, v in run.info.__dict__.items()}
     result = {
-            "run_id": run.info.run_id,
-            "run": run.info.to_dictionary()
+        "run_id": run.info.run_id,
+        "run": run_dict
     }
 
     return jsonify({"run": result})

@@ -4,7 +4,7 @@ import React, { FC, useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import AuthenticationCheck from "@/hoc/AuthenticationCheck";
 import Sidebar from "@/components/common/Sidebar";
-import { ArrowUpTrayIcon, TableCellsIcon, CodeBracketIcon } from "@heroicons/react/24/outline";
+import { ArrowUpTrayIcon, TableCellsIcon, CodeBracketIcon, BeakerIcon } from "@heroicons/react/24/outline";
 import Topbar from "../Topbar";
 
 interface Props {
@@ -38,7 +38,7 @@ const navigatorList: NavigatorProps[] = [
     subMenu: [
       {
         slug: "/",
-        pathName: ["prediction"],
+        pathName: "predict",
         name: "Upload file",
       },
     ],
@@ -57,6 +57,24 @@ const navigatorList: NavigatorProps[] = [
     ],
   },
   {
+    icon: <BeakerIcon className="w-5" />,
+    pathName: "experiments",
+    slug: "/experiments",
+    name: "Experiments and Models",
+    subMenu: [
+      {
+        slug: "/",
+        pathName: "experiments",
+        name: "Experiments",
+      },
+      {
+        slug: "/models",
+        pathName: "models",
+        name: "Models",
+      },
+    ],
+  },
+  {
     icon: <CodeBracketIcon className="w-5" />,
     pathName: "develop",
     slug: "/develop",
@@ -64,7 +82,7 @@ const navigatorList: NavigatorProps[] = [
     subMenu: [
       {
         slug: "/",
-        pathName: ["develop"],
+        pathName: "develop",
         name: "Develop",
       },
     ],
@@ -113,7 +131,7 @@ const Layout: FC<Props> = ({ children, pageProps }: Props) => {
         navigatorList={mainNavigate}
         asPath={router.asPath}
       />
-      <Topbar navigatorList={subNavigator} currentSubMenu={splitPathUrl[2]} />
+      <Topbar navigatorList={subNavigator} currentSubMenu={splitPathUrl[1]} />
       <div className="ml-sidebar">
         <div className="ml-[54px]">{children}</div>
       </div>
