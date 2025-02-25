@@ -1,0 +1,48 @@
+import { IMetrics } from "./model.interface";
+
+export interface IExperimentResponse {
+  experiments: IExperiment[];
+}
+
+export interface IExperiment {
+  artifact_location: string;
+  creation_time: number;
+  experiment_id: string;
+  last_update_time: number;
+  lifecycle_stage: string;
+  name: string;
+  tags: {};
+}
+
+export interface IExperimentsRunRequestParams {
+  orderBy?: string;
+  pageToken?: string;
+}
+
+export interface IExperimentsRunResponse {
+  nextPageToken: string;
+  runs: IRun[];
+}
+
+export interface IRun {
+  data: IRunData;
+  info: IRunInfo;
+}
+
+export interface IRunData {
+  metrics: { [key: string]: string };
+  parameters: { [key: string]: string };
+}
+
+export interface IRunInfo {
+  artifact_uri: string;
+  end_time: number;
+  experiment_id: string;
+  lifecycle_stage: string;
+  run_id: string;
+  run_name: string;
+  run_uuid: string;
+  start_time: number;
+  status: string;
+  user_id: string;
+}

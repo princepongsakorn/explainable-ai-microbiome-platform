@@ -21,15 +21,16 @@ interface TopbarLinkProps {
 
 const TopbarLinkComponent = React.forwardRef((props: TopbarLinkProps, ref) => {
   const { onClick, href, item, currentSubMenu, pathName } = props;
+  console.log(currentSubMenu, pathName, pathName.includes(currentSubMenu));
   return (
     <a onClick={onClick} href={href}>
       <div
         className={`flex items-center justify-center h-full relative px-1 hover:font-bold ${
-          !currentSubMenu || pathName.includes(currentSubMenu) ? "font-bold" : ""
+          pathName.includes(currentSubMenu) ? "font-bold" : ""
         }`}
       >
         {item.name}
-        {(!currentSubMenu || pathName.includes(currentSubMenu)) && (
+        {pathName.includes(currentSubMenu) && (
           <div className="w-full h-[2px] bg-black absolute bottom-0 rounded-topbar"></div>
         )}
       </div>
@@ -67,7 +68,7 @@ const Topbar: FC<TopbarProps> = (props: TopbarProps) => {
     >
       <div className="col-start-2 flex w-full h-full justify-center">
         <div
-          className={`grid  grid-cols-${navigatorList?.subMenu?.length} gap-5 justify-center text-sm justify-items-center h-full`}
+          className={`flex flex-rows gap-6 justify-center text-sm justify-items-center h-full`}
         >
           {navigatorList?.subMenu?.map((item, index) => {
             const pathName = Array.isArray(item.pathName)

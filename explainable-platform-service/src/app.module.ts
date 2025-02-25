@@ -7,6 +7,7 @@ import { QueueModule } from './queue/queue.module';
 import { StorageModule } from './storage/storage.module';
 import { ModelsModule } from './models/models.module';
 import { PredictionRecord } from './entity/prediction-record.entity';
+import { ExperimentsModule } from './experiments/experiments.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { PredictionRecord } from './entity/prediction-record.entity';
         port: Number(process.env.REDIS_PORT),
       },
     }),
+    ExperimentsModule,
     ModelsModule,
     PredictionsModule,
     QueueModule,
