@@ -11,13 +11,21 @@ import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import "react-modern-drawer/dist/index.css";
-import { getExperimentsList, getExperimentsById } from "../api/experiments";
+import {
+  getExperimentsList,
+  getExperimentsById,
+  getRunById,
+  putPublicModelByRunId,
+  putUnPublicModelByRunId,
+} from "../api/experiments";
 import {
   IExperiment,
   IExperimentsRunResponse,
   IRun,
+  IRunDetail,
 } from "@/components/model/experiments.interface";
 import relativeTime from "dayjs/plugin/relativeTime";
+import Drawer from "react-modern-drawer";
 
 dayjs.extend(relativeTime);
 dayjs.extend(utc);
@@ -28,6 +36,8 @@ export function History() {
   const [selectedExperiments, setSelectedExperiments] = useState<IExperiment>();
   const [runs, setRuns] = useState<IExperimentsRunResponse>();
   const [sort, setSort] = useState<{ key: string; order: string }>();
+  const [isOpen, setIsOpen] = useState(false);
+  const [runInfo, setRunInfo] = useState<IRunDetail>();
 
   useEffect(() => {
     const getExperiments = async () => {
@@ -61,9 +71,10 @@ export function History() {
 
   const getExperiment = async () => {
     if (selectedExperiments) {
+      const orderBy = sort?.key ? `${sort?.key} ${sort?.order}` : "";
       const data = await getExperimentsById(
         selectedExperiments?.experiment_id,
-        { pageToken: "", orderBy: "" }
+        { pageToken: "", orderBy: orderBy }
       );
       setRuns(data);
     }
@@ -90,6 +101,26 @@ export function History() {
       setSort({ key: col, order: order });
     } else {
       setSort({ key: col, order: "DESC" });
+    }
+  };
+
+  const loadRunInfo = async (id: string) => {
+    const run = await getRunById(id);
+    if (run.run) {
+      setRunInfo(run.run);
+      setIsOpen(true);
+    }
+  };
+
+  const publicModel = async (id?: string) => {
+    if (id) {
+      await putPublicModelByRunId(id);
+    }
+  };
+
+  const unPublicModel = async (id?: string) => {
+    if (id) {
+      await putUnPublicModelByRunId(id);
     }
   };
 
@@ -179,7 +210,7 @@ export function History() {
                       <th className="px-6 py-3 bg-gray-50 sticky left-[0] border-y-[1px] border-gray-200"></th>
                       <th
                         className="px-6 py-3 border-y-[1px] border-gray-200"
-                        colSpan={2}
+                        colSpan={3}
                       ></th>
                       {metricsHeaders.length > 0 && (
                         <th
@@ -219,6 +250,12 @@ export function History() {
                       className="px-6 py-3 font-medium border-b-[1px] border-gray-200"
                     >
                       Duration
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 font-medium border-b-[1px] border-gray-200"
+                    >
+                      User
                     </th>
                     {metricsHeaders.map((header) => (
                       <th
@@ -260,7 +297,10 @@ export function History() {
                 </thead>
                 <tbody>
                   {runs?.runs.map((run) => (
-                    <tr className="bg-white hover:bg-gray-50 text-black cursor-pointer border-b-[1px] border-gray-200">
+                    <tr
+                      className="bg-white hover:bg-gray-50 text-black cursor-pointer border-b-[1px] border-gray-200"
+                      onClick={() => loadRunInfo(run.info.run_id)}
+                    >
                       <th
                         scope="row"
                         className="font-medium bg-white sticky left-[0] whitespace-nowrap border-b-[1px] border-gray-200"
@@ -284,10 +324,20 @@ export function History() {
                           .toFixed(1)}
                         s
                       </th>
+                      <th
+                        scope="col"
+                        className="px-4 py-2 font-normal whitespace-nowrap border-b-[1px] border-gray-200"
+                      >
+                        {run.info.user_id}
+                      </th>
                       {metricsHeaders.map((header) => (
                         <td
                           key={header}
-                          className={`px-4 py-2 border-b-[1px] border-gray-200 ${sort?.key === `metrics.${header}` ? 'bg-blue-50' : ''}`}
+                          className={`px-4 py-2 border-b-[1px] border-gray-200 ${
+                            sort?.key === `metrics.${header}`
+                              ? "bg-blue-50"
+                              : ""
+                          }`}
                         >
                           {run.data.metrics[header] || "-"}
                         </td>
@@ -295,7 +345,11 @@ export function History() {
                       {parametersHeaders.map((header) => (
                         <td
                           key={header}
-                          className={`px-4 py-2 border-b-[1px] border-gray-200 ${sort?.key === `metrics.${header}` ? 'bg-blue-50' : ''}`}
+                          className={`px-4 py-2 border-b-[1px] border-gray-200 ${
+                            sort?.key === `metrics.${header}`
+                              ? "bg-blue-50"
+                              : ""
+                          }`}
                         >
                           {run.data.parameters[header] || "-"}
                         </td>
@@ -320,6 +374,103 @@ export function History() {
             </div>
           </div>
         </div>
+        <Drawer
+          open={isOpen}
+          onClose={() => setIsOpen(false)}
+          direction="right"
+          className="shadow-2xs max-w-4xl overflow-y-auto"
+          duration={150}
+          size={"60vw"}
+        >
+          <div className="p-[40px] pt-[40px] overflow-y-auto">
+            <div className="flex flex-row justify-between items-center">
+              <p className="text-xl font-medium text-gray-800 mb-2">
+                {runInfo?.info.run_name}
+              </p>
+              <div>
+                {runInfo?.models[0].current_stage === "Production" ? (
+                  <button
+                    type="button"
+                    className="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 focus:outline-none"
+                    onClick={() => unPublicModel(runInfo?.info.run_id)}
+                  >
+                    Unpublic Model
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 focus:outline-none"
+                    onClick={() => publicModel(runInfo?.info.run_id)}
+                  >
+                    Public Model
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="font-bold bg-gray-50 px-4 py-2 rounded-lg my-4">
+              Run Information
+            </div>
+            <div className="flex flex-row justify-between mb-3">
+              <p className="font-medium">User</p>
+              <p>{runInfo?.info.user_id}</p>
+            </div>
+            <div className="flex flex-row justify-between mb-3">
+              <p className="font-medium">Created</p>
+              <p>
+                {dayjs(runInfo?.info.start_time).format("DD/MM/YYYY")} (
+                {dayjs(runInfo?.info.start_time).fromNow()})
+              </p>
+            </div>
+            <div className="flex flex-row justify-between mb-3">
+              <p className="font-medium">Duration</p>
+              <p>
+                {dayjs(runInfo?.info.end_time)
+                  .diff(dayjs(runInfo?.info.start_time), "seconds", true)
+                  .toFixed(1)}
+                s
+              </p>
+            </div>
+            <div className="font-bold bg-gray-50 px-4 py-2 rounded-lg my-4">
+              Model Information
+            </div>
+            <div className="flex flex-row justify-between mb-3">
+              <p className="font-medium">Name</p>
+              <p>{runInfo?.models[0].name}</p>
+            </div>
+            <div className="flex flex-row justify-between mb-3">
+              <p className="font-medium">Version</p>
+              <p>{runInfo?.models[0].version}</p>
+            </div>
+            <div className="flex flex-row justify-between mb-3">
+              <p className="font-medium">Current Stage</p>
+              <p>{runInfo?.models[0].current_stage}</p>
+            </div>
+            <div className="font-bold bg-gray-50 px-4 py-2 rounded-lg my-4">
+              Model Metrics Information
+            </div>
+            {Object.keys(runInfo?.data.metrics ?? {}).map((metric) => {
+              return (
+                <div className="flex flex-row justify-between mb-3">
+                  <p className="font-medium capitalize">
+                    {metric.replaceAll("_", " ")}
+                  </p>
+                  <p>{runInfo?.data.metrics[metric]}</p>
+                </div>
+              );
+            })}
+            <div className="font-bold bg-gray-50 px-4 py-2 rounded-lg my-4">
+              Model Parameters Information
+            </div>
+            {Object.keys(runInfo?.data.parameters ?? {}).map((parameter) => {
+              return (
+                <div className="flex flex-row justify-between mb-3">
+                  <p className="font-medium">{parameter}</p>
+                  <p>{runInfo?.data.parameters[parameter]}</p>
+                </div>
+              );
+            })}
+          </div>
+        </Drawer>
       </div>
     </>
   );

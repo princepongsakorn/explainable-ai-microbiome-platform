@@ -2,6 +2,7 @@ import {
   IExperimentResponse,
   IExperimentsRunRequestParams,
   IExperimentsRunResponse,
+  IRunResponse,
 } from "@/components/model/experiments.interface";
 import { httpClient } from "./httpClient";
 
@@ -19,6 +20,25 @@ export const getExperimentsById = async (
     {
       params,
     }
+  );
+  return data;
+};
+
+export const getRunById = async (id: string) => {
+  const { data } = await httpClient.get<IRunResponse>(`/experiments/run/${id}`);
+  return data;
+};
+
+export const putPublicModelByRunId = async (id: string) => {
+  const { data } = await httpClient.put<IRunResponse>(
+    `/experiments/run/public-model/${id}`
+  );
+  return data;
+};
+
+export const putUnPublicModelByRunId = async (id: string) => {
+  const { data } = await httpClient.put<IRunResponse>(
+    `/experiments/run/unpublic-model/${id}`
   );
   return data;
 };

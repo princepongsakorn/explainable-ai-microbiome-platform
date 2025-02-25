@@ -24,6 +24,16 @@ export interface IExperimentsRunResponse {
   runs: IRun[];
 }
 
+export interface IRunResponse {
+  run: IRunDetail;
+}
+
+export interface IRunDetail {
+  data: IRunData;
+  info: IRunInfo;
+  models: IModel[];
+}
+
 export interface IRun {
   data: IRunData;
   info: IRunInfo;
@@ -45,4 +55,21 @@ export interface IRunInfo {
   start_time: number;
   status: string;
   user_id: string;
+}
+
+export interface IModel {
+  aliases: any[];
+  creation_time: number;
+  current_stage: string;
+  description: string;
+  last_updated_timestamp: number;
+  name: string;
+  run_id: string;
+  run_link: string;
+  source: string;
+  status: string;
+  status_message: any;
+  tags: { [key: string]: string };
+  user_id: string;
+  version: string;
 }

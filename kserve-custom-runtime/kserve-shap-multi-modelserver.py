@@ -498,10 +498,21 @@ def get_mlflow_run(run_id):
     mlflow.set_tracking_uri(mlflow_url)
     client = mlflow.tracking.MlflowClient()
     run = client.get_run(run_id)
-    run_dict = {k.lstrip("_"): v for k, v in run.info.__dict__.items()}
+    models = client.search_model_versions(f"run_id='{run.info.run_id}'")
+    model_list = [
+                {k.lstrip("_"): v for k, v in model.__dict__.items()}
+                for model in models
+            ]
+    metrics = {k: v for k, v in run.data.metrics.items()}
+    parameters = {k: v for k, v in run.data.params.items()}
+
     result = {
-        "run_id": run.info.run_id,
-        "run": run_dict
+        "data": {
+            "metrics": metrics,
+            "parameters": parameters
+        },
+        "models": model_list,
+        "info": {k.lstrip("_"): v for k, v in run.info.__dict__.items()}
     }
 
     return jsonify({"run": result})
