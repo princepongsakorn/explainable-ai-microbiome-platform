@@ -112,13 +112,13 @@ export function History() {
     }
   };
 
-  const publicModel = async (id?: string) => {
+  const publishModel = async (id?: string) => {
     if (id) {
       await putPublicModelByRunId(id);
     }
   };
 
-  const unPublicModel = async (id?: string) => {
+  const unPublishModel = async (id?: string) => {
     if (id) {
       await putUnPublicModelByRunId(id);
     }
@@ -380,7 +380,7 @@ export function History() {
           direction="right"
           className="shadow-2xs max-w-4xl overflow-y-auto"
           duration={150}
-          size={"60vw"}
+          size={"40vw"}
         >
           <div className="p-[40px] pt-[40px] overflow-y-auto">
             <div className="flex flex-row justify-between items-center">
@@ -391,18 +391,18 @@ export function History() {
                 {runInfo?.models[0].current_stage === "Production" ? (
                   <button
                     type="button"
-                    className="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 focus:outline-none"
-                    onClick={() => unPublicModel(runInfo?.info.run_id)}
+                    className="focus:outline-none text-white bg-yellow-400 hover:bg-yellow-500 focus:ring-4 focus:ring-yellow-300 font-medium rounded-lg text-sm px-5 py-2.5"
+                    onClick={() => unPublishModel(runInfo?.info.run_id)}
                   >
-                    Unpublic Model
+                    Unpublish Model
                   </button>
                 ) : (
                   <button
                     type="button"
                     className="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 focus:outline-none"
-                    onClick={() => publicModel(runInfo?.info.run_id)}
+                    onClick={() => publishModel(runInfo?.info.run_id)}
                   >
-                    Public Model
+                    Publish Model
                   </button>
                 )}
               </div>
@@ -443,7 +443,7 @@ export function History() {
             </div>
             <div className="flex flex-row justify-between mb-3">
               <p className="font-medium">Current Stage</p>
-              <p>{runInfo?.models[0].current_stage}</p>
+              <p>{runInfo?.models[0].current_stage === 'Production' ? "Public" : "Not Public"}</p>
             </div>
             <div className="font-bold bg-gray-50 px-4 py-2 rounded-lg my-4">
               Model Metrics Information

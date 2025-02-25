@@ -58,8 +58,8 @@ export class ExperimentsController {
     }
   }
 
-  @Put('run/public-model/:runId/')
-  async putPublicModelByRunId(@Param('runId') runId: string) {
+  @Put('run/publish-model/:runId/')
+  async putPublishModelByRunId(@Param('runId') runId: string) {
     try {
       return await this.experimentsService.putUpdateModelById(
         runId,
@@ -67,14 +67,14 @@ export class ExperimentsController {
       );
     } catch (error) {
       throw new HttpException(
-        'Failed to public model by id',
+        'Failed to publish model by id',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
 
-  @Put('run/unpublic-model/:runId/')
-  async putUnPublicModelByRunId(@Param('runId') runId: string) {
+  @Put('run/unpublish-model/:runId/')
+  async putUnPublishModelByRunId(@Param('runId') runId: string) {
     try {
       return await this.experimentsService.putUpdateModelById(
         runId,
@@ -82,7 +82,7 @@ export class ExperimentsController {
       );
     } catch (error) {
       throw new HttpException(
-        'Failed to unpublic model by id',
+        'Failed to unpublish model by id',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
