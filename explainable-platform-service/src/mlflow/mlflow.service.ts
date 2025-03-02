@@ -10,7 +10,7 @@ import {
 } from 'src/interface/experiments.interface';
 
 @Injectable()
-export class ExperimentsService {
+export class MlflowService {
   private inferenceServiceURL: string;
   private hostHeader = 'kserve-custom-inference-service.default.example.com';
 

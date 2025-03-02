@@ -32,12 +32,12 @@ export interface SubNavigatorProps {
 const navigatorList: NavigatorProps[] = [
   {
     icon: <ArrowUpTrayIcon className="w-5" />,
-    pathName: "predict",
-    slug: "/predict",
-    name: "predict",
+    pathName: "upload",
+    slug: "/upload",
+    name: "Upload",
     subMenu: [
       {
-        slug: "/",
+        slug: "/predict",
         pathName: "predict",
         name: "Upload file",
       },
@@ -50,7 +50,7 @@ const navigatorList: NavigatorProps[] = [
     name: "Prediction List",
     subMenu: [
       {
-        slug: "/",
+        slug: "/prediction",
         pathName: ["prediction", "local"],
         name: "Prediction List",
       },
@@ -63,7 +63,7 @@ const navigatorList: NavigatorProps[] = [
     name: "Experiments and Models",
     subMenu: [
       {
-        slug: "/",
+        slug: "/experiments",
         pathName: "experiments",
         name: "Experiments",
       },
@@ -76,14 +76,14 @@ const navigatorList: NavigatorProps[] = [
   },
   {
     icon: <CodeBracketIcon className="w-5" />,
-    pathName: "develop",
-    slug: "/develop",
-    name: "Develop",
+    pathName: "developer",
+    slug: "/developer",
+    name: "Developer",
     subMenu: [
       {
-        slug: "/",
-        pathName: "develop",
-        name: "Develop",
+        slug: "/mlflow",
+        pathName: "mlflow",
+        name: "MLflow and Tokens",
       },
     ],
   },
@@ -131,7 +131,7 @@ const Layout: FC<Props> = ({ children, pageProps }: Props) => {
         navigatorList={mainNavigate}
         asPath={router.asPath}
       />
-      <Topbar navigatorList={subNavigator} currentSubMenu={splitPathUrl[1]} />
+      <Topbar navigatorList={subNavigator} currentSubMenu={splitPathUrl[2]} />
       <div className="ml-sidebar">
         <div className="ml-[54px]">{children}</div>
       </div>

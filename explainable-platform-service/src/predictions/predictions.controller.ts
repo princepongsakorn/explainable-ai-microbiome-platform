@@ -7,13 +7,16 @@ import {
   UploadedFile,
   UseInterceptors,
   Body,
+  UseGuards,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { PredictionsService } from './predictions.service';
 import { Multer } from 'multer';
 import { PredictionClass, PredictionStatus } from 'src/interface/prediction-class.enum';
+import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 
 @Controller('predict')
+@UseGuards(JwtAuthGuard)
 export class PredictionsController {
   constructor(private readonly predictionsService: PredictionsService) {}
 

@@ -7,6 +7,7 @@ import Link from "next/link";
 import { NavigatorProps } from "../Layout/Layout";
 import { MinusCircleIcon } from "@heroicons/react/24/outline";
 import { Logo } from "../Logo";
+import { useUser } from "@/contexts/auth/auth-context";
 
 interface SidebarProps {
   currentPage: string;
@@ -16,7 +17,7 @@ interface SidebarProps {
 
 const Sidebar: FC<SidebarProps> = (props: SidebarProps) => {
   const { navigatorList, currentPage } = props;
-  // const { signOut } = useUser();
+  const { signOut } = useUser();
 
   return (
     <div className="fixed z-40 flex flex-col items-center py-5 w-[54px] h-full min-h-screen border-solid border-r-[1px] border-[#E4E7EC] bg-white">
@@ -50,7 +51,7 @@ const Sidebar: FC<SidebarProps> = (props: SidebarProps) => {
           })}
         </div>
       </div>
-      <div className="flex justify-center items-center relative h-10 w-10 rounded-md hover:bg-[#F8F8F8] hover:text-[#081226] text-[#898989] cursor-pointer">
+      <div className="flex justify-center items-center relative h-10 w-10 rounded-md hover:bg-[#F8F8F8] hover:text-[#081226] text-[#898989] cursor-pointer" onClick={signOut}>
         <MinusCircleIcon className="w-5" />
       </div>
     </div>

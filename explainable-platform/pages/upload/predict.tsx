@@ -1,17 +1,17 @@
 import Layout from "@/components/common/Layout";
 import { ArrowRightIcon } from "@heroicons/react/24/outline";
 import { ChangeEvent, useEffect, useState } from "react";
-import { getModelsList } from "./api/model";
+import { getModelsList } from "../api/model";
 import {
   ICreatePredictions,
   IMetrics,
   IModelInfo,
 } from "@/components/model/model.interface";
 import { Dropdown } from "flowbite-react";
-import { postModelPredict } from "./api/predict";
+import { postModelPredict } from "../api/predict";
 import { Modal } from "flowbite-react";
 import { useRouter } from "next/router";
-import { queryToString } from "./utils/queryToString";
+import { queryToString } from "../utils/queryToString";
 
 const UploadModal = (props: {
   isOpen: boolean;

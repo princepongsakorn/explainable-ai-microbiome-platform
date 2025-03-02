@@ -17,7 +17,7 @@ export class ModelsService {
       this.configService.get<string>('INFERENCE_SERVICE_URL') ?? '';
   }
 
-  async fetchModels() {
+  async fetchProductionModels() {
     try {
       const response = await lastValueFrom(
         this.httpService.get<IGetModelsResponse[]>(
@@ -27,7 +27,6 @@ export class ModelsService {
           },
         ),
       );
-      console.log('response.data', response.data)
       return response.data;
     } catch (error) {
       console.error(`Failed to fetch models`, error);

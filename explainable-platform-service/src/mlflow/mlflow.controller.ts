@@ -8,19 +8,19 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ExperimentsService } from './experiments.service';
+import { MlflowService } from './mlflow.service';
 import { ModelStage } from 'src/interface/experiments.interface';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 
-@Controller('experiments')
+@Controller('mlflow')
 @UseGuards(JwtAuthGuard)
-export class ExperimentsController {
-  constructor(private readonly experimentsService: ExperimentsService) {}
+export class MlflowController {
+  constructor(private readonly mlflowService: MlflowService) {}
 
   @Get()
   async fetchExperiments() {
     try {
-      return await this.experimentsService.fetchExperiments();
+      return await this.mlflowService.fetchExperiments();
     } catch (error) {
       throw new HttpException(
         'Failed to fetch experiments',
@@ -36,7 +36,7 @@ export class ExperimentsController {
     @Query('pageToken') pageToken: string,
   ) {
     try {
-      return await this.experimentsService.getExperimentById(
+      return await this.mlflowService.getExperimentById(
         experimentId,
         orderBy,
         pageToken,
@@ -52,7 +52,7 @@ export class ExperimentsController {
   @Get('run/:runId/')
   async getRunById(@Param('runId') runId: string) {
     try {
-      return await this.experimentsService.getRunById(runId);
+      return await this.mlflowService.getRunById(runId);
     } catch (error) {
       throw new HttpException(
         'Failed to fetch run by id',
@@ -64,7 +64,7 @@ export class ExperimentsController {
   @Put('run/publish-model/:runId/')
   async putPublishModelByRunId(@Param('runId') runId: string) {
     try {
-      return await this.experimentsService.putUpdateModelById(
+      return await this.mlflowService.putUpdateModelById(
         runId,
         ModelStage.Production,
       );
@@ -79,7 +79,7 @@ export class ExperimentsController {
   @Put('run/unpublish-model/:runId/')
   async putUnPublishModelByRunId(@Param('runId') runId: string) {
     try {
-      return await this.experimentsService.putUpdateModelById(
+      return await this.mlflowService.putUpdateModelById(
         runId,
         ModelStage.None,
       );

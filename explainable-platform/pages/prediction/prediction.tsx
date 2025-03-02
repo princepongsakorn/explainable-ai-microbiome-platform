@@ -40,7 +40,7 @@ export function History() {
     if (id) {
       const params = { id };
       const queryString = queryToString(params);
-      router.push(`prediction/local/?${queryString}`, undefined, {
+      router.push(`local/?${queryString}`, undefined, {
         shallow: true,
       });
     }
