@@ -6,11 +6,14 @@ import {
   Param,
   Put,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { ExperimentsService } from './experiments.service';
 import { ModelStage } from 'src/interface/experiments.interface';
+import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 
 @Controller('experiments')
+@UseGuards(JwtAuthGuard)
 export class ExperimentsController {
   constructor(private readonly experimentsService: ExperimentsService) {}
 

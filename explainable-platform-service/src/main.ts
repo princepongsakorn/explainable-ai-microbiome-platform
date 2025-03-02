@@ -1,5 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { Reflector } from '@nestjs/core';
+import { RolesGuard } from './auth/roles.guard';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -8,6 +10,8 @@ async function bootstrap() {
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     allowedHeaders: 'Content-Type, Authorization',
   });
+  const reflector = app.get(Reflector);
+  app.useGlobalGuards(new RolesGuard(reflector));
   await app.listen(process.env.PORT ?? 3000);
 }
 bootstrap();

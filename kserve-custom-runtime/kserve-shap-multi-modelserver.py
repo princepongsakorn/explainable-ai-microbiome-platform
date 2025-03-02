@@ -16,6 +16,7 @@ import json
 from flask import Flask, request, jsonify
 from joblib import Memory
 from mlflow.exceptions import MlflowException
+from mlflow.server import get_app_client
 
 class ShapValueObject:
     def __init__(self, base_value, shap_df, explanation):
@@ -545,6 +546,30 @@ def update_model_stage_by_run_id(run_id):
         return jsonify({"status": "success", "message": f"Model '{model_name}' version '{version}' transitioned to '{stage}'."})
     except MlflowException as e:
         return {"status": "error", "message": str(e)}
-    
+
+@app.route("/v1/mlflow/registered-models", methods=["GET"])
+def get_registered_models():
+    mlflow_url = os.environ.get("MLFLOW_URL", None)
+    mlflow.set_tracking_uri(mlflow_url)
+    client = mlflow.tracking.MlflowClient()
+    registered_models = client.search_registered_models()
+    logger.info(registered_models)
+    model_list = [
+        {k.lstrip("_"): v for k, v in model.__dict__.items()}
+        for model in registered_models
+    ]
+
+    return jsonify({"registered_models": model_list})
+
+@app.route("/v1/mlflow/user", methods=["POST"])
+def create_mlflow_user():
+    data = request.get_json()
+    username = data.get("username")
+    password = data.get("password")
+    tracking_uri = os.environ.get("MLFLOW_URL", None)
+    auth_client = get_app_client("basic-auth", tracking_uri=tracking_uri)
+    user = auth_client.create_user(username=username, password=password)
+    return jsonify({"user": {k.lstrip("_"): v for k, v in user.__dict__.items()}})
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)

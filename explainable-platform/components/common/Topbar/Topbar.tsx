@@ -5,6 +5,8 @@ import Link from "next/link";
 
 import { NavigatorProps } from "@/components/common/Layout/Layout";
 import Image from "next/image";
+import { getToken } from "@/pages/api/httpClient";
+import { jwtDecode } from "jwt-decode";
 
 interface TopbarProps {
   navigatorList?: NavigatorProps;
@@ -41,6 +43,22 @@ const TopbarLinkComponent = React.forwardRef((props: TopbarLinkProps, ref) => {
 const Topbar: FC<TopbarProps> = (props: TopbarProps) => {
   const { navigatorList, currentSubMenu } = props;
   const [hasScrolled, setHasScrolled] = useState(false);
+  const [profile, setProfile] = useState<any>();
+  const firstLetter = profile ? profile?.username.charAt(0).toUpperCase() : "-";
+
+  useEffect(() => {
+    const profile = getProfile();
+    setProfile(profile);
+  }, []);
+
+  function getProfile() {
+    if (!!getToken()) {
+      const profile: any = jwtDecode(getToken()!);
+      return {
+        username: profile?.username,
+      };
+    }
+  }
 
   useEffect(() => {
     const handleScroll = throttle(() => {
@@ -98,14 +116,10 @@ const Topbar: FC<TopbarProps> = (props: TopbarProps) => {
           })}
         </div>
       </div>
-      <div className="flex justify-end mr-3">
-        <div className="w-[40px] h-[40px] rounded-full bg-[#fbfbfb] border-solid border-[1px] border-[#E4E7EC] shadow-sm">
-          <img
-            src="/assets/profile/profile-1.png"
-            alt="Profile Picture"
-            width="40"
-            height="40"
-          />
+      <div className="flex justify-end mr-3 items-center gap-2">
+        <div className="text-sm text-right text-[#747474]">{profile?.username}</div>
+        <div className="w-[40px] h-[40px] overflow-hidden flex items-center justify-center rounded-full bg-blue-500 border-solid border-[1px] border-[#E4E7EC] shadow-sm">
+          <div className="text-white rounded-full text-lg font-bold select-none">{firstLetter}</div>
         </div>
       </div>
     </div>

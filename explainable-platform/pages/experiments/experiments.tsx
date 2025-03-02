@@ -169,13 +169,13 @@ export function History() {
               <tbody>
                 {experiments?.map((experiment) => (
                   <tr
-                    className={`bg-white hover:bg-gray-50 cursor-pointer ${
-                      experiment === selectedExperiments ? "bg-blue-50" : ""
+                    className={`hover:bg-gray-50 cursor-pointer rounded-lg ${
+                      experiment === selectedExperiments ? "bg-blue-50" : "bg-white"
                     }`}
                   >
                     <th
                       scope="row"
-                      className="px-4 py-3 font-medium text-black whitespace-nowrap"
+                      className="px-4 py-3 font-medium text-black rounded-lg whitespace-nowrap"
                       onClick={() => setSelectedExperiments(experiment)}
                     >
                       {experiment.name}
@@ -443,7 +443,11 @@ export function History() {
             </div>
             <div className="flex flex-row justify-between mb-3">
               <p className="font-medium">Current Stage</p>
-              <p>{runInfo?.models[0].current_stage === 'Production' ? "Public" : "Not Public"}</p>
+              <p>
+                {runInfo?.models[0].current_stage === "Production"
+                  ? "Public"
+                  : "Not Public"}
+              </p>
             </div>
             <div className="font-bold bg-gray-50 px-4 py-2 rounded-lg my-4">
               Model Metrics Information

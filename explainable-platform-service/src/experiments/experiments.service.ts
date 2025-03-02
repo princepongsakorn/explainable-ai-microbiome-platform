@@ -93,4 +93,20 @@ export class ExperimentsService {
       throw error;
     }
   }
+
+  async getRegisteredModel() {
+    try {
+      const response = await lastValueFrom(
+        this.httpService.put<IRunResponse>(
+          `${this.inferenceServiceURL}/v1/mlflow/registered-models`,
+          { headers: { Host: this.hostHeader } },
+        ),
+      );
+      return response.data;
+    } catch (error) {
+      console.error(`Failed to fetch registered models`, error);
+      throw error;
+    }
+  }
+  
 }

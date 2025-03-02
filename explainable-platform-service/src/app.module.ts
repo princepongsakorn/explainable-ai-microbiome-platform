@@ -8,6 +8,9 @@ import { StorageModule } from './storage/storage.module';
 import { ModelsModule } from './models/models.module';
 import { PredictionRecord } from './entity/prediction-record.entity';
 import { ExperimentsModule } from './experiments/experiments.module';
+import { AuthModule } from './auth/auth.module';
+import { ThirdPartyTokenModule } from './third-party-token/third-party-token.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -27,6 +30,9 @@ import { ExperimentsModule } from './experiments/experiments.module';
         port: Number(process.env.REDIS_PORT),
       },
     }),
+    AuthModule,
+    UsersModule,
+    ThirdPartyTokenModule,
     ExperimentsModule,
     ModelsModule,
     PredictionsModule,
