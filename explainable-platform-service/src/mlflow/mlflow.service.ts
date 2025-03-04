@@ -108,5 +108,19 @@ export class MlflowService {
       throw error;
     }
   }
-  
+ 
+  async getMLURI() {
+    try {
+      const response = await lastValueFrom(
+        this.httpService.get<IRunResponse>(
+          `${this.inferenceServiceURL}/v1/mlflow/tracking_uri`,
+          { headers: { Host: this.hostHeader } },
+        ),
+      );
+      return response.data;
+    } catch (error) {
+      console.error(`Failed to fetch ml tracking_uri`, error);
+      throw error;
+    }
+  }
 }

@@ -8,4 +8,4 @@ import { HttpModule } from '@nestjs/axios';
   controllers: [MlflowController],
   providers: [MlflowService],
 })
-export class ExperimentsModule {}
+export class MLflowModule {}

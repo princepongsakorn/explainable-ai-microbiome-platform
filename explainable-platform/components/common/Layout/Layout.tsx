@@ -81,9 +81,14 @@ const navigatorList: NavigatorProps[] = [
     name: "Developer",
     subMenu: [
       {
+        slug: "/token",
+        pathName: "token",
+        name: "Personal Access Tokens",
+      },
+      {
         slug: "/mlflow",
         pathName: "mlflow",
-        name: "MLflow and Tokens",
+        name: "MLflow and Deployment",
       },
     ],
   },

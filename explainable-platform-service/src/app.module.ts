@@ -11,6 +11,7 @@ import { ExperimentsModule } from './experiments/experiments.module';
 import { AuthModule } from './auth/auth.module';
 import { ThirdPartyTokenModule } from './third-party-token/third-party-token.module';
 import { UsersModule } from './users/users.module';
+import { MLflowModule } from './mlflow/mlflow.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { UsersModule } from './users/users.module';
     AuthModule,
     UsersModule,
     ThirdPartyTokenModule,
+    MLflowModule,
     ExperimentsModule,
     ModelsModule,
     PredictionsModule,
