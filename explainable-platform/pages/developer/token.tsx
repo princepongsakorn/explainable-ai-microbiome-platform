@@ -16,7 +16,7 @@ export function Tokens() {
     getURL();
     setToken({
       username: "pongsakorn@outlook.com",
-      token: "ghp_7oouPsXCxXsIoAD7ACDV7hsOb1Cnxzv",
+      token: "ghp_7oouPsXCxIoADV7hs1F1BgoYTJGAOb1Cnxzv",
     });
   }, []);
 
