@@ -3,12 +3,16 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
+  BeforeInsert,
 } from 'typeorm';
 
 @Entity()
 export class Prediction {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  @Column({ unique: true })
+  prediction_number: number; 
 
   @Column()
   modelName: string;

@@ -63,7 +63,7 @@ export class QueueService {
     await this.recordsRepository
       .createQueryBuilder()
       .update(PredictionRecord)
-      .set({ status: PredictionStatus.ERROR, errorMsg: 'Job was terminated' })
+      .set({ status: PredictionStatus.CANCELED, errorMsg: 'Job was terminated' })
       .where('predictionId = :predictionId AND status IN (:...statuses)', {
         predictionId,
         statuses: [PredictionStatus.PENDING, PredictionStatus.IN_PROGRESS],

@@ -98,7 +98,7 @@ export function History() {
                       scope="row"
                       className="px-6 py-5 font-medium text-black whitespace-nowrap"
                     >
-                      {prediction.id}
+                      {prediction.predictionNumber}
                     </th>
                     <td className="text-black px-6 py-5">
                       {prediction.modelName}
@@ -138,7 +138,7 @@ export function History() {
         <div className="p-[40px] pt-[40px] overflow-y-auto">
           <div className="flex flex-row justify-between items-center">
             <p className="text-xl font-medium text-gray-800">
-              {selectPrediction?.id}
+              {selectPrediction?.predictionNumber}
             </p>
             <button
               type="button"

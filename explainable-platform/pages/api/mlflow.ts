@@ -6,3 +6,17 @@ export const getMLFlowTrackingUri = async () => {
   );
   return data;
 };
+
+export const getMLFlowToken = async () => {
+  const { data } = await httpClient.get<{ user: string; token?: string }>(
+    `/mlflow/token`
+  );
+  return data;
+};
+
+export const generateMLFlowToken = async () => {
+  const { data } = await httpClient.post<{ user: string; token: string }>(
+    `/mlflow/token`
+  );
+  return data;
+};

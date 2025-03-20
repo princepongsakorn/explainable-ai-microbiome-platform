@@ -4,6 +4,7 @@ import {
   IPredictionRecords,
   IPredictions,
   ICreatePredictions,
+  IPredictionsPagination,
 } from "@/components/model/model.interface";
 import {
   IPagination,
@@ -53,7 +54,7 @@ export const getPredictionRecords = async (
   id: string,
   params: IPaginationRequestParams
 ) => {
-  const { data } = await httpClient.get<IPagination<IPredictionRecords>>(
+  const { data } = await httpClient.get<IPredictionsPagination>(
     `/predict/${id}/records`,
     {
       params,
