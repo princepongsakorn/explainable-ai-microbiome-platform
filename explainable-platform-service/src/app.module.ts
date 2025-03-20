@@ -9,7 +9,6 @@ import { ModelsModule } from './models/models.module';
 import { PredictionRecord } from './entity/prediction-record.entity';
 import { ExperimentsModule } from './experiments/experiments.module';
 import { AuthModule } from './auth/auth.module';
-import { ThirdPartyTokenModule } from './third-party-token/third-party-token.module';
 import { UsersModule } from './users/users.module';
 import { MLflowModule } from './mlflow/mlflow.module';
 
@@ -33,7 +32,6 @@ import { MLflowModule } from './mlflow/mlflow.module';
     }),
     AuthModule,
     UsersModule,
-    ThirdPartyTokenModule,
     MLflowModule,
     ExperimentsModule,
     ModelsModule,

@@ -1,3 +1,5 @@
+import { IPaginationMeta } from "./pagination.interface";
+
 export interface IModelInfo {
   metrics: IMetrics;
   model_name: string;
@@ -35,9 +37,11 @@ export interface IPredictionRecords {
   dfColumns?: string[];
   dfData?: string[];
   errorMsg?: string;
+  record_number: number;
 }
 export interface IPredictions {
   id: string;
+  predictionNumber: number;
   modelName: string;
   records: {
     total: number;
@@ -47,6 +51,13 @@ export interface IPredictions {
   createdAt: string;
   heatmap?: string;
   beeswarm?: string;
+}
+
+
+export interface IPredictionsPagination {
+  items: IPredictionRecords[];
+  meta: IPaginationMeta;
+  prediction: IPredictions
 }
 
 export enum PredictionClass {
@@ -61,4 +72,5 @@ export enum PredictionStatus {
   IN_PROGRESS = "IN_PROGRESS",
   SUCCESS = "SUCCESS",
   ERROR = "ERROR",
+  CANCELED = 'CANCELED'
 }

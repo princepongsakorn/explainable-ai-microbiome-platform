@@ -10,9 +10,9 @@ import { JwtAuthGuard } from './jwt-auth.guard';
 @Global()
 @Module({
   imports: [
-    PassportModule,
+    PassportModule.register({ defaultStrategy: 'jwt' }), 
     JwtModule.register({
-      secret: process.env.JWT_SECRET || 'default_secret',
+      secret: 'default_secret',
       signOptions: { expiresIn: '12h' },
     }),
     UsersModule,

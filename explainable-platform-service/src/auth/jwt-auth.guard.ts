@@ -9,11 +9,9 @@ import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { lastValueFrom, Observable } from 'rxjs';
 
-@Injectable({ scope: Scope.REQUEST }) 
+@Injectable({ scope: Scope.REQUEST })
 export class JwtAuthGuard extends AuthGuard('jwt') {
-  constructor(
-    @Inject(AuthService) private readonly authService: AuthService,
-  ) {
+  constructor(@Inject(AuthService) private readonly authService: AuthService) {
     super();
   }
 
@@ -25,9 +23,10 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
         'Token has been invalidated. Please log in again.',
       );
     }
+
     const canActivateResult = super.canActivate(context);
     if (canActivateResult instanceof Observable) {
-      return lastValueFrom(canActivateResult);
+      return await lastValueFrom(canActivateResult);
     }
     return canActivateResult as boolean;
   }

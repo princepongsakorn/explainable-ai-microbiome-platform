@@ -45,8 +45,11 @@ X = train_data.loc[train_ids]
 y = train_metadata['CRC']
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
+
+os.environ['MLFLOW_TRACKING_USERNAME'] = '***REMOVED***'
+os.environ['MLFLOW_TRACKING_PASSWORD'] = '***REMOVED***'
 mlflow.set_tracking_uri("http://ec2-3-1-102-14.ap-southeast-1.compute.amazonaws.com:5000")
-mlflow.set_experiment("sample-rf-crc")
+# mlflow.set_experiment("sample-rf-crc")
 
 def objective(params):
     with mlflow.start_run() as run:

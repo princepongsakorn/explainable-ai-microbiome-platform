@@ -27,18 +27,33 @@ export class PredictionsService {
 
   async createPrediction(file: Multer.File, modelName: string) {
     const { dfColumns, dfDataRows } = await parseCsv(file);
+
+    const lastPrediction = await this.predictionsRepository.findOne({
+      order: { prediction_number: 'DESC' },
+    });
+    const predictionNumber = lastPrediction
+      ? lastPrediction.prediction_number + 1
+      : 10000000;
+
     const predictionId = uuidv4();
     const prediction = this.predictionsRepository.create({
       id: predictionId,
+      prediction_number: predictionNumber,
       modelName,
       dfColumns: dfColumns,
     });
 
     await this.predictionsRepository.save(prediction);
     for (const row of dfDataRows) {
+      const lastRecord = await this.recordsRepository.findOne({
+        order: { record_number: 'DESC' },
+      });
+      const recordNumber = lastRecord ? lastRecord.record_number + 1 : 10000000;
+
       const recordId = uuidv4();
       const record = this.recordsRepository.create({
         id: recordId,
+        record_number: recordNumber,
         prediction,
         dfData: row,
       });
@@ -84,7 +99,14 @@ export class PredictionsService {
 
   async getPredictions(page: number = 1, limit: number = 10) {
     const [items, totalItems] = await this.predictionsRepository.findAndCount({
-      select: ['id', 'modelName', 'heatmap', 'beeswarm', 'createdAt'],
+      select: [
+        'id',
+        'modelName',
+        'heatmap',
+        'beeswarm',
+        'createdAt',
+        'prediction_number',
+      ],
       take: limit,
       skip: (page - 1) * limit,
       order: { createdAt: 'DESC' },
@@ -111,6 +133,7 @@ export class PredictionsService {
 
         return {
           id: prediction.id,
+          predictionNumber: prediction.prediction_number,
           modelName: prediction.modelName,
           records: {
             total: totalRecords,
@@ -147,6 +170,7 @@ export class PredictionsService {
   ) {
     const prediction = await this.predictionsRepository.findOne({
       where: { id: predictionId },
+      select: ['id', 'prediction_number', 'modelName'],
     });
     if (!prediction)
       throw new NotFoundException(`Prediction ID ${predictionId} not found`);
@@ -173,7 +197,16 @@ export class PredictionsService {
 
     const [items, totalItems] = await this.recordsRepository.findAndCount({
       where: whereCondition,
-      select: ['id', 'proba', 'class', 'waterfall', 'status', 'errorMsg', 'dfData'],
+      select: [
+        'id',
+        'proba',
+        'class',
+        'waterfall',
+        'status',
+        'errorMsg',
+        'dfData',
+        'record_number',
+      ],
       take: limit,
       skip: (page - 1) * limit,
     });
@@ -198,6 +231,13 @@ export class PredictionsService {
       currentPage: page,
     };
 
-    return { items: predictions, meta };
+    return {
+      items: predictions,
+      prediction: {
+        predictionNumber: prediction.prediction_number,
+        ...prediction,
+      },
+      meta,
+    };
   }
 }

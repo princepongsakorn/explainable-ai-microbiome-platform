@@ -1,8 +1,11 @@
 import {
+  Body,
   Controller,
   Get,
   HttpException,
   HttpStatus,
+  Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { MlflowService } from './mlflow.service';
@@ -22,5 +25,18 @@ export class MlflowController {
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
+  }
+
+  @Post('token')
+  async createOrUpdateToken(@Req() req) {
+    const userId = req.user.userId;
+    return this.mlflowService.generateToken(userId, 'mlflow');
+  }
+
+  @Get('token')
+  @UseGuards(JwtAuthGuard)
+  async getToken(@Req() req) {
+    const userId = req.user.userId;
+    return this.mlflowService.getToken(userId, 'mlflow');
   }
 }

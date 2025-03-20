@@ -132,7 +132,7 @@ export class PredictionProcessor {
         console.log(
           `[PredictionProcessor] Job was terminated for Record ID: ${record.id}`,
         );
-        record.status = PredictionStatus.ERROR;
+        record.status = PredictionStatus.CANCELED;
         record.errorMsg = 'Job was terminated';
         await this.recordsRepository.save(record);
         return;

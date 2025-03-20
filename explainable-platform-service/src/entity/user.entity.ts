@@ -1,10 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
 import { ThirdPartyToken } from './third-party-token.entity';
-
-export enum UserRole {
-  ADMIN = 'admin',
-  USER = 'user',
-}
+import { UserRole } from 'src/interface/user.interface';
 
 @Entity()
 export class User {

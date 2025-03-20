@@ -10,4 +10,5 @@ export enum PredictionStatus {
   IN_PROGRESS = 'IN_PROGRESS',
   SUCCESS = 'SUCCESS',
   ERROR = 'ERROR',
+  CANCELED = 'CANCELED'
 }

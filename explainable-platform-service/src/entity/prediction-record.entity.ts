@@ -6,6 +6,9 @@ export class PredictionRecord {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Column({ unique: true })
+  record_number: number;
+
   @ManyToOne(() => Prediction, (prediction) => prediction.id)
   prediction: Prediction;
 

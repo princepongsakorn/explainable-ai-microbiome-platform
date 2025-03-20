@@ -2,6 +2,7 @@ import Layout from "@/components/common/Layout";
 import { useCallback, useEffect, useState } from "react";
 import {
   IPredictionRecords,
+  IPredictionsPagination,
   PredictionClass,
   PredictionStatus,
 } from "@/components/model/model.interface";
@@ -166,7 +167,7 @@ const DataTable = (props: { selectPrediction: IPredictionRecords }) => {
 export function History() {
   const router = useRouter();
   const [predictions, setPredictions] =
-    useState<IPagination<IPredictionRecords>>();
+    useState<IPredictionsPagination>();
   const [isOpen, setIsOpen] = useState(false);
   const [selectPrediction, setSelectPrediction] =
     useState<IPredictionRecords>();
@@ -239,8 +240,8 @@ export function History() {
             <ChevronLeftIcon className="w-6" />
           </div>
           <div>
-            <div className="font-medium">Prediction: {predictionId}</div>
-            <div className="text-base text-gray-500">Model: simple-crc</div>
+            <div className="font-medium">Prediction: {predictions?.prediction?.predictionNumber}</div>
+            <div className="text-base text-gray-500">Model: {predictions?.prediction?.modelName}</div>
           </div>
         </div>
         <div className="mt-6 pt-4 overflow-hidden border-solid bg-white border-t-[1px] border-[#EAEAEA] w-full">
@@ -368,15 +369,13 @@ export function History() {
                         className="px-3 py-2 hover:text-gray-900 hover:bg-gray-100 rounded-md cursor-pointer"
                         onClick={onRepredict}
                       >
-                        <p>Re-run all failed jobs</p>
+                        <p>Re-run failed jobs</p>
                       </div>
                       <div
                         className="px-3 py-2 hover:text-gray-900 hover:bg-gray-100 rounded-md cursor-pointer"
                         onClick={onCancel}
                       >
-                        <p className="text-red-500">
-                          Cancel all in-progress jobs
-                        </p>
+                        <p className="text-red-500">Cancel in-progress jobs</p>
                       </div>
                     </div>
                   }
@@ -436,7 +435,7 @@ export function History() {
                         scope="row"
                         className="px-6 py-5 font-medium text-black whitespace-nowrap"
                       >
-                        {prediction.id}
+                        {prediction.record_number}
                       </th>
                       <td className="text-black px-6 py-5">
                         {!isNull(prediction.proba)
@@ -510,13 +509,25 @@ export function History() {
           <div className="p-[40px] pt-[40px]">
             <div className="flex flex-row justify-between items-center">
               <p className="text-xl font-medium text-gray-800">
-                {selectPrediction?.id}
+                {selectPrediction?.record_number}
               </p>
             </div>
             {selectPrediction?.status === PredictionStatus.ERROR && (
               <>
                 <div className="font-bold bg-red-50 px-4 py-2 rounded-lg my-4 text-red-700">
                   Error
+                </div>
+                <div className="flex flex-row justify-between mb-6">
+                  <p className="font-medium text-red-700">
+                    {selectPrediction.errorMsg ?? "Unknown error occurred"}
+                  </p>
+                </div>
+              </>
+            )}
+            {selectPrediction?.status === PredictionStatus.CANCELED && (
+              <>
+                <div className="font-bold bg-red-50 px-4 py-2 rounded-lg my-4 text-red-700">
+                  Canceled
                 </div>
                 <div className="flex flex-row justify-between mb-6">
                   <p className="font-medium text-red-700">
