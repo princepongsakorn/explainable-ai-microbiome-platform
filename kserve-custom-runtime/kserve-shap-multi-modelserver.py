@@ -571,5 +571,22 @@ def create_mlflow_user():
     user = auth_client.create_user(username=username, password=password)
     return jsonify({"user": {k.lstrip("_"): v for k, v in user.__dict__.items()}})
 
+@app.route("/v1/mlflow/user/<username>", methods=["GET"])
+def get_mlflow_user(username):
+    tracking_uri = os.environ.get("MLFLOW_URL", None)
+    auth_client = get_app_client("basic-auth", tracking_uri=tracking_uri)
+    user = auth_client.get_user(username=username)
+    return jsonify({"user": {k.lstrip("_"): v for k, v in user.__dict__.items()}})
+
+@app.route("/v1/mlflow/user/<username>", methods=["DELETE"])
+def delete_mlflow_user(username):
+    tracking_uri = os.environ.get("MLFLOW_URL", None)
+    auth_client = get_app_client("basic-auth", tracking_uri=tracking_uri)
+    try:
+        auth_client.delete_user(username=username)
+        return jsonify({"message": f"User '{username}' deleted"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)

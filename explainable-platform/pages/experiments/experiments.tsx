@@ -33,16 +33,21 @@ dayjs.extend(timezone);
 
 export function History() {
   const [experiments, setExperiments] = useState<IExperiment[]>();
+  const [experimentsLoading, setExperimentsLoading] = useState<boolean>(true);
   const [selectedExperiments, setSelectedExperiments] = useState<IExperiment>();
   const [runs, setRuns] = useState<IExperimentsRunResponse>();
+  const [runLoading, setRunLoading] = useState<boolean>(true);
   const [sort, setSort] = useState<{ key: string; order: string }>();
   const [isOpen, setIsOpen] = useState(false);
   const [runInfo, setRunInfo] = useState<IRunDetail>();
 
   useEffect(() => {
     const getExperiments = async () => {
+      setExperimentsLoading(true);
+      setRunLoading(true)
       const data = await getExperimentsList();
       const experiments = data.experiments;
+      setExperimentsLoading(false)
       setExperiments(experiments);
       setSelectedExperiments(experiments[0]);
     };
@@ -72,10 +77,12 @@ export function History() {
   const getExperiment = async () => {
     if (selectedExperiments) {
       const orderBy = sort?.key ? `${sort?.key} ${sort?.order}` : "";
+      setRunLoading(true);
       const data = await getExperimentsById(
         selectedExperiments?.experiment_id,
         { pageToken: "", orderBy: orderBy }
       );
+      setRunLoading(false)
       setRuns(data);
     }
   };
@@ -166,30 +173,50 @@ export function History() {
                   </th>
                 </tr>
               </thead>
-              <tbody>
-                {experiments?.map((experiment) => (
-                  <tr
-                    className={`hover:bg-gray-50 cursor-pointer rounded-lg ${
-                      experiment === selectedExperiments ? "bg-blue-50" : "bg-white"
-                    }`}
-                  >
-                    <th
-                      scope="row"
-                      className="px-4 py-3 font-medium text-black rounded-lg whitespace-nowrap"
-                      onClick={() => setSelectedExperiments(experiment)}
+              {experimentsLoading ? (
+                <div>
+                  <div role="status" className="max-w-sm animate-pulse">
+                    {Array(8)
+                      .fill("")
+                      .map(() => (
+                        <div className="h-3 bg-gray-200 rounded-full mb-4 mt-4" />
+                      ))}
+                  </div>
+                </div>
+              ) : (
+                <tbody>
+                  {experiments?.map((experiment) => (
+                    <tr
+                      className={`hover:bg-gray-50 cursor-pointer rounded-lg ${
+                        experiment === selectedExperiments
+                          ? "bg-blue-50"
+                          : "bg-white"
+                      }`}
                     >
-                      {experiment.name}
-                    </th>
-                  </tr>
-                ))}
-              </tbody>
+                      <th
+                        scope="row"
+                        className="px-4 py-3 font-medium text-black rounded-lg whitespace-nowrap"
+                        onClick={() => setSelectedExperiments(experiment)}
+                      >
+                        {experiment.name}
+                      </th>
+                    </tr>
+                  ))}
+                </tbody>
+              )}
             </table>
           </div>
           <div className="flex flex-col flex-1 w-3/4">
             <div className="flex flex-row justify-between mt-2 mb-6 items-center">
-              <div className="font-medium text-xl">
-                {selectedExperiments?.name}
-              </div>
+              {experimentsLoading ? (
+                <div role="status" className="w-[280px] animate-pulse">
+                  <div className="h-4 bg-gray-300 rounded-full mb-4 mt-4" />
+                </div>
+              ) : (
+                <div className="font-medium text-xl">
+                  {selectedExperiments?.name}
+                </div>
+              )}
               <div className="flex flex-row gap-3">
                 <div
                   className="flex flex-row gap-2 text-sm cursor-pointer px-4 py-2 rounded-full hover:text-gray-900 hover:bg-gray-100 border-[1px] border-[#EAEAEA]"
@@ -199,7 +226,7 @@ export function History() {
                 </div>
               </div>
             </div>
-            <div className="hide-scrollbar overflow-scroll border-b-[1px] border-gray-200">
+            <div className="hide-scrollbar overflow-scroll pb-4 border-b-[1px] border-gray-200">
               <table
                 style={{ maxHeight: "calc(100vh - 280px)" }}
                 className="w-full text-sm text-left rtl:text-right text-gray-500 border-separate border-spacing-0"
@@ -295,68 +322,91 @@ export function History() {
                     ))}
                   </tr>
                 </thead>
-                <tbody>
-                  {runs?.runs.map((run) => (
-                    <tr
-                      className="bg-white hover:bg-gray-50 text-black cursor-pointer border-b-[1px] border-gray-200"
-                      onClick={() => loadRunInfo(run.info.run_id)}
-                    >
-                      <th
-                        scope="row"
-                        className="font-medium bg-white sticky left-[0] whitespace-nowrap border-b-[1px] border-gray-200"
-                      >
-                        <div className="px-4 py-4 border-r border-gray-200">
-                          {run.info.run_name}
-                        </div>
-                      </th>
-                      <th
-                        scope="col"
-                        className="px-4 py-2 font-normal whitespace-nowrap border-b-[1px] border-gray-200"
-                      >
-                        {dayjs(run.info.start_time).fromNow()}
-                      </th>
-                      <th
-                        scope="col"
-                        className="font-normal px-4 py-2 border-b-[1px] border-gray-200"
-                      >
-                        {dayjs(run.info.end_time)
-                          .diff(dayjs(run.info.start_time), "seconds", true)
-                          .toFixed(1)}
-                        s
-                      </th>
-                      <th
-                        scope="col"
-                        className="px-4 py-2 font-normal whitespace-nowrap border-b-[1px] border-gray-200"
-                      >
-                        {run.info.user_id}
-                      </th>
-                      {metricsHeaders.map((header) => (
-                        <td
-                          key={header}
-                          className={`px-4 py-2 border-b-[1px] border-gray-200 ${
-                            sort?.key === `metrics.${header}`
-                              ? "bg-blue-50"
-                              : ""
-                          }`}
-                        >
-                          {run.data.metrics[header] || "-"}
-                        </td>
+                {runLoading ? (
+                  <tbody>
+                    {Array(10)
+                      .fill("")
+                      .map(() => (
+                        <tr role="status" className="animate-pulse">
+                          <th>
+                            <div className="h-3 bg-gray-200 rounded-full w-3/4 mt-4"></div>
+                          </th>
+                          <th>
+                            <div className="h-3 bg-gray-200 rounded-full w-3/4 mt-4"></div>
+                          </th>
+                          <th>
+                            <div className="h-3 bg-gray-200 rounded-full w-3/4 mt-4"></div>
+                          </th>
+                          <th>
+                            <div className="h-3 bg-gray-200 rounded-full w-3/4 mt-4"></div>
+                          </th>
+                        </tr>
                       ))}
-                      {parametersHeaders.map((header) => (
-                        <td
-                          key={header}
-                          className={`px-4 py-2 border-b-[1px] border-gray-200 ${
-                            sort?.key === `metrics.${header}`
-                              ? "bg-blue-50"
-                              : ""
-                          }`}
+                  </tbody>
+                ) : (
+                  <tbody>
+                    {runs?.runs.map((run) => (
+                      <tr
+                        className="bg-white hover:bg-gray-50 text-black cursor-pointer border-b-[1px] border-gray-200"
+                        onClick={() => loadRunInfo(run.info.run_id)}
+                      >
+                        <th
+                          scope="row"
+                          className="font-medium bg-white sticky left-[0] whitespace-nowrap border-b-[1px] border-gray-200"
                         >
-                          {run.data.parameters[header] || "-"}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
+                          <div className="px-4 py-4 border-r border-gray-200">
+                            {run.info.run_name}
+                          </div>
+                        </th>
+                        <th
+                          scope="col"
+                          className="px-4 py-2 font-normal whitespace-nowrap border-b-[1px] border-gray-200"
+                        >
+                          {dayjs(run.info.start_time).fromNow()}
+                        </th>
+                        <th
+                          scope="col"
+                          className="font-normal px-4 py-2 border-b-[1px] border-gray-200"
+                        >
+                          {dayjs(run.info.end_time)
+                            .diff(dayjs(run.info.start_time), "seconds", true)
+                            .toFixed(1)}
+                          s
+                        </th>
+                        <th
+                          scope="col"
+                          className="px-4 py-2 font-normal whitespace-nowrap border-b-[1px] border-gray-200"
+                        >
+                          {run.info.user_id}
+                        </th>
+                        {metricsHeaders.map((header) => (
+                          <td
+                            key={header}
+                            className={`px-4 py-2 border-b-[1px] border-gray-200 ${
+                              sort?.key === `metrics.${header}`
+                                ? "bg-blue-50"
+                                : ""
+                            }`}
+                          >
+                            {run.data.metrics[header] || "-"}
+                          </td>
+                        ))}
+                        {parametersHeaders.map((header) => (
+                          <td
+                            key={header}
+                            className={`px-4 py-2 border-b-[1px] border-gray-200 ${
+                              sort?.key === `metrics.${header}`
+                                ? "bg-blue-50"
+                                : ""
+                            }`}
+                          >
+                            {run.data.parameters[header] || "-"}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                )}
               </table>
               {runs?.nextPageToken && (
                 <div className="sticky left-[0] w-full px-4 py-2">

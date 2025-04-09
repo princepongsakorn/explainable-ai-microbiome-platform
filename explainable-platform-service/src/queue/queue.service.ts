@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue, Job } from 'bull';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { PredictionRecord } from 'src/entity/prediction-record.entity';
 import { PredictionStatus } from 'src/interface/prediction-class.enum';
 
@@ -59,15 +59,20 @@ export class QueueService {
         }
       }
     }
+    
+    await this.recordsRepository.update(
+      { prediction: { id: predictionId }, status: In([PredictionStatus.PENDING, PredictionStatus.IN_PROGRESS]) },
+      { status: PredictionStatus.CANCELED, errorMsg: 'Job was canceled' }
+    );
 
-    await this.recordsRepository
-      .createQueryBuilder()
-      .update(PredictionRecord)
-      .set({ status: PredictionStatus.CANCELED, errorMsg: 'Job was terminated' })
-      .where('predictionId = :predictionId AND status IN (:...statuses)', {
-        predictionId,
-        statuses: [PredictionStatus.PENDING, PredictionStatus.IN_PROGRESS],
-      })
-      .execute();
+    // await this.recordsRepository
+    //   .createQueryBuilder()
+    //   .update(PredictionRecord)
+    //   .set({ status: PredictionStatus.CANCELED, errorMsg: 'Job was terminated' })
+    //   .where('predictionId = :predictionId AND status IN (:...statuses)', {
+    //     predictionId,
+    //     statuses: [PredictionStatus.PENDING, PredictionStatus.IN_PROGRESS],
+    //   })
+    //   .execute();
   }
 }
