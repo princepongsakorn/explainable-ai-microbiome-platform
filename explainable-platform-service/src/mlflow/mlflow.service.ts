@@ -64,11 +64,9 @@ export class MlflowService {
     if (input.length <= visibleStart + visibleEnd) {
       return input;
     }
-
     const start = input.substring(0, visibleStart);
     const end = input.substring(input.length - visibleEnd);
     const masked = '*'.repeat(input.length - visibleStart - visibleEnd);
-
     return `${start}${masked}${end}`;
   }
 
@@ -79,6 +77,31 @@ export class MlflowService {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException('User not found');
+    }
+    let mlflowUser: string = '';
+
+    try {
+      const response = await lastValueFrom(
+        this.httpService.get<{ user: { username: string } }>(
+          `${this.inferenceServiceURL}/v1/mlflow/user/${userId}`,
+          {
+            headers: { Host: this.hostHeader },
+          },
+        ),
+      );
+      mlflowUser = response.data?.user?.username;
+    } catch (error) {}
+
+    if (mlflowUser) {
+      await lastValueFrom(
+        this.httpService.delete<{ user: { username: string } }>(
+          `${this.inferenceServiceURL}/v1/mlflow/user/${userId}`,
+          {
+            headers: { Host: this.hostHeader },
+          },
+        ),
+      );
+      await this.tokenRepository.delete({ user: { id: userId } });
     }
 
     try {
@@ -98,14 +121,15 @@ export class MlflowService {
       let thirdPartyToken = await this.tokenRepository.findOne({
         where: { user: { id: userId }, provider },
       });
-
+      
+      const maskedToken = this.maskString(token);
       if (thirdPartyToken) {
-        thirdPartyToken.token = this.maskString(token);
+        thirdPartyToken.token = maskedToken;
       } else {
         thirdPartyToken = this.tokenRepository.create({
           user,
           provider,
-          token: token,
+          token: maskedToken,
         });
       }
 

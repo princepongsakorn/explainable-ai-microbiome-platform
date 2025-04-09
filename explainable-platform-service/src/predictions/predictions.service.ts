@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindManyOptions, Repository } from 'typeorm';
+import { FindManyOptions, In, Repository } from 'typeorm';
 import { Prediction } from '../entity/prediction.entity';
 import { PredictionRecord } from '../entity/prediction-record.entity';
 import { parseCsv } from '../utils/csv-parser.util';
@@ -28,9 +28,12 @@ export class PredictionsService {
   async createPrediction(file: Multer.File, modelName: string) {
     const { dfColumns, dfDataRows } = await parseCsv(file);
 
-    const lastPrediction = await this.predictionsRepository.findOne({
-      order: { prediction_number: 'DESC' },
-    });
+    const lastPrediction = await this.predictionsRepository
+      .createQueryBuilder('prediction')
+      .orderBy('prediction.prediction_number', 'DESC')
+      .limit(1)
+      .getOne();
+
     const predictionNumber = lastPrediction
       ? lastPrediction.prediction_number + 1
       : 10000000;
@@ -45,9 +48,12 @@ export class PredictionsService {
 
     await this.predictionsRepository.save(prediction);
     for (const row of dfDataRows) {
-      const lastRecord = await this.recordsRepository.findOne({
-        order: { record_number: 'DESC' },
-      });
+      const lastRecord = await this.recordsRepository
+        .createQueryBuilder('record')
+        .orderBy('record.record_number', 'DESC')
+        .limit(1)
+        .getOne();
+
       const recordNumber = lastRecord ? lastRecord.record_number + 1 : 10000000;
 
       const recordId = uuidv4();
@@ -75,8 +81,9 @@ export class PredictionsService {
     const failedRecords = await this.recordsRepository.find({
       where: {
         prediction: { id: predictionId },
-        status: PredictionStatus.ERROR,
+        status: In([PredictionStatus.ERROR, PredictionStatus.CANCELED]),
       },
+      order: { record_number: 'DESC' },
     });
 
     if (failedRecords.length === 0) {
@@ -109,7 +116,7 @@ export class PredictionsService {
       ],
       take: limit,
       skip: (page - 1) * limit,
-      order: { createdAt: 'DESC' },
+      order: { prediction_number: 'DESC' },
     });
 
     const predictions = await Promise.all(
@@ -193,6 +200,8 @@ export class PredictionsService {
       whereCondition['status'] = PredictionStatus.SUCCESS;
     } else if (predictionStatus === PredictionStatus.IN_PROGRESS) {
       whereCondition['status'] = PredictionStatus.IN_PROGRESS;
+    } else if (predictionStatus === PredictionStatus.CANCELED) {
+      whereCondition['status'] = PredictionStatus.CANCELED;
     }
 
     const [items, totalItems] = await this.recordsRepository.findAndCount({
@@ -209,6 +218,7 @@ export class PredictionsService {
       ],
       take: limit,
       skip: (page - 1) * limit,
+      order: { record_number: 'DESC' },
     });
 
     const predictions = await Promise.all(

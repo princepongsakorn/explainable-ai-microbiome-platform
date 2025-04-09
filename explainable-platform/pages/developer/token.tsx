@@ -2,14 +2,14 @@ import Layout from "@/components/common/Layout";
 import { WhiteButton } from "@/components/ui/Button/Button";
 import { ArrowPathIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
-import { getMLFlowToken, getMLFlowTrackingUri } from "../api/mlflow";
+import { generateMLFlowToken, getMLFlowToken, getMLFlowTrackingUri } from "../api/mlflow";
 import { CodeBlock } from "react-code-block";
 import { EXCodeBlock } from "@/components/ui/CodeBlock/CodeBlock";
 
 export function Tokens() {
   const [token, setToken] = useState<{ user: string; token?: string }>();
   const [mlflowUrl, setMlflowUrl] = useState<string>();
-
+  
   useEffect(() => {
     const getURL = async () => {
       const uri = await getMLFlowTrackingUri();
@@ -22,6 +22,11 @@ export function Tokens() {
     getToken();
     getURL();
   }, []);
+
+  const generateToken = async () => {
+    const token = await generateMLFlowToken()
+    setToken(token)
+  }
 
   const mlflowCode = `
 import mlflow
@@ -63,7 +68,7 @@ mlflow.set_tracking_uri("${mlflowUrl}")
                   </div>
                 </div>
                 <div className="content-end">
-                  <WhiteButton>
+                  <WhiteButton onClick={generateToken}>
                     <div className="flex flex-rows gap-2">
                       <ArrowPathIcon className="w-5" />
                       Generate new token

@@ -83,6 +83,15 @@ const StatusBox = (status?: PredictionStatus) => {
           </div>
         </div>
       );
+    case PredictionStatus.CANCELED:
+      return (
+        <div className="w-fit px-4 py-2 rounded-full font-medium text-xs bg-red-100 text-red-800 items-center">
+          <div className="justify-center flex gap-2 items-center">
+            <div className="w-1 h-1 bg-red-800 rounded-full" />
+            <div>CANCELED</div>
+          </div>
+        </div>
+      );
     case PredictionStatus.IN_PROGRESS:
       return (
         <div className="w-fit px-4 py-2 rounded-full font-medium text-xs bg-blue-100 text-blue-800 items-center">
@@ -166,8 +175,7 @@ const DataTable = (props: { selectPrediction: IPredictionRecords }) => {
 
 export function History() {
   const router = useRouter();
-  const [predictions, setPredictions] =
-    useState<IPredictionsPagination>();
+  const [predictions, setPredictions] = useState<IPredictionsPagination>();
   const [isOpen, setIsOpen] = useState(false);
   const [selectPrediction, setSelectPrediction] =
     useState<IPredictionRecords>();
@@ -178,7 +186,7 @@ export function History() {
   const currentPage = Number(router.query.page) || 1;
 
   const onHandleChangePage = (page: number) => {
-    const params = { id: predictionId, page: page, class: predictionClass };
+    const params = { id: predictionId, page: page, class: predictionClass, status: predictionStatus };
     const queryString = queryToString(params);
     router.replace(`?${queryString}`, undefined, { shallow: true });
   };
@@ -240,8 +248,12 @@ export function History() {
             <ChevronLeftIcon className="w-6" />
           </div>
           <div>
-            <div className="font-medium">Prediction: {predictions?.prediction?.predictionNumber}</div>
-            <div className="text-base text-gray-500">Model: {predictions?.prediction?.modelName}</div>
+            <div className="font-medium">
+              Prediction: {predictions?.prediction?.predictionNumber}
+            </div>
+            <div className="text-base text-gray-500">
+              Model: {predictions?.prediction?.modelName}
+            </div>
           </div>
         </div>
         <div className="mt-6 pt-4 overflow-hidden border-solid bg-white border-t-[1px] border-[#EAEAEA] w-full">
@@ -344,6 +356,19 @@ export function History() {
                     }`}
                   >
                     In progress
+                  </a>
+                </li>
+                <li>
+                  <a
+                    onClick={() => onHandleChangeStatus(PredictionStatus.CANCELED)}
+                    className={`cursor-pointer inline-block px-6 py-2 rounded-full ${
+                      predictionStatus === PredictionStatus.CANCELED
+                        ? "text-white bg-blue-600"
+                        : "hover:text-gray-900 hover:bg-gray-100 border-[1px] border-[#EAEAEA]"
+                    }`}
+                    aria-current="page"
+                  >
+                    Canceled
                   </a>
                 </li>
                 <li>
