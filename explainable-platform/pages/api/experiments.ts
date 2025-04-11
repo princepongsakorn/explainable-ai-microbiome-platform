@@ -2,6 +2,7 @@ import {
   IExperimentResponse,
   IExperimentsRunRequestParams,
   IExperimentsRunResponse,
+  IRegisteredModelResponse,
   IRunResponse,
 } from "@/components/model/experiments.interface";
 import { httpClient } from "./httpClient";
@@ -21,6 +22,20 @@ export const getExperimentsById = async (
       params,
     }
   );
+  return data;
+};
+
+export const getExperimentsModelList = async () => {
+  const { data } = await httpClient.get<IRegisteredModelResponse>(
+    "/experiments/models"
+  );
+  return data;
+};
+
+export const postDescriptionExperiments = async (experimentId: string, description?: string) => {
+  const { data } = await httpClient.post(`/experiments/description/${experimentId}`, {
+    description: description ?? '',
+  });
   return data;
 };
 

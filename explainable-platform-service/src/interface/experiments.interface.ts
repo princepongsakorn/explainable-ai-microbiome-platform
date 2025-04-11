@@ -43,6 +43,7 @@ export interface IRunInfo {
   start_time: number;
   status: string;
   user_id: string;
+  user_name?: string;
 }
 
 export interface IModel {

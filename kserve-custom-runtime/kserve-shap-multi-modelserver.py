@@ -415,10 +415,26 @@ def predict(model_name):
 
 @app.route("/v1/models", methods=["GET"])
 def list_models():
+    from requests.auth import HTTPBasicAuth
+    import requests
+
     mlflow_url = os.environ.get("MLFLOW_URL", None)
+    username = os.environ.get("MLFLOW_TRACKING_USERNAME", None)
+    password = os.environ.get("MLFLOW_TRACKING_PASSWORD", None)
+    
+    if not (mlflow_url and username and password):
+        return jsonify({"error": "Missing MLFLOW env vars"}), 400
+    
+    url = f"{mlflow_url}/api/2.0/mlflow/registered-models/search"
+    resp = requests.get(url, auth=HTTPBasicAuth(username, password))
+
+    if resp.status_code != 200:
+        return jsonify({"error": resp.text}), resp.status_code
+
+    data = resp.json()
+    registered_models = data.get("registered_models", [])
     mlflow.set_tracking_uri(mlflow_url)
     client = mlflow.tracking.MlflowClient()
-    registered_models = client.search_registered_models()
     
     model_list = []
     for model in registered_models:
@@ -455,11 +471,23 @@ def get_mlflow_experiments():
     mlflow.set_tracking_uri(mlflow_url)
     client = mlflow.tracking.MlflowClient()
     experiments = client.search_experiments()
+    model = client.search_registered_models()
+    logger.info(model)
     experiment_list = [
         {k.lstrip("_"): v for k, v in exp.__dict__.items()}
         for exp in experiments
     ]
     return jsonify({"experiments": experiment_list})
+
+@app.route("/v1/mlflow/experiments/description/<experiment_id>", methods=["POST"])
+def update_experiments_description(experiment_id):
+    data = request.get_json()
+    description = data.get("description")
+    mlflow_url = os.environ.get("MLFLOW_URL", None)
+    mlflow.set_tracking_uri(mlflow_url)
+    client = mlflow.tracking.MlflowClient()
+    client.set_experiment_tag(experiment_id, "mlflow.note.content", description)
+    return jsonify({"status": 200})
 
 @app.route("/v1/mlflow/experiment/<experiment_id>", methods=["GET"])
 def get_experiment_runs(experiment_id):
@@ -549,17 +577,26 @@ def update_model_stage_by_run_id(run_id):
 
 @app.route("/v1/mlflow/registered-models", methods=["GET"])
 def get_registered_models():
-    mlflow_url = os.environ.get("MLFLOW_URL", None)
-    mlflow.set_tracking_uri(mlflow_url)
-    client = mlflow.tracking.MlflowClient()
-    registered_models = client.search_registered_models()
-    logger.info(registered_models)
-    model_list = [
-        {k.lstrip("_"): v for k, v in model.__dict__.items()}
-        for model in registered_models
-    ]
+    from requests.auth import HTTPBasicAuth
+    import requests
 
-    return jsonify({"registered_models": model_list})
+    mlflow_url = os.environ.get("MLFLOW_URL", None)
+    username = os.environ.get("MLFLOW_TRACKING_USERNAME", None)
+    password = os.environ.get("MLFLOW_TRACKING_PASSWORD", None)
+    
+    if not (mlflow_url and username and password):
+        return jsonify({"error": "Missing MLFLOW env vars"}), 400
+    
+    url = f"{mlflow_url}/api/2.0/mlflow/registered-models/search"
+    resp = requests.get(url, auth=HTTPBasicAuth(username, password))
+
+    if resp.status_code != 200:
+        return jsonify({"error": resp.text}), resp.status_code
+
+    data = resp.json()
+    registered_models = data.get("registered_models", [])
+
+    return jsonify({"registered_models": registered_models})
 
 @app.route("/v1/mlflow/user", methods=["POST"])
 def create_mlflow_user():

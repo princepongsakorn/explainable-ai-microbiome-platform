@@ -23,11 +23,14 @@ import {
   getExperimentsList,
   getExperimentsById,
   putUnPublicModelByRunId,
+  getExperimentsModelList,
 } from "../api/experiments";
 import {
   IExperiment,
   IExperimentsRunResponse,
+  IRegisteredModelLatestVersions,
   IRun,
+  RegisteredModel,
 } from "@/components/model/experiments.interface";
 import relativeTime from "dayjs/plugin/relativeTime";
 import { getModelsList } from "../api/model";
@@ -37,29 +40,35 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 
 export function History() {
-  const [models, setModels] = useState<IModelInfo[]>();
-  const [selectedExperiments, setSelectedExperiments] = useState<IExperiment>();
-  const [runs, setRuns] = useState<IExperimentsRunResponse>();
-
+  const [models, setModels] = useState<IRegisteredModelLatestVersions[]>();
   const getModels = async () => {
-    const data = await getModelsList();
-    setModels(data);
+    const resp = await getExperimentsModelList();
+    const model = resp.registered_models
+      .map((model) => {
+        const productionVersion = Array.isArray(model.latest_versions)
+          ? model.latest_versions.find((v) => v.current_stage === "Production")
+          : null;
+        return productionVersion || null;
+      })
+      .filter((v) => v !== null);
+    console.log(model);
+    setModels(model);
   };
 
   useEffect(() => {
     getModels();
   }, []);
 
-  const getAllMetricsKeys = (models?: IModelInfo[]) => {
-    if (models) {
-      const keys = new Set<string>();
-      models.forEach((model) => {
-        Object.keys(model.metrics).forEach((key) => keys.add(key));
-      });
-      return Array.from(keys);
-    }
-    return [];
-  };
+  // const getAllMetricsKeys = (models?: RegisteredModel[]) => {
+  //   if (models) {
+  //     const keys = new Set<string>();
+  //     models.forEach((model) => {
+  //       Object.keys(model.metrics).forEach((key) => keys.add(key));
+  //     });
+  //     return Array.from(keys);
+  //   }
+  //   return [];
+  // };
 
   const unPublishModel = async (id?: string) => {
     if (id) {
@@ -67,7 +76,7 @@ export function History() {
     }
   };
 
-  const metricsHeaders = getAllMetricsKeys(models);
+  // const metricsHeaders = getAllMetricsKeys(models);
 
   return (
     <>
@@ -93,7 +102,7 @@ export function History() {
               className="w-full text-sm text-left rtl:text-right text-gray-500 border-separate border-spacing-0"
             >
               <thead className="text-gray-700 bg-gray-50 z-[1] sticky top-[0]">
-                {metricsHeaders.length > 0 ? (
+                {/* {metricsHeaders.length > 0 ? (
                   <tr className="border-solid border-y-[1px] border-gray-200">
                     <th
                       className="px-6 py-3 bg-gray-50 border-y-[1px] border-gray-200"
@@ -111,7 +120,7 @@ export function History() {
                   </tr>
                 ) : (
                   <></>
-                )}
+                )} */}
                 <tr className="">
                   <th
                     scope="col"
@@ -123,22 +132,22 @@ export function History() {
                     scope="col"
                     className="px-6 py-3 font-medium border-b-[1px] border-gray-200"
                   >
-                    Version
+                    Production
                   </th>
                   <th
                     scope="col"
                     className="px-6 py-3 font-medium border-b-[1px] border-gray-200"
                   >
-                    Created by
+                    Created
                   </th>
-                  {metricsHeaders.map((header) => (
+                  {/* {metricsHeaders.map((header) => (
                     <th
                       key={header}
                       className="font-medium whitespace-nowrap px-6 py-3 border-b-[1px] border-gray-200"
                     >
                       <div className="flex flex-row gap-2">{header}</div>
                     </th>
-                  ))}
+                  ))} */}
                   <th
                     scope="col"
                     className="px-6 py-3 font-medium border-b-[1px] border-gray-200"
@@ -153,29 +162,31 @@ export function History() {
                       className="font-medium whitespace-nowrap border-b-[1px] border-gray-200"
                     >
                       <div className="px-4 py-4 border-r border-gray-300">
-                        {model.model_name}
+                        {model.name}
                       </div>
                     </td>
                     <td
                       scope="col"
                       className="px-4 py-2 font-normal whitespace-nowrap border-b-[1px] border-gray-200"
                     >
-                      {model.version}
+                      Version {model.version}
                     </td>
                     <td
                       scope="col"
                       className="px-4 py-2 font-normal whitespace-nowrap border-b-[1px] border-gray-200"
                     >
-                      -
+                      {dayjs(model.creation_timestamp)
+                        .tz("Asia/Bangkok")
+                        .format("DD-MM-YYYY HH:mm")}
                     </td>
-                    {metricsHeaders.map((header) => (
+                    {/* {metricsHeaders.map((header) => (
                       <td
                         key={header}
                         className={`px-4 py-2 border-b-[1px] border-gray-200`}
                       >
                         {model.metrics[header] || "-"}
                       </td>
-                    ))}
+                    ))} */}
                     <td className={`px-4 py-2 border-b-[1px] border-gray-200`}>
                       <button
                         type="button"

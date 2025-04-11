@@ -5,6 +5,8 @@ import {
   ArrowPathIcon,
   BarsArrowUpIcon,
   BarsArrowDownIcon,
+  PencilSquareIcon,
+  CheckIcon,
 } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import dayjs from "dayjs";
@@ -17,6 +19,7 @@ import {
   getRunById,
   putPublicModelByRunId,
   putUnPublicModelByRunId,
+  postDescriptionExperiments,
 } from "../api/experiments";
 import {
   IExperiment,
@@ -26,12 +29,13 @@ import {
 } from "@/components/model/experiments.interface";
 import relativeTime from "dayjs/plugin/relativeTime";
 import Drawer from "react-modern-drawer";
+import { isEmpty, isNil } from "lodash";
 
 dayjs.extend(relativeTime);
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-export function History() {
+export function Experiments() {
   const [experiments, setExperiments] = useState<IExperiment[]>();
   const [experimentsLoading, setExperimentsLoading] = useState<boolean>(true);
   const [selectedExperiments, setSelectedExperiments] = useState<IExperiment>();
@@ -40,19 +44,28 @@ export function History() {
   const [sort, setSort] = useState<{ key: string; order: string }>();
   const [isOpen, setIsOpen] = useState(false);
   const [runInfo, setRunInfo] = useState<IRunDetail>();
+  // Description
+  const [experimentsDescription, setExperimentsDescription] =
+    useState<string>();
+  const [isEditDescription, setIsEditDescription] = useState<boolean>(false);
 
   useEffect(() => {
     const getExperiments = async () => {
       setExperimentsLoading(true);
-      setRunLoading(true)
+      setRunLoading(true);
       const data = await getExperimentsList();
       const experiments = data.experiments;
-      setExperimentsLoading(false)
+      setExperimentsLoading(false);
       setExperiments(experiments);
       setSelectedExperiments(experiments[0]);
     };
     getExperiments();
   }, []);
+
+  useEffect(() => {
+    setExperimentsDescription(selectedExperiments?.tags["mlflow.note.content"]);
+    setIsEditDescription(false);
+  }, [selectedExperiments]);
 
   useEffect(() => {
     setRuns(undefined);
@@ -82,8 +95,15 @@ export function History() {
         selectedExperiments?.experiment_id,
         { pageToken: "", orderBy: orderBy }
       );
-      setRunLoading(false)
+      setRunLoading(false);
       setRuns(data);
+    }
+  };
+
+  const updateDescriptionExperiments = async () => {
+    if (selectedExperiments) {
+      setIsEditDescription(false)
+      await postDescriptionExperiments(selectedExperiments?.experiment_id, experimentsDescription);
     }
   };
 
@@ -210,11 +230,46 @@ export function History() {
             <div className="flex flex-row justify-between mt-2 mb-6 items-center">
               {experimentsLoading ? (
                 <div role="status" className="w-[280px] animate-pulse">
-                  <div className="h-4 bg-gray-300 rounded-full mb-4 mt-4" />
+                  <div className="h-4 bg-gray-300 rounded-full mb-2 mt-4" />
+                  <div className="h-3 bg-gray-300 w-3/4 rounded-full mb-4 mt-2" />
                 </div>
               ) : (
-                <div className="font-medium text-xl">
-                  {selectedExperiments?.name}
+                <div className="w-3/4">
+                  <div className="font-medium text-xl">
+                    {selectedExperiments?.name}
+                  </div>
+                  {isEditDescription ? (
+                    <div className="flex flex-row items-center gap-2">
+                      <input
+                        id="description"
+                        className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                        placeholder="Add Description"
+                        value={experimentsDescription}
+                        onChange={(e) => setExperimentsDescription(e.target.value)}
+                      />
+                      <div
+                        className="flex flex-row cursor-pointer items-center"
+                        onClick={updateDescriptionExperiments}
+                      >
+                        <CheckIcon className="text-gray-800 w-5" />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-row items-center">
+                      <div className={"text-gray-800"}>
+                        {experimentsDescription}
+                      </div>
+                      <div
+                        className="flex flex-row cursor-pointer items-center"
+                        onClick={() => setIsEditDescription(true)}
+                      >
+                        <div className="text-gray-400 mr-2">
+                          {isEmpty(experimentsDescription) && "Add Description"}
+                        </div>
+                        <PencilSquareIcon className="text-gray-500 w-5" />
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               <div className="flex flex-row gap-3">
@@ -377,7 +432,7 @@ export function History() {
                           scope="col"
                           className="px-4 py-2 font-normal whitespace-nowrap border-b-[1px] border-gray-200"
                         >
-                          {run.info.user_id}
+                          {run.info.user_name}
                         </th>
                         {metricsHeaders.map((header) => (
                           <td
@@ -438,7 +493,7 @@ export function History() {
                 {runInfo?.info.run_name}
               </p>
               <div>
-                {runInfo?.models[0].current_stage === "Production" ? (
+                {runInfo?.models?.[0]?.current_stage === "Production" ? (
                   <button
                     type="button"
                     className="focus:outline-none text-white bg-yellow-400 hover:bg-yellow-500 focus:ring-4 focus:ring-yellow-300 font-medium rounded-lg text-sm px-5 py-2.5"
@@ -462,7 +517,7 @@ export function History() {
             </div>
             <div className="flex flex-row justify-between mb-3">
               <p className="font-medium">User</p>
-              <p>{runInfo?.info.user_id}</p>
+              <p>{runInfo?.info.user_name}</p>
             </div>
             <div className="flex flex-row justify-between mb-3">
               <p className="font-medium">Created</p>
@@ -530,5 +585,5 @@ export function History() {
   );
 }
 
-History.Layout = Layout;
-export default History;
+Experiments.Layout = Layout;
+export default Experiments;
