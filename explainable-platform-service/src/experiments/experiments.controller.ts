@@ -1,9 +1,11 @@
 import {
+  Body,
   Controller,
   Get,
   HttpException,
   HttpStatus,
   Param,
+  Post,
   Put,
   Query,
   UseGuards,
@@ -29,6 +31,18 @@ export class ExperimentsController {
     }
   }
 
+  @Get('/models')
+  async fetchModel() {
+    try {
+      return await this.experimentsService.getRegisteredModel();
+    } catch (error) {
+      throw new HttpException(
+        'Failed to fetch experiments',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   @Get(':experimentId/')
   async getExperimentById(
     @Param('experimentId') experimentId: string,
@@ -44,6 +58,24 @@ export class ExperimentsController {
     } catch (error) {
       throw new HttpException(
         'Failed to fetch experiments by id',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Post('description/:experimentId/')
+  async updateDescriptionExperiments(
+    @Param('experimentId') experimentId: string,
+    @Body('description') description: string,
+  ) {
+    try {
+      return await this.experimentsService.postUpdateDescriptionExperiments(
+        experimentId,
+        description,
+      );
+    } catch (error) {
+      throw new HttpException(
+        'Failed to update description experiments',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }

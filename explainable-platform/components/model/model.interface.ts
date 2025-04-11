@@ -9,11 +9,6 @@ export interface IModelInfo {
 
 export interface IMetrics {
   [key: string]: string;
-  // accuracy?: number;
-  // f1?: number;
-  // precision?: number;
-  // recall?: number;
-  // roc_auc?: number;
 }
 
 export interface IModelPayload {

@@ -11,7 +11,9 @@ export interface IExperiment {
   last_update_time: number;
   lifecycle_stage: string;
   name: string;
-  tags: {};
+  tags: {
+    [key: string]: string;
+  };
 }
 
 export interface IExperimentsRunRequestParams {
@@ -55,6 +57,7 @@ export interface IRunInfo {
   start_time: number;
   status: string;
   user_id: string;
+  user_name: string;
 }
 
 export interface IModel {
@@ -71,5 +74,28 @@ export interface IModel {
   status_message: any;
   tags: { [key: string]: string };
   user_id: string;
+  version: string;
+}
+
+export interface IRegisteredModelResponse {
+  registered_models: RegisteredModel[];
+}
+export interface RegisteredModel {
+  creation_timestamp: number;
+  last_updated_timestamp: number;
+  name: string;
+  latest_versions?: IRegisteredModelLatestVersions[];
+}
+
+export interface IRegisteredModelLatestVersions {
+  creation_timestamp: number;
+  current_stage: string;
+  description: string;
+  last_updated_timestamp: number;
+  name: string;
+  run_id: string;
+  run_link: string;
+  source: string;
+  status: string;
   version: string;
 }
