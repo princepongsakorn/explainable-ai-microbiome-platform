@@ -12,6 +12,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { ThirdPartyToken } from 'src/entity/third-party-token.entity';
 import { Repository } from 'typeorm';
 import { User } from 'src/entity/user.entity';
+import e from 'express';
 
 @Injectable()
 export class MlflowService {
@@ -92,36 +93,40 @@ export class MlflowService {
       mlflowUser = response.data?.user?.username;
     } catch (error) {}
 
-    if (mlflowUser) {
-      await lastValueFrom(
-        this.httpService.delete<{ user: { username: string } }>(
-          `${this.inferenceServiceURL}/v1/mlflow/user/${userId}`,
-          {
-            headers: { Host: this.hostHeader },
-          },
-        ),
-      );
-      await this.tokenRepository.delete({ user: { id: userId } });
-    }
-
     try {
       const token = this.generateRandomString(40);
-      const response = await lastValueFrom(
-        this.httpService.post(
-          `${this.inferenceServiceURL}/v1/mlflow/user`,
-          {
-            username: user.id,
-            password: token,
-          },
-          {
-            headers: { Host: this.hostHeader },
-          },
-        ),
-      );
+      if (mlflowUser) {
+        await lastValueFrom(
+          this.httpService.put<{ user: { username: string } }>(
+            `${this.inferenceServiceURL}/v1/mlflow/user`,
+            {
+              username: user.id,
+              password: token,
+            },
+            {
+              headers: { Host: this.hostHeader },
+            },
+          ),
+        );
+      } else {
+        await lastValueFrom(
+          this.httpService.post(
+            `${this.inferenceServiceURL}/v1/mlflow/user`,
+            {
+              username: user.id,
+              password: token,
+            },
+            {
+              headers: { Host: this.hostHeader },
+            },
+          ),
+        );
+      }
+
       let thirdPartyToken = await this.tokenRepository.findOne({
         where: { user: { id: userId }, provider },
       });
-      
+
       const maskedToken = this.maskString(token);
       if (thirdPartyToken) {
         thirdPartyToken.token = maskedToken;

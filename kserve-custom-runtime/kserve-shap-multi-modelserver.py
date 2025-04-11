@@ -18,6 +18,20 @@ from joblib import Memory
 from mlflow.exceptions import MlflowException
 from mlflow.server import get_app_client
 
+def safe_jsonify(obj):
+    def serialize(v):
+        if isinstance(v, (str, int, float, bool)) or v is None:
+            return v
+        elif isinstance(v, dict):
+            return {k: serialize(val) for k, val in v.items()}
+        elif isinstance(v, list):
+            return [serialize(item) for item in v]
+        elif hasattr(v, "__dict__"):
+            return serialize({k.lstrip("_"): val for k, val in v.__dict__.items()})
+        else:
+            return str(v)  # fallback to string
+
+    return serialize(obj)
 class ShapValueObject:
     def __init__(self, base_value, shap_df, explanation):
         self.base_value = base_value
@@ -606,24 +620,24 @@ def create_mlflow_user():
     tracking_uri = os.environ.get("MLFLOW_URL", None)
     auth_client = get_app_client("basic-auth", tracking_uri=tracking_uri)
     user = auth_client.create_user(username=username, password=password)
-    return jsonify({"user": {k.lstrip("_"): v for k, v in user.__dict__.items()}})
+    return jsonify({"user": safe_jsonify(user)})
+
+@app.route("/v1/mlflow/user", methods=["PUT"])
+def update_mlflow_user():
+    data = request.get_json()
+    username = data.get("username")
+    password = data.get("password")
+    tracking_uri = os.environ.get("MLFLOW_URL", None)
+    auth_client = get_app_client("basic-auth", tracking_uri=tracking_uri)
+    user = auth_client.update_user_password(username=username, password=password)
+    return jsonify({"user": safe_jsonify(user)})
 
 @app.route("/v1/mlflow/user/<username>", methods=["GET"])
 def get_mlflow_user(username):
     tracking_uri = os.environ.get("MLFLOW_URL", None)
     auth_client = get_app_client("basic-auth", tracking_uri=tracking_uri)
     user = auth_client.get_user(username=username)
-    return jsonify({"user": {k.lstrip("_"): v for k, v in user.__dict__.items()}})
-
-@app.route("/v1/mlflow/user/<username>", methods=["DELETE"])
-def delete_mlflow_user(username):
-    tracking_uri = os.environ.get("MLFLOW_URL", None)
-    auth_client = get_app_client("basic-auth", tracking_uri=tracking_uri)
-    try:
-        auth_client.delete_user(username=username)
-        return jsonify({"message": f"User '{username}' deleted"}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    return jsonify({"user": safe_jsonify(user)})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
