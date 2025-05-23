@@ -30,11 +30,141 @@ import {
 import relativeTime from "dayjs/plugin/relativeTime";
 import Drawer from "react-modern-drawer";
 import { isEmpty, isNil } from "lodash";
+import { Modal, Dropdown, Textarea } from "flowbite-react";
+import { getModelsType } from "../api/model";
+import { IModelType } from "@/components/model/model.interface";
 
 dayjs.extend(relativeTime);
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
+const PublishModal = (props: {
+  isOpen: boolean;
+  setIsOpen: any;
+  onOk: (data: { model?: IModelType; description?: string }) => void;
+  onCancel: any;
+}) => {
+  const [modelType, setModelType] = useState<IModelType[]>([]);
+  const [selectedModelType, setSelectedModelType] = useState<IModelType>();
+  const [description, setDescription] = useState<string>();
+
+  useEffect(() => {
+    const getType = async () => {
+      const modalType = await getModelsType();
+      setModelType(modalType);
+    };
+    getType();
+  }, []);
+
+  const onOK = () => {
+    if (selectedModelType && description) {
+      props.onOk({ model: selectedModelType, description });
+      props.setIsOpen(false);
+    }
+  };
+
+  const onCancel = () => {
+    props.onCancel();
+    props.setIsOpen(false);
+  };
+
+  return (
+    <Modal
+      theme={{
+        header: {
+          popup:
+            "border-b dark:border-gray-300 border-gray-300 m-6 p-0 pb-4 mb-4",
+          close: {
+            icon: "text-2xl",
+          },
+        },
+        content: {
+          base: "relative h-full w-full md:w-[700px] p-4 md:h-1/2",
+          inner:
+            "relative flex max-h-[90dvh] flex-col rounded-lg bg-white shadow",
+        },
+        footer: {
+          base: "flex items-center space-x-2 rounded-b border-t border-gray-200 p-6 justify-end",
+        },
+      }}
+      show={props.isOpen}
+      size="md"
+      onClose={onCancel}
+      className="z-[9999] bg-black/20"
+      popup
+    >
+      <Modal.Header>Publish Model to Production</Modal.Header>
+      <Modal.Body>
+        <div className="pt-0">
+          <div className="text-gray-500">
+            You are about to publish this model and make it available for use.
+            Please provide additional details before proceeding.
+          </div>
+          <div className="flex flex-col py-2 gap-2">
+            <div className="font-medium text-md">Model Type</div>
+            <Dropdown
+              theme={{
+                floating: {
+                  target: `w-full justify-start font-medium border-gray-300 ${
+                    selectedModelType ? "text-black" : "text-gray-500"
+                  }`,
+                },
+              }}
+              label={
+                selectedModelType
+                  ? `${selectedModelType.name} (${selectedModelType.description}) `
+                  : "Select the prediction category"
+              }
+              arrowIcon={false}
+              className="shadow-sm rounded-lg overflow-hidden dark:bg-white"
+            >
+              {modelType.map((model, index) => (
+                <Dropdown.Item
+                  onClick={() => setSelectedModelType(model)}
+                  className={`flex flex-col items-start ${
+                    index + 1 !== modelType.length
+                      ? "border-b-[1px] border-[#EAEAEA]"
+                      : ""
+                  }`}
+                >
+                  <span className="text-sm font-medium text-black">
+                    {model.name} ({model.description})
+                  </span>
+                </Dropdown.Item>
+              ))}
+            </Dropdown>
+            <div className="font-medium text-md">Description</div>
+            <Textarea
+              style={{ resize: "none", height: 100 }}
+              className="dark:border-gray-300 border-gray-300 bg-white"
+              placeholder="Write a short description about this model’s purpose, training data, or usage instructions."
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
+        </div>
+      </Modal.Body>
+      <Modal.Footer>
+        <div className="flex flex-row gap-4">
+          <button
+            type="button"
+            className="py-2.5 px-5 text-sm font-medium text-gray-900 focus:outline-none bg-white rounded-lg border border-gray-200 hover:bg-gray-100 hover:text-blue-700 focus:z-10 focus:ring-4 focus:ring-gray-100"
+            onClick={onCancel}
+          >
+            <div>Cancel</div>
+          </button>
+          <button
+            type="button"
+            className="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5focus:outline-none"
+            onClick={onOK}
+          >
+            <div>Publish Model</div>
+          </button>
+        </div>
+      </Modal.Footer>
+    </Modal>
+  );
+};
 export function Experiments() {
   const [experiments, setExperiments] = useState<IExperiment[]>();
   const [experimentsLoading, setExperimentsLoading] = useState<boolean>(true);
@@ -44,6 +174,8 @@ export function Experiments() {
   const [sort, setSort] = useState<{ key: string; order: string }>();
   const [isOpen, setIsOpen] = useState(false);
   const [runInfo, setRunInfo] = useState<IRunDetail>();
+  const [openModal, setOpenModal] = useState(false);
+
   // Description
   const [experimentsDescription, setExperimentsDescription] =
     useState<string>();
@@ -102,8 +234,11 @@ export function Experiments() {
 
   const updateDescriptionExperiments = async () => {
     if (selectedExperiments) {
-      setIsEditDescription(false)
-      await postDescriptionExperiments(selectedExperiments?.experiment_id, experimentsDescription);
+      setIsEditDescription(false);
+      await postDescriptionExperiments(
+        selectedExperiments?.experiment_id,
+        experimentsDescription
+      );
     }
   };
 
@@ -139,9 +274,12 @@ export function Experiments() {
     }
   };
 
-  const publishModel = async (id?: string) => {
+  const publishModel = async (
+    id: string,
+    data: { model?: IModelType; description?: string }
+  ) => {
     if (id) {
-      await putPublicModelByRunId(id);
+      await putPublicModelByRunId(id, data);
     }
   };
 
@@ -245,7 +383,9 @@ export function Experiments() {
                         className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
                         placeholder="Add Description"
                         value={experimentsDescription}
-                        onChange={(e) => setExperimentsDescription(e.target.value)}
+                        onChange={(e) =>
+                          setExperimentsDescription(e.target.value)
+                        }
                       />
                       <div
                         className="flex flex-row cursor-pointer items-center"
@@ -505,7 +645,7 @@ export function Experiments() {
                   <button
                     type="button"
                     className="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 focus:outline-none"
-                    onClick={() => publishModel(runInfo?.info.run_id)}
+                    onClick={() => setOpenModal(true)}
                   >
                     Publish Model
                   </button>
@@ -540,16 +680,16 @@ export function Experiments() {
             </div>
             <div className="flex flex-row justify-between mb-3">
               <p className="font-medium">Name</p>
-              <p>{runInfo?.models[0].name}</p>
+              <p>{runInfo?.models[0]?.name}</p>
             </div>
             <div className="flex flex-row justify-between mb-3">
               <p className="font-medium">Version</p>
-              <p>{runInfo?.models[0].version}</p>
+              <p>{runInfo?.models[0]?.version}</p>
             </div>
             <div className="flex flex-row justify-between mb-3">
               <p className="font-medium">Current Stage</p>
               <p>
-                {runInfo?.models[0].current_stage === "Production"
+                {runInfo?.models[0]?.current_stage === "Production"
                   ? "Public"
                   : "Not Public"}
               </p>
@@ -580,6 +720,13 @@ export function Experiments() {
             })}
           </div>
         </Drawer>
+        <PublishModal
+          key={runInfo?.info.run_id}
+          isOpen={openModal}
+          setIsOpen={setOpenModal}
+          onCancel={() => {}}
+          onOk={(data) => publishModel(runInfo?.info.run_id ?? '', data)}
+        />
       </div>
     </>
   );

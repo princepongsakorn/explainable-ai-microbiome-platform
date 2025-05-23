@@ -1,10 +1,32 @@
 import { IPaginationMeta } from "./pagination.interface";
 
+export interface IProductionModelInfo {
+  creation_timestamp: number
+  current_stage: string
+  description: {
+    model?: string
+    description: string
+  }
+  last_updated_timestamp: number
+  metrics: IMetrics
+  name: string
+  run_id: string
+  run_link: string
+  source: string
+  status: string
+  version: string
+}
 export interface IModelInfo {
   metrics: IMetrics;
   model_name: string;
   run_id: string;
   version: string;
+}
+
+export interface IModelType {
+  id: string;
+  name: string;
+  description: string;
 }
 
 export interface IMetrics {
@@ -48,11 +70,10 @@ export interface IPredictions {
   beeswarm?: string;
 }
 
-
 export interface IPredictionsPagination {
   items: IPredictionRecords[];
   meta: IPaginationMeta;
-  prediction: IPredictions
+  prediction: IPredictions;
 }
 
 export enum PredictionClass {
@@ -67,5 +88,5 @@ export enum PredictionStatus {
   IN_PROGRESS = "IN_PROGRESS",
   SUCCESS = "SUCCESS",
   ERROR = "ERROR",
-  CANCELED = 'CANCELED'
+  CANCELED = "CANCELED",
 }

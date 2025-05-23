@@ -6,6 +6,7 @@ import {
   IRunResponse,
 } from "@/components/model/experiments.interface";
 import { httpClient } from "./httpClient";
+import { IModelType } from "@/components/model/model.interface";
 
 export const getExperimentsList = async () => {
   const { data } = await httpClient.get<IExperimentResponse>("/experiments");
@@ -32,10 +33,16 @@ export const getExperimentsModelList = async () => {
   return data;
 };
 
-export const postDescriptionExperiments = async (experimentId: string, description?: string) => {
-  const { data } = await httpClient.post(`/experiments/description/${experimentId}`, {
-    description: description ?? '',
-  });
+export const postDescriptionExperiments = async (
+  experimentId: string,
+  description?: string
+) => {
+  const { data } = await httpClient.post(
+    `/experiments/description/${experimentId}`,
+    {
+      description: description ?? "",
+    }
+  );
   return data;
 };
 
@@ -44,9 +51,18 @@ export const getRunById = async (id: string) => {
   return data;
 };
 
-export const putPublicModelByRunId = async (id: string) => {
+export const putPublicModelByRunId = async (
+  id: string,
+  description: { model?: IModelType; description?: string }
+) => {
   const { data } = await httpClient.put<IRunResponse>(
-    `/experiments/run/publish-model/${id}`
+    `/experiments/run/publish-model/${id}`,
+    {
+      description: JSON.stringify({
+        model: description?.model?.id,
+        description: description?.description,
+      }),
+    }
   );
   return data;
 };
