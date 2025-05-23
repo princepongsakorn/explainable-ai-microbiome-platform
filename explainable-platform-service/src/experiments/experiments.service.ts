@@ -112,6 +112,7 @@ export class ExperimentsService {
           },
         ),
       );
+      console.log('response', response)
       const run = response.data.run;
       const userId = run.info?.user_id;
       let user_name: string | null = null;
@@ -140,12 +141,20 @@ export class ExperimentsService {
     }
   }
 
-  async putUpdateModelById(runId: string, stage: ModelStage) {
+  async putUpdateModelById(
+    runId: string,
+    description: string,
+    stage: ModelStage,
+  ) {
     try {
       const response = await lastValueFrom(
         this.httpService.put<IRunResponse>(
           `${this.inferenceServiceURL}/v1/mlflow/run/${runId}/stage`,
-          { stage: stage, archive_existing_versions: true },
+          {
+            stage: stage,
+            description: description,
+            archive_existing_versions: true,
+          },
           { headers: { Host: this.hostHeader } },
         ),
       );
@@ -159,7 +168,7 @@ export class ExperimentsService {
   async getRegisteredModel() {
     try {
       const response = await lastValueFrom(
-        this.httpService.get<IRunResponse>(
+        this.httpService.get(
           `${this.inferenceServiceURL}/v1/mlflow/registered-models`,
           { headers: { Host: this.hostHeader } },
         ),

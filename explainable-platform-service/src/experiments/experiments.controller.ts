@@ -94,10 +94,14 @@ export class ExperimentsController {
   }
 
   @Put('run/publish-model/:runId/')
-  async putPublishModelByRunId(@Param('runId') runId: string) {
+  async putPublishModelByRunId(
+    @Param('runId') runId: string,
+    @Body('description') description: string,
+  ) {
     try {
       return await this.experimentsService.putUpdateModelById(
         runId,
+        description ?? '',
         ModelStage.Production,
       );
     } catch (error) {
@@ -113,6 +117,7 @@ export class ExperimentsController {
     try {
       return await this.experimentsService.putUpdateModelById(
         runId,
+        '',
         ModelStage.None,
       );
     } catch (error) {

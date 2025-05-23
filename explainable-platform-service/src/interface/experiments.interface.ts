@@ -69,3 +69,18 @@ export enum ModelStage {
   Production = "Production",
   Archived = "Archived",
 }
+
+export interface IProductionModels {
+  creation_timestamp: number
+  current_stage: ModelStage
+  description: string
+  last_updated_timestamp: number
+  metrics: { [key: string]: string };
+  name: string
+  run_id: string
+  run_link: string
+  source: string
+  status: string
+  version: string
+}
+

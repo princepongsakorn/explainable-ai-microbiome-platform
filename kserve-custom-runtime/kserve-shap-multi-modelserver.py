@@ -447,31 +447,53 @@ def list_models():
 
     data = resp.json()
     registered_models = data.get("registered_models", [])
+
     mlflow.set_tracking_uri(mlflow_url)
     client = mlflow.tracking.MlflowClient()
     
-    model_list = []
+    production_model = []
     for model in registered_models:
-        model_name = model.name
-        latest_versions = client.get_latest_versions(model_name, stages=["Production"])
+        latest_versions = model.get("latest_versions", [])
+        for version in latest_versions:
+            if version.get("current_stage") == "Production":
+                run_id = version.get("run_id")
+                try:
+                    run = client.get_run(run_id)
+                    version["metrics"] = run.data.metrics
+                except Exception:
+                    version["metrics"] = {}
+                production_model.append(version)
+        model_list = []
+    # for model in registered_models:
+    #     logger.info(model)
 
-        if not latest_versions:
-            continue
+    #     model_name = model["name"]
+    #     try:
+    #         model_meta = client.get_registered_model(model_name)
+    #         model_description = model_meta.description
+    #     except Exception:
+    #         model_description = ""
+            
+    #     latest_versions = client.get_latest_versions(model_name, stages=["Production"])
 
-        latest_version = latest_versions[0]
-        run_id = latest_version.run_id
+    #     if not latest_versions:
+    #         continue
+
+    #     latest_version = latest_versions[0]
+    #     run_id = latest_version.run_id
         
-        run_data = client.get_run(run_id).data.metrics
-        metrics = {key: value for key, value in run_data.items()}
+    #     run_data = client.get_run(run_id).data.metrics
+    #     metrics = {key: value for key, value in run_data.items()}
         
-        model_list.append({
-            "model_name": model_name,
-            "version": latest_version.version,
-            "run_id": run_id,
-            "metrics": metrics
-        })
+    #     model_list.append({
+    #         "model_name": model_name,
+    #         "description": model_description,
+    #         "version": latest_version.version,
+    #         "run_id": run_id,
+    #         "metrics": metrics
+    #     })
 
-    return jsonify(model_list)
+    return jsonify(production_model)
 
 # ML flow api
 @app.route("/v1/mlflow/tracking_uri", methods=["GET"])
@@ -485,8 +507,7 @@ def get_mlflow_experiments():
     mlflow.set_tracking_uri(mlflow_url)
     client = mlflow.tracking.MlflowClient()
     experiments = client.search_experiments()
-    model = client.search_registered_models()
-    logger.info(model)
+
     experiment_list = [
         {k.lstrip("_"): v for k, v in exp.__dict__.items()}
         for exp in experiments
@@ -541,11 +562,13 @@ def get_mlflow_run(run_id):
     mlflow.set_tracking_uri(mlflow_url)
     client = mlflow.tracking.MlflowClient()
     run = client.get_run(run_id)
+
     models = client.search_model_versions(f"run_id='{run.info.run_id}'")
     model_list = [
                 {k.lstrip("_"): v for k, v in model.__dict__.items()}
                 for model in models
             ]
+
     metrics = {k: v for k, v in run.data.metrics.items()}
     parameters = {k: v for k, v in run.data.params.items()}
 
@@ -564,6 +587,7 @@ def get_mlflow_run(run_id):
 def update_model_stage_by_run_id(run_id):
     data = request.get_json()
     stage = data.get("stage", None)
+    description = data.get("description", None)
     archive_existing_versions = data.get("archive_existing_versions", False)
 
     if stage not in ["None", "Staging", "Production", "Archived"]:
@@ -579,16 +603,54 @@ def update_model_stage_by_run_id(run_id):
     try:
         model_name = models[0].name
         version = models[0].version
+
         client.transition_model_version_stage(
             name=model_name,
             version=version,
             stage=stage,
             archive_existing_versions=archive_existing_versions
         )
+        if description:
+            client.update_model_version(
+                name=model_name,
+                version=version,
+                description=description
+            )
         return jsonify({"status": "success", "message": f"Model '{model_name}' version '{version}' transitioned to '{stage}'."})
     except MlflowException as e:
         return {"status": "error", "message": str(e)}
 
+@app.route("/v1/mlflow/model/<model_name>/version/<version>/description", methods=["PUT"])
+def update_model_version_description(model_name, version):
+    data = request.get_json()
+    description = data.get("description", None)
+
+    if not description:
+        return jsonify({"status": "error", "message": "Missing 'description' field"}), 400
+
+    mlflow_url = os.environ.get("MLFLOW_URL", None)
+    mlflow.set_tracking_uri(mlflow_url)
+    client = mlflow.tracking.MlflowClient()
+
+    try:
+        # ✅ อัปเดต description ให้กับ version เฉพาะ
+        client.update_model_version(
+            name=model_name,
+            version=version,
+            description=description
+        )
+
+        return jsonify({
+            "status": "success",
+            "message": f"Description updated for model '{model_name}', version '{version}'",
+            "model_name": model_name,
+            "version": version,
+            "description": description
+        })
+
+    except MlflowException as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+    
 @app.route("/v1/mlflow/registered-models", methods=["GET"])
 def get_registered_models():
     from requests.auth import HTTPBasicAuth
@@ -612,6 +674,7 @@ def get_registered_models():
 
     return jsonify({"registered_models": registered_models})
 
+# MLflow user
 @app.route("/v1/mlflow/user", methods=["POST"])
 def create_mlflow_user():
     data = request.get_json()
