@@ -18,7 +18,6 @@ import {
 import { useRouter } from "next/router";
 import { queryToString } from "../utils/queryToString";
 import { ShapPlotPlaceholder } from "@/components/ui/ImageEmpty/ImageEmpty";
-import { Dropdown } from "@/components/ui/Dropdown/Dropdown";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -28,6 +27,7 @@ export function History() {
   const [predictions, setPredictions] = useState<IPagination<IPredictions>>();
   const [isOpen, setIsOpen] = useState(false);
   const [selectPrediction, setSelectPrediction] = useState<IPredictions>();
+
   const currentPage = Number(router.query.page) || 1;
 
   const onHandleChangePage = (page: number) => {

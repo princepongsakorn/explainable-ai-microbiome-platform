@@ -5,15 +5,13 @@ import { getModelsList } from "../api/model";
 import {
   ICreatePredictions,
   IMetrics,
-  IModelInfo,
   IProductionModelInfo,
 } from "@/components/model/model.interface";
-import { Dropdown } from "flowbite-react";
 import { postModelPredict } from "../api/predict";
 import { Modal } from "flowbite-react";
 import { useRouter } from "next/router";
 import { queryToString } from "../utils/queryToString";
-import { isNull, isUndefined } from "lodash";
+import { isUndefined } from "lodash";
 
 const UploadModal = (props: {
   isOpen: boolean;
@@ -52,10 +50,10 @@ const UploadModal = (props: {
       <Modal.Header />
       <Modal.Body>
         <div className="px-2">
-          <div className="text-center font-medium text-lg mb-4">
+          <div className="font-medium text-lg mb-4">
             Upload Successful & Prediction Created
           </div>
-          <div className="text-center text-gray-500">
+          <div className="text-gray-500">
             Your file has been successfully uploaded, and a prediction request
             has been created. You may proceed to the results page or continue
             uploading additional files.
@@ -66,17 +64,17 @@ const UploadModal = (props: {
         <div className="flex flex-row gap-4">
           <button
             type="button"
-            className="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5focus:outline-none"
-            onClick={onOK}
-          >
-            <div>View Prediction</div>
-          </button>
-          <button
-            type="button"
             className="py-2.5 px-5 text-sm font-medium text-gray-900 focus:outline-none bg-white rounded-lg border border-gray-200 hover:bg-gray-100 hover:text-blue-700 focus:z-10 focus:ring-4 focus:ring-gray-100"
             onClick={onCancel}
           >
             <div>Close</div>
+          </button>
+          <button
+            type="button"
+            className="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5focus:outline-none"
+            onClick={onOK}
+          >
+            <div>View Prediction</div>
           </button>
         </div>
       </Modal.Footer>
@@ -317,7 +315,7 @@ export function Home() {
     if (id) {
       const params = { id };
       const queryString = queryToString(params);
-      router.push(`prediction/local/?${queryString}`, undefined, {
+      router.push(`/prediction/local/?${queryString}`, undefined, {
         shallow: true,
       });
     }

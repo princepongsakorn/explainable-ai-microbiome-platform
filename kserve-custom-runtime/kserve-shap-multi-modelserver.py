@@ -92,19 +92,19 @@ class ModelLoader:
         """Load the latest model version from MLflow Model Registry (cached)."""
         model_versions = self.client.get_latest_versions(self.model_name, stages=["Production"])
         if not model_versions:
-            raise ValueError(f"❌ No model version for '{self.model_name}' in Production stage.")
+            raise ValueError(f"No model version for '{self.model_name}' in Production stage.")
 
         # Get the latest registered version in Production
         model_version_info = model_versions[-1]
         version = model_version_info.version
         run_id = model_version_info.run_id
-        logger.info(f"✅ Using cached Production version: {version} (Run ID: {run_id})")
+        logger.info(f"Using cached Production version: {version} (Run ID: {run_id})")
 
         # Load model from MLflow Model Registry
         model_uri = f"models:/{self.model_name}/{version}"
-        logger.info(f"🔄 Loading cached model from MLflow Registry: {model_uri}")
+        logger.info(f"Loading cached model from MLflow Registry: {model_uri}")
         model = mlflow.sklearn.load_model(model_uri)
-        logger.info(f"✅ Model {self.model_name} (Version {version}) cached successfully!")
+        logger.info(f"Model {self.model_name} (Version {version}) cached successfully!")
 
         return model, run_id
 
@@ -290,10 +290,7 @@ def explain_beeswarm(model_name):
         data = req_json["dataframe_split"]["data"]
 
         input_df = pd.DataFrame(data=data, columns=columns)
-        logger.info(input_df.head())
-        # Transform input DataFrame to match model requirements
         input_data = transformer(input_df, input_columns)  
-        logger.info(input_data.head())
 
         shap_object = get_shap_value(explainer, X=input_data)
         beeswarm = get_beeswarm(shap_object.explanation)
@@ -463,36 +460,7 @@ def list_models():
                 except Exception:
                     version["metrics"] = {}
                 production_model.append(version)
-        model_list = []
-    # for model in registered_models:
-    #     logger.info(model)
-
-    #     model_name = model["name"]
-    #     try:
-    #         model_meta = client.get_registered_model(model_name)
-    #         model_description = model_meta.description
-    #     except Exception:
-    #         model_description = ""
-            
-    #     latest_versions = client.get_latest_versions(model_name, stages=["Production"])
-
-    #     if not latest_versions:
-    #         continue
-
-    #     latest_version = latest_versions[0]
-    #     run_id = latest_version.run_id
         
-    #     run_data = client.get_run(run_id).data.metrics
-    #     metrics = {key: value for key, value in run_data.items()}
-        
-    #     model_list.append({
-    #         "model_name": model_name,
-    #         "description": model_description,
-    #         "version": latest_version.version,
-    #         "run_id": run_id,
-    #         "metrics": metrics
-    #     })
-
     return jsonify(production_model)
 
 # ML flow api
