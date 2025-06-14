@@ -31,6 +31,7 @@ import {
 import { Popover } from "flowbite-react";
 import Drawer from "react-modern-drawer";
 import { ShapPlotPlaceholder } from "@/components/ui/ImageEmpty/ImageEmpty";
+import { Modal } from "flowbite-react";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -173,6 +174,142 @@ const DataTable = (props: { selectPrediction: IPredictionRecords }) => {
   );
 };
 
+const ConfirmCancelModal = (props: {
+  isOpen: boolean;
+  setIsOpen: any;
+  onOk: any;
+  onCancel: any;
+}) => {
+  const onOK = () => {
+    props.onOk();
+    props.setIsOpen(false);
+  };
+
+  const onCancel = () => {
+    props.onCancel();
+    props.setIsOpen(false);
+  };
+
+  return (
+    <Modal
+      theme={{
+        content: {
+          base: "relative h-full w-full md:w-[500px] p-4 md:h-1/2",
+          inner:
+            "relative flex max-h-[90dvh] flex-col rounded-lg bg-white shadow",
+        },
+        footer: {
+          base: "flex items-center space-x-2 rounded-b border-t border-gray-200 p-6 justify-end",
+        },
+      }}
+      show={props.isOpen}
+      size="md"
+      onClose={onCancel}
+      className="z-[9999] bg-black/20"
+      popup
+    >
+      <Modal.Header />
+      <Modal.Body>
+        <div className="px-2">
+          <div className="font-medium text-lg mb-4">
+            Cancel In-Progress Jobs
+          </div>
+          <div className="text-gray-500">
+            You’re about to cancel jobs that are currently in progress. These
+            jobs will be immediately stopped and marked as canceled. This action
+            cannot be undone.
+          </div>
+        </div>
+      </Modal.Body>
+      <Modal.Footer>
+        <div className="flex flex-row gap-4">
+          <button
+            type="button"
+            className="py-2.5 px-5 text-sm font-medium text-gray-900 focus:outline-none bg-white rounded-lg border border-gray-200 hover:bg-gray-100 hover:text-blue-700 focus:z-10 focus:ring-4 focus:ring-gray-100"
+            onClick={onCancel}
+          >
+            <div>Close</div>
+          </button>
+          <button
+            type="button"
+            className="text-white bg-red-600 hover:bg-red-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5focus:outline-none"
+            onClick={onOK}
+          >
+            <div>Cancel jobs</div>
+          </button>
+        </div>
+      </Modal.Footer>
+    </Modal>
+  );
+};
+
+const ConfirmReJoblModal = (props: {
+  isOpen: boolean;
+  setIsOpen: any;
+  onOk: any;
+  onCancel: any;
+}) => {
+  const onOK = () => {
+    props.onOk();
+    props.setIsOpen(false);
+  };
+
+  const onCancel = () => {
+    props.onCancel();
+    props.setIsOpen(false);
+  };
+
+  return (
+    <Modal
+      theme={{
+        content: {
+          base: "relative h-full w-full md:w-[500px] p-4 md:h-1/2",
+          inner:
+            "relative flex max-h-[90dvh] flex-col rounded-lg bg-white shadow",
+        },
+        footer: {
+          base: "flex items-center space-x-2 rounded-b border-t border-gray-200 p-6 justify-end",
+        },
+      }}
+      show={props.isOpen}
+      size="md"
+      onClose={onCancel}
+      className="z-[9999] bg-black/20"
+      popup
+    >
+      <Modal.Header />
+      <Modal.Body>
+        <div className="px-2">
+          <div className=" font-medium text-lg mb-4">Re-run failed jobs</div>
+          <div className=" text-gray-500">
+            You’re about to re-run prediction jobs that were previously canceled
+            or failed. This will restart the selected jobs using the same input
+            data and model.
+          </div>
+        </div>
+      </Modal.Body>
+      <Modal.Footer>
+        <div className="flex flex-row gap-4">
+          <button
+            type="button"
+            className="py-2.5 px-5 text-sm font-medium text-gray-900 focus:outline-none bg-white rounded-lg border border-gray-200 hover:bg-gray-100 hover:text-blue-700 focus:z-10 focus:ring-4 focus:ring-gray-100"
+            onClick={onCancel}
+          >
+            <div>Close</div>
+          </button>
+          <button
+            type="button"
+            className="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5focus:outline-none"
+            onClick={onOK}
+          >
+            <div>Re-run jobs</div>
+          </button>
+        </div>
+      </Modal.Footer>
+    </Modal>
+  );
+};
+
 export function History() {
   const router = useRouter();
   const [predictions, setPredictions] = useState<IPredictionsPagination>();
@@ -182,11 +319,20 @@ export function History() {
 
   const predictionClass = usePredictionClass();
   const predictionStatus = usePredictionStatus();
+
+  const [openCancelModal, setOpenCancelModal] = useState(false);
+  const [openReJoblModal, setOpenReJobModal] = useState(false);
+
   const predictionId = router.query.id as string;
   const currentPage = Number(router.query.page) || 1;
 
   const onHandleChangePage = (page: number) => {
-    const params = { id: predictionId, page: page, class: predictionClass, status: predictionStatus };
+    const params = {
+      id: predictionId,
+      page: page,
+      class: predictionClass,
+      status: predictionStatus,
+    };
     const queryString = queryToString(params);
     router.replace(`?${queryString}`, undefined, { shallow: true });
   };
@@ -226,11 +372,13 @@ export function History() {
   };
 
   const onRepredict = async () => {
-    await postRePredict(predictionId);
+    setOpenReJobModal(true);
+    // await postRePredict(predictionId);
   };
 
   const onCancel = async () => {
-    await postCancelPredict(predictionId);
+    setOpenCancelModal(true);
+    // await postCancelPredict(predictionId);
   };
 
   useEffect(() => {
@@ -360,7 +508,9 @@ export function History() {
                 </li>
                 <li>
                   <a
-                    onClick={() => onHandleChangeStatus(PredictionStatus.CANCELED)}
+                    onClick={() =>
+                      onHandleChangeStatus(PredictionStatus.CANCELED)
+                    }
                     className={`cursor-pointer inline-block px-6 py-2 rounded-full ${
                       predictionStatus === PredictionStatus.CANCELED
                         ? "text-white bg-blue-600"
@@ -607,6 +757,18 @@ export function History() {
               />
             )}
           </div>
+          <ConfirmCancelModal
+            isOpen={openCancelModal}
+            setIsOpen={setOpenCancelModal}
+            onCancel={() => {}}
+            onOk={async () => await postCancelPredict(predictionId)}
+          />
+          <ConfirmReJoblModal
+            isOpen={openReJoblModal}
+            setIsOpen={setOpenReJobModal}
+            onCancel={() => {}}
+            onOk={async () => await postRePredict(predictionId)}
+          />
         </Drawer>
       </div>
     </>
