@@ -373,12 +373,12 @@ export function History() {
 
   const onRepredict = async () => {
     setOpenReJobModal(true);
-    // await postRePredict(predictionId);
+    await postRePredict(predictionId);
   };
 
   const onCancel = async () => {
     setOpenCancelModal(true);
-    // await postCancelPredict(predictionId);
+    await postCancelPredict(predictionId);
   };
 
   useEffect(() => {
@@ -586,9 +586,6 @@ export function History() {
                   <th scope="col" className="font-medium px-6 py-3">
                     Classification
                   </th>
-                  <th scope="col" className="font-medium px-6 py-3">
-                    Predict At
-                  </th>
                   <th
                     scope="col"
                     className="font-medium rounded-r-lg px-6 py-3"
@@ -620,15 +617,9 @@ export function History() {
                       <td className="text-black px-6 py-5">
                         {!isNull(prediction.class)
                           ? prediction.class === 0
-                            ? "Probability of negative class"
-                            : "Probability of positive class"
+                            ? "Probable negative"
+                            : "Probable positive"
                           : "-"}
-                      </td>
-                      <td className="text-black px-6 py-5">
-                        -
-                        {/* {dayjs(prediction.createdAt)
-                        .tz("Asia/Bangkok")
-                        .format("DD-MM-YYYY HH:mm")} */}
                       </td>
                       <td className="text-black px-6 py-5">
                         {StatusBox(prediction.status)}

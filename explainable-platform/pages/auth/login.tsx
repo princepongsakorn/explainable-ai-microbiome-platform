@@ -30,7 +30,7 @@ export default function App() {
   useEffect(() => {
     const token = Cookies.get("act");
     if (token) {
-      router.push("/");
+      router.push("/prediction/prediction");
     } else {
       setNeedSignIn(true);
     }
