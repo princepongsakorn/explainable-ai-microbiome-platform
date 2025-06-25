@@ -697,27 +697,41 @@ export function Experiments() {
             <div className="font-bold bg-gray-50 px-4 py-2 rounded-lg my-4">
               Model Metrics Information
             </div>
-            {Object.keys(runInfo?.data.metrics ?? {}).map((metric) => {
-              return (
-                <div className="flex flex-row justify-between mb-3">
-                  <p className="font-medium capitalize">
-                    {metric.replaceAll("_", " ")}
-                  </p>
-                  <p>{runInfo?.data.metrics[metric]}</p>
-                </div>
-              );
-            })}
+            <table className="w-full table-auto border-collapse">
+              <tbody>
+                {Object.keys(runInfo?.data.metrics ?? {}).map((metric) => (
+                  <tr key={metric} className="border-b">
+                    <td className="font-medium capitalize py-2">
+                      {metric.replaceAll("_", " ")}
+                    </td>
+                    <td className="py-2 text-right">
+                      {runInfo?.data.metrics[metric]}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
             <div className="font-bold bg-gray-50 px-4 py-2 rounded-lg my-4">
               Model Parameters Information
             </div>
-            {Object.keys(runInfo?.data.parameters ?? {}).map((parameter) => {
-              return (
-                <div className="flex flex-row justify-between mb-3">
-                  <p className="font-medium">{parameter}</p>
-                  <p>{runInfo?.data.parameters[parameter]}</p>
-                </div>
-              );
-            })}
+            <table className="w-full table-auto border-collapse">
+              <tbody>
+                {Object.keys(runInfo?.data.parameters ?? {}).map(
+                  (parameter) => {
+                    return (
+                      <tr key={parameter} className="border-b">
+                        <td className="font-medium capitalize py-2">
+                          {parameter}
+                        </td>
+                        <td className="py-2 text-right">
+                          {runInfo?.data.parameters[parameter]}
+                        </td>
+                      </tr>
+                    );
+                  }
+                )}
+              </tbody>
+            </table>
           </div>
         </Drawer>
         <PublishModal
@@ -725,7 +739,7 @@ export function Experiments() {
           isOpen={openModal}
           setIsOpen={setOpenModal}
           onCancel={() => {}}
-          onOk={(data) => publishModel(runInfo?.info.run_id ?? '', data)}
+          onOk={(data) => publishModel(runInfo?.info.run_id ?? "", data)}
         />
       </div>
     </>

@@ -188,13 +188,13 @@ export function History() {
                       </td>
                     ))} */}
                     <td className={`px-4 py-2 border-b-[1px] border-gray-200`}>
-                      <button
+                      {/* <button
                         type="button"
                         className="focus:outline-none text-white bg-yellow-400 hover:bg-yellow-500 focus:ring-4 focus:ring-yellow-300 font-medium rounded-lg text-sm px-5 py-2.5"
                         onClick={() => unPublishModel(model.run_id)}
                       >
                         Unpublish Model
-                      </button>
+                      </button> */}
                     </td>
                   </tr>
                 ))}
