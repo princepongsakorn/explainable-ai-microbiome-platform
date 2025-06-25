@@ -179,6 +179,7 @@ export class PredictionsService {
       where: { id: predictionId },
       select: ['id', 'prediction_number', 'modelName'],
     });
+
     if (!prediction)
       throw new NotFoundException(`Prediction ID ${predictionId} not found`);
 
@@ -204,22 +205,35 @@ export class PredictionsService {
       whereCondition['status'] = PredictionStatus.CANCELED;
     }
 
-    const [items, totalItems] = await this.recordsRepository.findAndCount({
-      where: whereCondition,
-      select: [
-        'id',
-        'proba',
-        'class',
-        'waterfall',
-        'status',
-        'errorMsg',
-        'dfData',
-        'record_number',
-      ],
-      take: limit,
-      skip: (page - 1) * limit,
-      order: { record_number: 'DESC' },
-    });
+    const [items, totalItems] = await this.recordsRepository
+      .createQueryBuilder('record')
+      .select([
+        'record.id',
+        'record.proba',
+        'record.class',
+        'record.waterfall',
+        'record.status',
+        'record.errorMsg',
+        'record.dfData',
+        'record.record_number',
+      ])
+      .where(whereCondition)
+      .orderBy(
+        `
+      CASE record.status
+        WHEN 'SUCCESS' THEN 1
+        WHEN 'IN_PROGRESS' THEN 2
+        WHEN 'PENDING' THEN 3
+        WHEN 'CANCELED' THEN 4
+        WHEN 'ERROR' THEN 5
+        ELSE 6
+      END
+    `,
+      )
+      .addOrderBy('record.record_number', 'ASC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
 
     const predictions = await Promise.all(
       items.map(async (predictionRow) => {

@@ -18,7 +18,7 @@ const color = {
   gray: "\x1b[90m"
 };
 
-function shortenJsonData(data: any, length = 500): string {
+function shortenJsonData(data: any, length = 50000000): string {
   const json = JSON.stringify(data);
   if (json.length <= length * 2) return json;
   const head = json.slice(0, length);
