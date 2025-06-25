@@ -41,11 +41,36 @@ class ShapValueObject:
 # Define a persistent disk-based cache directory
 # Flask API is running inside KServe in Kubernetes, each API call may run in a new process, causing MLflow downloads to be re-triggered.
 # Solution: Use disk-based caching (joblib.Memory) to persist downloaded files across requests.
-# CACHE_DIR = "/tmp/mlflow_cache"
-# memory = Memory(CACHE_DIR, verbose=0)
+memory = Memory(location="/tmp/cache", verbose=0)
+@memory.cache
+def load_input_columns_cached(run_id, artifact_path):
+    input_example_path = mlflow.artifacts.download_artifacts(artifact_path=artifact_path, run_id=run_id)
+    with open(input_example_path, "r") as f:
+        input_example = json.load(f)
+    return input_example["columns"]
+
+@memory.cache
+def load_explainer_cached(run_id, artifact_path):
+    explainer_path = mlflow.artifacts.download_artifacts(artifact_path=artifact_path, run_id=run_id)
+    with open(explainer_path, "rb") as f:
+        explainer = joblib.load(f)
+    return explainer
+
+@memory.cache
+def load_model_cached(model_name):
+    client = mlflow.tracking.MlflowClient()
+    model_versions = client.get_latest_versions(model_name, stages=["Production"])
+    if not model_versions:
+        raise ValueError(f"No model version for '{model_name}' in Production stage.")
+    model_version_info = model_versions[-1]
+    version = model_version_info.version
+    run_id = model_version_info.run_id
+    model_uri = f"models:/{model_name}/{version}"
+    model = mlflow.sklearn.load_model(model_uri)
+    return model, run_id
+
 class ModelLoader:
     def __init__(self, model_name):
-        """Initialize the model loader with the given model name."""
         self.model_name = model_name
         self.mlflow_url = os.getenv("MLFLOW_URL", None)
 
@@ -53,65 +78,25 @@ class ModelLoader:
             raise ValueError("Environment variable 'MLFLOW_URL' is required.")
 
         mlflow.set_tracking_uri(self.mlflow_url)
-        self.client = mlflow.tracking.MlflowClient()
-
-    # Cache results persistently
-    # @memory.cache
-    def load_input_columns(self, run_id, artifact_path="model/input_example.json"):
-        """Download and parse `input_example.json` from MLflow Artifacts."""
-        try:
-            input_example_path = mlflow.artifacts.download_artifacts(artifact_path=artifact_path, run_id=run_id)
-            with open(input_example_path, "r") as f:
-                input_example = json.load(f)
-
-            input_columns = input_example["columns"]
-            logger.info(f"✅ Cached input columns: {input_columns[:5]} ... (total {len(input_columns)} features)")
-            return input_columns
-        except Exception as e:
-            logger.error(f"model/input_example.json not found in for run_id {run_id}, skipping. Error: {str(e)}")
-            return None
-        
-    # Cache results persistently
-    # @memory.cache  
-    def load_explainer(self, run_id, artifact_path="shap_explainer/shap_explainer.pkl"):
-        """Download `shap_explainer.pkl` separately from its own directory in MLflow Artifacts."""
-        try:
-            explainer_path = mlflow.artifacts.download_artifacts(artifact_path=artifact_path, run_id=run_id)
-            with open(explainer_path, "rb") as f:
-                explainer = joblib.load(f)
-
-            logger.info(f"✅ Cached SHAP Explainer for run_id {run_id}")
-            return explainer
-        except Exception as e:
-            logger.error(f"⚠️ shap_explainer.pkl not found for run_id {run_id}, skipping. Error: {str(e)}")
-            return None
-        
-    # Cache results persistently     
-    # @memory.cache  
-    def load_model(self):
-        """Load the latest model version from MLflow Model Registry (cached)."""
-        model_versions = self.client.get_latest_versions(self.model_name, stages=["Production"])
-        if not model_versions:
-            raise ValueError(f"No model version for '{self.model_name}' in Production stage.")
-
-        # Get the latest registered version in Production
-        model_version_info = model_versions[-1]
-        version = model_version_info.version
-        run_id = model_version_info.run_id
-        logger.info(f"Using cached Production version: {version} (Run ID: {run_id})")
-
-        # Load model from MLflow Model Registry
-        model_uri = f"models:/{self.model_name}/{version}"
-        logger.info(f"Loading cached model from MLflow Registry: {model_uri}")
-        model = mlflow.sklearn.load_model(model_uri)
-        logger.info(f"Model {self.model_name} (Version {version}) cached successfully!")
-
-        return model, run_id
 
     def load(self):
-        model, run_id = self.load_model()
-        input_columns = self.load_input_columns(run_id)
-        explainer = self.load_explainer(run_id)
+        model, run_id = load_model_cached(self.model_name)
+        logger.info(f"✅ Loaded model from cache for model: {self.model_name}")
+
+        try:
+            input_columns = load_input_columns_cached(run_id, "model/input_example.json")
+            logger.info(f"✅ Loaded input columns from cache: {input_columns[:5]} ... (total {len(input_columns)} features)")
+        except Exception as e:
+            logger.error(f"❌ Failed to load input columns: {e}")
+            input_columns = None
+
+        try:
+            explainer = load_explainer_cached(run_id, "shap_explainer/shap_explainer.pkl")
+            logger.info(f"✅ Loaded SHAP Explainer from cache for run_id {run_id}")
+        except Exception as e:
+            logger.error(f"❌ Failed to load explainer: {e}")
+            explainer = None
+
         return model, input_columns, explainer
 
 # Shap function
@@ -173,8 +158,9 @@ def get_beeswarm(explanation):
         return img_base64
     
 def get_heatmap(explanation): 
-    plt.ioff()
     shap.plots.heatmap(explanation, instance_order=explanation.sum(1), max_display=15, show=False)
+
+    plt.ioff()
 
     ax = plt.gca()
     yticks = ax.get_yticks()
@@ -354,6 +340,9 @@ def explain_waterfall(model_name):
         input_data = transformer(input_df, input_columns)  
         logger.info(input_data.head())
 
+        if len(input_data) != 1:
+            return jsonify({"error": "Waterfall explanation requires exactly one row of input"}), 400
+        
         shap_object = get_shap_value(explainer, X=input_data)
         explain = [
             {
@@ -363,9 +352,7 @@ def explain_waterfall(model_name):
                         shap_value_object=shap_object
                 )
             }
-            for idx in zip(
-                input_data.index,
-            )
+            for idx in input_data.index
         ]
 
         return jsonify({"explain": explain})
