@@ -7,11 +7,8 @@ interface Props {
   pageProps: {};
 }
 
-interface Token {
-  exp: number;
-}
 const AuthenticationCheck = (WrappedComponent: any) => {
-  return (props: any) => {
+  return (props: Props) => {
     const router = useRouter();
     const [isClient, setIsClient] = useState(false);
 
@@ -31,39 +28,12 @@ const AuthenticationCheck = (WrappedComponent: any) => {
 
     const actDecode: { exp: number } = jwtDecode(accessToken);
     if (Date.now() >= actDecode.exp * 1000) {
-      // router.push("/403");
-      // return null;
+      router.push("/403");
+      return null;
     }
 
     return <WrappedComponent {...props} />;
   };
 };
-
-// const AuthenticationCheck = (WrappedComponent: any) => {
-//   const isTokenExpired = (exp: number) => {
-//     return Date.now() >= Number(exp) * 1000;
-//   };
-//   return (props: Props) => {
-//     // checks whether we are on client / browser or server.
-//     if (typeof window !== "undefined") {
-//       const router = useRouter();
-//       const accessToken = Cookies.get("act");
-//       // if (!accessToken) {
-//       //   router.push("/auth/login");
-//       //   return null;
-//       // }
-
-//       // const actDecode: Token = jwtDecode(accessToken!);
-//       // if (isTokenExpired(actDecode.exp)) {
-//       //   router.push("/403");
-//       //   return null;
-//       // }
-
-//       return <WrappedComponent {...props} />;
-//     }
-
-//     return <div></div>;
-//   };
-// };
 
 export default AuthenticationCheck;
