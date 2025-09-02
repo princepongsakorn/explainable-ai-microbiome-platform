@@ -4,7 +4,7 @@ import React, { FC, useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import AuthenticationCheck from "@/hoc/AuthenticationCheck";
 import Sidebar from "@/components/common/Sidebar";
-import { VariableIcon } from "@heroicons/react/outline";
+import { ArrowUpTrayIcon, TableCellsIcon, CodeBracketIcon, BeakerIcon } from "@heroicons/react/24/outline";
 import Topbar from "../Topbar";
 
 interface Props {
@@ -31,20 +31,64 @@ export interface SubNavigatorProps {
 
 const navigatorList: NavigatorProps[] = [
   {
-    icon: <VariableIcon className="w-5" />,
-    pathName: "investor-management",
-    slug: "/investor-management",
-    name: "Investor management",
+    icon: <ArrowUpTrayIcon className="w-5" />,
+    pathName: "upload",
+    slug: "/upload",
+    name: "Upload",
     subMenu: [
       {
-        slug: "/investor-list",
-        pathName: ["investor-list", "update-investor"],
-        name: "Investor management",
+        slug: "/predict",
+        pathName: "predict",
+        name: "Upload file",
+      },
+    ],
+  },
+  {
+    icon: <TableCellsIcon className="w-5" />,
+    pathName: "prediction",
+    slug: "/prediction",
+    name: "Prediction List",
+    subMenu: [
+      {
+        slug: "/prediction",
+        pathName: ["prediction", "local"],
+        name: "Prediction List",
+      },
+    ],
+  },
+  {
+    icon: <BeakerIcon className="w-5" />,
+    pathName: "experiments",
+    slug: "/experiments",
+    name: "Experiments and Models",
+    subMenu: [
+      {
+        slug: "/experiments",
+        pathName: "experiments",
+        name: "Experiments",
       },
       {
-        slug: "/draft-investor-list",
-        pathName: ["draft-investor-list", "create"],
-        name: "Draft investor management",
+        slug: "/models",
+        pathName: "models",
+        name: "Models",
+      },
+    ],
+  },
+  {
+    icon: <CodeBracketIcon className="w-5" />,
+    pathName: "developer",
+    slug: "/developer",
+    name: "Developer",
+    subMenu: [
+      {
+        slug: "/token",
+        pathName: "token",
+        name: "Personal Access Tokens",
+      },
+      {
+        slug: "/mlflow",
+        pathName: "mlflow",
+        name: "MLflow and Deployment",
       },
     ],
   },
@@ -54,9 +98,8 @@ const Layout: FC<Props> = ({ children, pageProps }: Props) => {
   const router = useRouter();
   const [mainNavigate, SetMainNavigate] = useState<NavigatorProps[]>([]);
   const [subNavigator, setSubNavigator] = useState<NavigatorProps>();
-
   const splitPathUrl = router.pathname.split("/");
-
+  
   useEffect(() => {
     SetMainNavigate(
       navigatorList

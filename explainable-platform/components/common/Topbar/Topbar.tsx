@@ -5,6 +5,8 @@ import Link from "next/link";
 
 import { NavigatorProps } from "@/components/common/Layout/Layout";
 import Image from "next/image";
+import { getToken } from "@/pages/api/httpClient";
+import { jwtDecode } from "jwt-decode";
 
 interface TopbarProps {
   navigatorList?: NavigatorProps;
@@ -29,8 +31,8 @@ const TopbarLinkComponent = React.forwardRef((props: TopbarLinkProps, ref) => {
         }`}
       >
         {item.name}
-        {(!currentSubMenu || pathName.includes(currentSubMenu)) && (
-          <div className="w-full h-[4px] bg-token-purple absolute bottom-0 rounded-topbar"></div>
+        {pathName.includes(currentSubMenu) && (
+          <div className="w-full h-[2px] bg-black absolute bottom-0 rounded-topbar"></div>
         )}
       </div>
     </a>
@@ -40,6 +42,22 @@ const TopbarLinkComponent = React.forwardRef((props: TopbarLinkProps, ref) => {
 const Topbar: FC<TopbarProps> = (props: TopbarProps) => {
   const { navigatorList, currentSubMenu } = props;
   const [hasScrolled, setHasScrolled] = useState(false);
+  const [profile, setProfile] = useState<any>();
+  const firstLetter = profile ? profile?.username.charAt(0).toUpperCase() : "-";
+
+  useEffect(() => {
+    const profile = getProfile();
+    setProfile(profile);
+  }, []);
+
+  function getProfile() {
+    if (!!getToken()) {
+      const profile: any = jwtDecode(getToken()!);
+      return {
+        username: profile?.username,
+      };
+    }
+  }
 
   useEffect(() => {
     const handleScroll = throttle(() => {
@@ -61,13 +79,13 @@ const Topbar: FC<TopbarProps> = (props: TopbarProps) => {
   return (
     <div
       className={cn(
-        `grid grid-cols-3 items-center h-[66px] sticky top-0 z-30 transition-all duration-150 border-solid border-b-[1px] border-[#E4E7EC] bg-white`,
+        `grid grid-cols-3 items-center h-[66px] sticky top-0 z-30 transition-all duration-150 border-solid border-b-[1px] border-[#E4E7EC] bg-[#F0F3F7]`,
         { "shadow-magical": hasScrolled }
       )}
     >
       <div className="col-start-2 flex w-full h-full justify-center">
         <div
-          className={`grid  grid-cols-${navigatorList?.subMenu?.length} gap-5 justify-center text-sm justify-items-center h-full`}
+          className={`flex flex-rows gap-6 justify-center text-sm justify-items-center h-full`}
         >
           {navigatorList?.subMenu?.map((item, index) => {
             const pathName = Array.isArray(item.pathName)
@@ -97,14 +115,10 @@ const Topbar: FC<TopbarProps> = (props: TopbarProps) => {
           })}
         </div>
       </div>
-      <div className="flex justify-end mr-3">
-        <div className="w-[40px] h-[40px] rounded-full bg-[#fbfbfb] border-solid border-[1px] border-[#E4E7EC] shadow-sm">
-          <img
-            src="/assets/profile/profile-1.png"
-            alt="Profile Picture"
-            width="40"
-            height="40"
-          />
+      <div className="flex justify-end mr-3 items-center gap-2">
+        <div className="text-sm text-right text-[#747474]">{profile?.username}</div>
+        <div className="w-[40px] h-[40px] overflow-hidden flex items-center justify-center rounded-full bg-blue-500 border-solid border-[1px] border-[#E4E7EC] shadow-sm">
+          <div className="text-white rounded-full text-lg font-bold select-none">{firstLetter}</div>
         </div>
       </div>
     </div>

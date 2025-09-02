@@ -24,6 +24,16 @@ spec:
           secretKeyRef:
             name: mlflow-secret
             key: MLFLOW_URL
+      - name: MLFLOW_TRACKING_USERNAME
+        valueFrom:
+          secretKeyRef:
+            name: mlflow-secret
+            key: MLFLOW_TRACKING_USERNAME
+      - name: MLFLOW_TRACKING_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: mlflow-secret
+            key: MLFLOW_TRACKING_PASSWORD
       - name: AWS_ACCESS_KEY_ID
         valueFrom:
           secretKeyRef:
