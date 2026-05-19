@@ -62,3 +62,17 @@ export const getPredictionRecords = async (
   );
   return data;
 };
+
+export const patchPredictionRecordsComment = async (
+  predictionId: string,
+  predictionRecordsId: string,
+  comment?: string
+) => {
+  const { data } = await httpClient.patch<IPredictionsPagination>(
+    `predict/${predictionId}/records/${predictionRecordsId}/comment`,
+    {
+      comment: comment ?? "",
+    }
+  );
+  return data;
+};

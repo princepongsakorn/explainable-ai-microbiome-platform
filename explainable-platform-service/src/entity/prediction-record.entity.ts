@@ -24,6 +24,9 @@ export class PredictionRecord {
   @Column({ nullable: true })
   waterfall?: string;
 
+  @Column({ nullable: true })
+  barPlot?: string;
+
   @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;
 
@@ -32,4 +35,7 @@ export class PredictionRecord {
 
   @Column({ type: 'text', nullable: true })
   errorMsg?: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  comment?: string;
 }

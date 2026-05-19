@@ -10,7 +10,7 @@ import {
 import { postModelPredict } from "../api/predict";
 import { Modal } from "flowbite-react";
 import { useRouter } from "next/router";
-import { queryToString } from "../utils/queryToString";
+import { queryToString } from "@/lib/queryToString";
 import { isUndefined } from "lodash";
 
 const UploadModal = (props: {

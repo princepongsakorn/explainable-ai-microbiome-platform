@@ -8,6 +8,7 @@ import {
 } from "@/components/model/model.interface";
 import {
   getPredictionRecords,
+  patchPredictionRecordsComment,
   postCancelPredict,
   postRePredict,
 } from "../api/predict";
@@ -21,17 +22,17 @@ import {
   IPaginationRequestParams,
 } from "@/components/model/pagination.interface";
 import { useRouter } from "next/router";
-import { queryToString } from "../utils/queryToString";
+import { queryToString } from "@/lib/queryToString";
 import { isNull } from "lodash";
 import {
   ArrowPathIcon,
   ChevronLeftIcon,
   EllipsisHorizontalIcon,
 } from "@heroicons/react/24/outline";
-import { Popover } from "flowbite-react";
+import { Popover, Modal, Textarea, Button } from "flowbite-react";
 import Drawer from "react-modern-drawer";
 import { ShapPlotPlaceholder } from "@/components/ui/ImageEmpty/ImageEmpty";
-import { Modal } from "flowbite-react";
+import { MainButton } from "@/components/ui/Button/Button";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -316,7 +317,8 @@ export function History() {
   const [isOpen, setIsOpen] = useState(false);
   const [selectPrediction, setSelectPrediction] =
     useState<IPredictionRecords>();
-
+  const [diagnosisComment, setDiagnosisComment] = useState<string>();
+  const [saveCommentLoading, setSaveCommentLoading] = useState<boolean>(false);
   const predictionClass = usePredictionClass();
   const predictionStatus = usePredictionStatus();
 
@@ -371,6 +373,13 @@ export function History() {
     }
   };
 
+  const onOpenPrediction = (prediction: IPredictionRecords) => {
+    setIsOpen(true);
+    console.log('prediction', prediction)
+    setSelectPrediction(prediction);
+    setDiagnosisComment(prediction.comment);
+  };
+
   const onRepredict = async () => {
     setOpenReJobModal(true);
     await postRePredict(predictionId);
@@ -380,6 +389,14 @@ export function History() {
     setOpenCancelModal(true);
     await postCancelPredict(predictionId);
   };
+
+  const onSaveComment = async () => {
+    if (selectPrediction?.id) {
+      setSaveCommentLoading(true)
+      await patchPredictionRecordsComment(predictionId, selectPrediction?.id, diagnosisComment)
+      setSaveCommentLoading(false)
+    }
+  }
 
   useEffect(() => {
     getPredictionsList();
@@ -599,9 +616,7 @@ export function History() {
                   predictions?.items.map((prediction) => (
                     <tr
                       className="bg-white hover:bg-gray-50"
-                      onClick={() => {
-                        setIsOpen(true), setSelectPrediction(prediction);
-                      }}
+                      onClick={() => onOpenPrediction(prediction)}
                     >
                       <th
                         scope="row"
@@ -665,6 +680,7 @@ export function History() {
           />
         </div>
         <Drawer
+          key={selectPrediction?.id}
           open={isOpen}
           onClose={() => setIsOpen(false)}
           direction="right"
@@ -740,6 +756,21 @@ export function History() {
                 plotName="Waterfall plot"
                 showShapLabel
               />
+            </div>
+            <div className="font-bold bg-gray-50 px-4 py-2 rounded-lg my-4">
+              Diagnosis Comment
+            </div>
+            <div>
+              <Textarea
+                style={{ resize: "none", height: 150 }}
+                className="dark:border-gray-300 border-gray-300 bg-white"
+                placeholder="Write your diagnosis, interpretation, or any relevant medical notes here."
+                value={diagnosisComment}
+                onChange={(e) => setDiagnosisComment(e.target.value)}
+              />
+              <div className="flex mt-2 justify-end">
+                <MainButton onClick={onSaveComment} loading={saveCommentLoading}>Save</MainButton>
+              </div>
             </div>
             {selectPrediction?.dfColumns && selectPrediction?.dfData && (
               <DataTable

@@ -7,7 +7,6 @@ export const options = {
 };
 
 const headers = {
-  Host: "kserve-custom-inference-service.default.example.com",
   "Content-Type": "application/json",
 };
 

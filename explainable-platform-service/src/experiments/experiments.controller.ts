@@ -93,6 +93,32 @@ export class ExperimentsController {
     }
   }
 
+  @Post('run/register-model/:runId/')
+  async postRegisterModelByRunId(
+    @Param('runId') runId: string,
+    @Body('name') name: string,
+    @Body('description') description?: string,
+  ) {
+    if (!name) {
+      throw new HttpException(
+        'Missing required field: name',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    try {
+      return await this.experimentsService.registerModelByRunId(
+        runId,
+        name,
+        description ?? '',
+      );
+    } catch (error) {
+      throw new HttpException(
+        'Failed to register model by run id',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   @Put('run/publish-model/:runId/')
   async putPublishModelByRunId(
     @Param('runId') runId: string,

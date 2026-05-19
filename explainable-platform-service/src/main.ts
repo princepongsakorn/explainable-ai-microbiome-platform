@@ -18,7 +18,7 @@ const color = {
   gray: "\x1b[90m"
 };
 
-function shortenJsonData(data: any, length = 50000000): string {
+function shortenJsonData(data: any, length = 500): string {
   const json = JSON.stringify(data);
   if (json.length <= length * 2) return json;
   const head = json.slice(0, length);
@@ -47,6 +47,8 @@ async function bootstrap() {
   });
 
   const app = await NestFactory.create(AppModule);
+  // Mount all controllers under /api so nginx can route /api/* → backend.
+  app.setGlobalPrefix('api');
   app.enableCors({
     origin: '*',
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',

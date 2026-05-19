@@ -47,6 +47,7 @@ export interface ICreatePredictions {
 
 export interface IPredictionRecords {
   id: string;
+  record_number: number;
   proba?: number;
   class?: number;
   waterfall?: string;
@@ -54,7 +55,7 @@ export interface IPredictionRecords {
   dfColumns?: string[];
   dfData?: string[];
   errorMsg?: string;
-  record_number: number;
+  comment?: string
 }
 export interface IPredictions {
   id: string;

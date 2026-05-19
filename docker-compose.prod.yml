@@ -1,0 +1,96 @@
+# Production stack for VM #2
+#
+# Services:
+#   postgres   - backend's metadata DB
+#   redis      - Bull queue store
+#   backend    - NestJS API (port 3000, bound to localhost only — nginx proxies)
+#   frontend   - Next.js (port 3001, bound to localhost only — nginx proxies)
+#
+# NOT included (run as separate native systemd services on the host):
+#   inference  - Flask + SHAP container, listening on host port 8080
+#   nginx      - reverse proxy on host ports 80/443
+#
+# Backend reaches inference via host.docker.internal:8080 (extra_hosts gateway).
+# GCS access uses Application Default Credentials → metadata server (HTTP) → compute SA.
+#
+# Usage on VM:
+#   docker compose -f docker-compose.prod.yml up -d --build
+#   docker compose -f docker-compose.prod.yml logs -f backend
+
+services:
+  postgres:
+    image: postgres:14
+    container_name: postgres-platform
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-explainable_platform_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres_user}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis-platform
+    restart: always
+    command: redis-server --save 60 1 --loglevel warning
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./explainable-platform-service
+      dockerfile: Dockerfile
+    container_name: backend
+    restart: always
+    env_file:
+      - ./explainable-platform-service/.env
+    extra_hosts:
+      # Allows backend container to reach the inference systemd container at host's :8080
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      # Bind to localhost only — public traffic comes through nginx on host
+      - "127.0.0.1:3000:3000"
+
+  frontend:
+    build:
+      context: ./explainable-platform
+      dockerfile: Dockerfile
+      args:
+        # Frontend → backend through nginx (same origin) — baked into the build
+        NEXT_PUBLIC_API: "/api"
+    container_name: frontend
+    restart: always
+    env_file:
+      - ./explainable-platform/.env
+    # Force production runtime values — wins over env_file so a stale .env can't break the deploy
+    environment:
+      PORT: "3001"
+      HOSTNAME: "0.0.0.0"
+      # Frontend → backend goes through nginx (same origin) — relative path
+      API: "/api"
+    depends_on:
+      - backend
+    ports:
+      - "127.0.0.1:3001:3001"
+
+volumes:
+  postgres_data:
+    name: platform_postgres_data
+
+networks:
+  default:
+    name: platform

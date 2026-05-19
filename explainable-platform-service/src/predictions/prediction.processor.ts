@@ -20,7 +20,6 @@ import { PredictionStatus } from 'src/interface/prediction-class.enum';
 @Processor('predictionQueue')
 export class PredictionProcessor {
   private inferenceServiceURL: string;
-  private hostHeader = 'kserve-custom-inference-service.default.example.com';
 
   constructor(
     private httpService: HttpService,
@@ -69,7 +68,6 @@ export class PredictionProcessor {
     const heatmapObservable = this.httpService.post<IHeatmapResponse>(
       `${this.inferenceServiceURL}/v1/explain/heatmap/${prediction.modelName}`,
       dataframe_split,
-      { headers: { Host: this.hostHeader } },
     );
 
     const heatmapResponse = await lastValueFrom(heatmapObservable);
@@ -86,7 +84,6 @@ export class PredictionProcessor {
     const beeswarmObservable = this.httpService.post<IBeeswarmResponse>(
       `${this.inferenceServiceURL}/v1/explain/beeswarm/${prediction.modelName}`,
       dataframe_split,
-      { headers: { Host: this.hostHeader } },
     );
 
     const beeswarmResponse = await lastValueFrom(beeswarmObservable);
@@ -150,7 +147,6 @@ export class PredictionProcessor {
         const predictionObservable = this.httpService.post<IPredictResponse>(
           `${this.inferenceServiceURL}/v1/predict/${prediction.modelName}`,
           dataframe_split,
-          { headers: { Host: this.hostHeader } },
         );
 
         const predictionResponse = await lastValueFrom(predictionObservable);
@@ -173,7 +169,6 @@ export class PredictionProcessor {
         const waterfallObservable = this.httpService.post<IWaterfallResponse>(
           `${this.inferenceServiceURL}/v1/explain/waterfall/${prediction.modelName}`,
           dataframe_split,
-          { headers: { Host: this.hostHeader } },
         );
 
         const waterfallResponse = await lastValueFrom(waterfallObservable);
