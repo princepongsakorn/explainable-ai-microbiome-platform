@@ -1,4 +1,3 @@
-import getConfig from "next/config";
 import axios, {
   AxiosError,
   AxiosResponse,
@@ -7,10 +6,12 @@ import axios, {
 import Cookies from "js-cookie";
 import { jwtDecode } from "jwt-decode";
 
-const { publicRuntimeConfig } = getConfig();
+// NEXT_PUBLIC_* env vars are inlined at build time and reach the browser without SSR.
+// Defaults to "/api" so requests go through the nginx reverse proxy (same origin).
+const API_BASE_URL = process.env.NEXT_PUBLIC_API ?? "/api";
 
 export const httpClient = axios.create({
-  baseURL: `${publicRuntimeConfig.api}`,
+  baseURL: API_BASE_URL,
   timeout: 180000, // 3 minutes
 });
 

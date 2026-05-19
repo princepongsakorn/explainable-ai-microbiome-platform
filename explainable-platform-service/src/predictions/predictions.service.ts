@@ -177,7 +177,7 @@ export class PredictionsService {
   ) {
     const prediction = await this.predictionsRepository.findOne({
       where: { id: predictionId },
-      select: ['id', 'prediction_number', 'modelName'],
+      select: ['id', 'prediction_number', 'modelName', 'dfColumns'],
     });
 
     if (!prediction)
@@ -209,13 +209,14 @@ export class PredictionsService {
       .createQueryBuilder('record')
       .select([
         'record.id',
+        'record.record_number',
         'record.proba',
         'record.class',
         'record.waterfall',
         'record.status',
         'record.errorMsg',
         'record.dfData',
-        'record.record_number',
+        'record.comment',
       ])
       .where(whereCondition)
       .orderBy(
@@ -263,5 +264,26 @@ export class PredictionsService {
       },
       meta,
     };
+  }
+
+  async updatePredictionRecordsComment(
+    predictionId: string,
+    predictionRecordsId: string,
+    comment: string,
+  ): Promise<PredictionRecord> {
+    const record = await this.recordsRepository.findOne({
+      where: {
+        id: predictionRecordsId,
+        prediction: { id: predictionId },
+      },
+      relations: ['prediction'],
+    });
+    if (!record) {
+      throw new NotFoundException(
+        `PredictionRecord with id ${predictionRecordsId} not found`,
+      );
+    }
+    record.comment = comment;
+    return await this.recordsRepository.save(record);
   }
 }

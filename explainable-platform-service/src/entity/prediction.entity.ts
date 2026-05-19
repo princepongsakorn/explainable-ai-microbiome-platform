@@ -19,6 +19,9 @@ export class Prediction {
 
   @Column('jsonb')
   dfColumns: string[]
+  
+  @Column({ type: 'decimal', precision: 10, scale: 4, default: 0.5 })
+  threshold: number;
 
   @Column({ nullable: true })
   heatmap: string;

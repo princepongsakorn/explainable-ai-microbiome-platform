@@ -8,11 +8,15 @@ import {
   UseInterceptors,
   Body,
   UseGuards,
+  Patch,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { PredictionsService } from './predictions.service';
 import { Multer } from 'multer';
-import { PredictionClass, PredictionStatus } from 'src/interface/prediction-class.enum';
+import {
+  PredictionClass,
+  PredictionStatus,
+} from 'src/interface/prediction-class.enum';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 
 @Controller('predict')
@@ -60,7 +64,20 @@ export class PredictionsController {
       Number(page),
       Number(limit),
       predictionClass,
-      predictionStatus
+      predictionStatus,
+    );
+  }
+
+  @Patch(':predictionId/records/:predictionRecordsId/comment')
+  async updateComment(
+    @Param('predictionId') predictionId: string,
+    @Param('predictionRecordsId') predictionRecordsId: string,
+    @Body('comment') comment: string,
+  ) {
+    return await this.predictionsService.updatePredictionRecordsComment(
+      predictionId,
+      predictionRecordsId,
+      comment,
     );
   }
 }

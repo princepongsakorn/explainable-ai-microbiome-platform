@@ -1,7 +1,5 @@
 kserve
 psutil
-xgboost
-mlflow
 cloudpickle
 matplotlib
 numpy
@@ -9,9 +7,20 @@ numba
 pandas
 scikit-learn
 scipy
-shap
+shap>=0.43
 boto3
 joblib
 flask
 xgboost==2.1.3
-mlflow[auth]
+# Pinned to match MLflow Tracking Server on VM #1 — newer client versions
+# expect "scorer_permissions" in user response which the 2.x server doesn't return.
+mlflow[auth]>=2.9.0,<3
+google-auth>=2.20,<2.30
+google-cloud-storage>=2.10,<3.0
+# Contract layer — every served model is a pyfunc-backed ExplainableModel.
+mlflow-explainable>=1.0,<2
+# Required to unpickle the GCN artifact (sample-gcn-crc). CPU build is enough
+# for inference; ~250 MB image-size hit but unavoidable if we want a uniform
+# runtime that serves both tabular tree models and GNNs.
+torch
+torch-geometric

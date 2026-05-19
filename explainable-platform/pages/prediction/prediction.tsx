@@ -16,7 +16,7 @@ import {
   IPaginationRequestParams,
 } from "@/components/model/pagination.interface";
 import { useRouter } from "next/router";
-import { queryToString } from "../utils/queryToString";
+import { queryToString } from "@/lib/queryToString";
 import { ShapPlotPlaceholder } from "@/components/ui/ImageEmpty/ImageEmpty";
 
 dayjs.extend(utc);
