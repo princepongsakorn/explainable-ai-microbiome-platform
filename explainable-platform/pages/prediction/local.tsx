@@ -11,6 +11,7 @@ import {
   patchPredictionRecordsComment,
   postCancelPredict,
   postRePredict,
+  postRegenWaterfall,
 } from "../api/predict";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
@@ -33,6 +34,7 @@ import { Popover, Modal, Textarea, Button } from "flowbite-react";
 import Drawer from "react-modern-drawer";
 import { ShapPlotPlaceholder } from "@/components/ui/ImageEmpty/ImageEmpty";
 import { MainButton } from "@/components/ui/Button/Button";
+import { useSse } from "@/lib/useSse";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -319,6 +321,7 @@ export function History() {
     useState<IPredictionRecords>();
   const [diagnosisComment, setDiagnosisComment] = useState<string>();
   const [saveCommentLoading, setSaveCommentLoading] = useState<boolean>(false);
+  const [regenWaterfall, setRegenWaterfall] = useState<boolean>(false);
   const predictionClass = usePredictionClass();
   const predictionStatus = usePredictionStatus();
 
@@ -375,32 +378,126 @@ export function History() {
 
   const onOpenPrediction = (prediction: IPredictionRecords) => {
     setIsOpen(true);
-    console.log('prediction', prediction)
     setSelectPrediction(prediction);
     setDiagnosisComment(prediction.comment);
   };
 
-  const onRepredict = async () => {
+  // Popover handlers only OPEN the modal; the actual API call is fired
+  // by the modal's confirm button to avoid the previous double-fire bug.
+  const onRepredict = () => {
     setOpenReJobModal(true);
-    await postRePredict(predictionId);
   };
 
-  const onCancel = async () => {
+  const onCancel = () => {
     setOpenCancelModal(true);
+  };
+
+  const onConfirmRepredict = async () => {
+    await postRePredict(predictionId);
+    await getPredictionsList();
+  };
+
+  const onConfirmCancel = async () => {
     await postCancelPredict(predictionId);
+    await getPredictionsList();
+  };
+
+  // Re-generate just the waterfall plot for the open record. The backend
+  // queues a job; the result arrives over SSE as a 'record:update', which
+  // clears the spinner below.
+  const onRegenWaterfall = async () => {
+    if (!selectPrediction?.id) return;
+    setRegenWaterfall(true);
+    try {
+      await postRegenWaterfall(predictionId, selectPrediction.id);
+    } catch {
+      setRegenWaterfall(false);
+    }
   };
 
   const onSaveComment = async () => {
     if (selectPrediction?.id) {
-      setSaveCommentLoading(true)
-      await patchPredictionRecordsComment(predictionId, selectPrediction?.id, diagnosisComment)
-      setSaveCommentLoading(false)
+      setSaveCommentLoading(true);
+      try {
+        await patchPredictionRecordsComment(
+          predictionId,
+          selectPrediction.id,
+          diagnosisComment
+        );
+        // Reflect the saved comment in both the drawer's selected record
+        // and the table row so the user doesn't see stale text.
+        setSelectPrediction({
+          ...selectPrediction,
+          comment: diagnosisComment ?? "",
+        });
+        setPredictions((prev) =>
+          prev
+            ? {
+                ...prev,
+                items: prev.items.map((it) =>
+                  it.id === selectPrediction.id
+                    ? { ...it, comment: diagnosisComment ?? "" }
+                    : it
+                ),
+              }
+            : prev
+        );
+      } finally {
+        setSaveCommentLoading(false);
+      }
     }
-  }
+  };
 
+  // Re-fetch whenever the URL-driven query (page / class / status) changes.
+  // Previously this only fired on mount, so the table never refreshed when
+  // the user clicked a tab or paginated.
   useEffect(() => {
     getPredictionsList();
-  }, []);
+  }, [predictionId, currentPage, predictionClass, predictionStatus]);
+
+  // Live updates from the backend: as each record transitions
+  // PENDING -> IN_PROGRESS -> SUCCESS/ERROR/CANCELED, the processor emits a
+  // 'record:update' event and we patch the matching row in place. Avoids
+  // the "click Refresh repeatedly" workflow this page used to require.
+  useSse(predictionId ? `/events/predictions/${predictionId}` : null, {
+    // SSE has no event replay: any 'record:update' emitted while the socket
+    // was down is lost. Re-fetch once on every (re)connect so the table is
+    // reconciled with the server before we start applying live patches.
+    onOpen() {
+      getPredictionsList();
+    },
+    onMessage(ev) {
+      if (!ev.data) return;
+      try {
+        const payload = JSON.parse(ev.data);
+        if (ev.event === "record:update") {
+          setPredictions((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  items: prev.items.map((it) =>
+                    it.id === payload.id ? { ...it, ...payload } : it
+                  ),
+                }
+              : prev
+          );
+          // Keep the drawer in sync if it's open on this record.
+          setSelectPrediction((prev) =>
+            prev && prev.id === payload.id ? { ...prev, ...payload } : prev
+          );
+          // A record:update for the open record means any in-flight
+          // waterfall re-generation has finished — drop the spinner.
+          setRegenWaterfall(false);
+        }
+        // 'prediction:explain' fires after the heatmap/beeswarm are ready.
+        // The list page on this route doesn't show them, so we ignore it
+        // here — the parent /prediction page can subscribe if needed.
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn("[prediction SSE] bad payload:", err);
+      }
+    },
+  });
 
   return (
     <>
@@ -755,6 +852,9 @@ export function History() {
                 src={selectPrediction?.waterfall}
                 plotName="Waterfall plot"
                 showShapLabel
+                errorReason={selectPrediction?.waterfallError}
+                onRegenerate={onRegenWaterfall}
+                regenerating={regenWaterfall}
               />
             </div>
             <div className="font-bold bg-gray-50 px-4 py-2 rounded-lg my-4">
@@ -783,13 +883,13 @@ export function History() {
             isOpen={openCancelModal}
             setIsOpen={setOpenCancelModal}
             onCancel={() => {}}
-            onOk={async () => await postCancelPredict(predictionId)}
+            onOk={onConfirmCancel}
           />
           <ConfirmReJoblModal
             isOpen={openReJoblModal}
             setIsOpen={setOpenReJobModal}
             onCancel={() => {}}
-            onOk={async () => await postRePredict(predictionId)}
+            onOk={onConfirmRepredict}
           />
         </Drawer>
       </div>

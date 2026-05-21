@@ -8,7 +8,7 @@ import {
   PencilSquareIcon,
   CheckIcon,
 } from "@heroicons/react/24/outline";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -181,6 +181,14 @@ export function Experiments() {
     useState<string>();
   const [isEditDescription, setIsEditDescription] = useState<boolean>(false);
 
+  // Auto-refresh interval for the runs table. Training is triggered outside
+  // this service (MLflow notebooks), so there's no in-process event to push
+  // over SSE — a lightweight poll is the pragmatic choice here.
+  const RUNS_POLL_INTERVAL_MS = 15_000;
+  // Set once the user clicks "Load more": polling would otherwise collapse
+  // the expanded view back to page 1. Reset when the scope changes.
+  const loadedMoreRef = useRef(false);
+
   useEffect(() => {
     const getExperiments = async () => {
       setExperimentsLoading(true);
@@ -219,6 +227,35 @@ export function Experiments() {
     getExperimentsByIdAndSort();
   }, [sort]);
 
+  // Whenever the viewed scope changes, drop the "user paginated" guard so
+  // polling resumes for the new experiment / sort order.
+  useEffect(() => {
+    loadedMoreRef.current = false;
+  }, [selectedExperiments, sort]);
+
+  // Poll the runs table so newly-finished training runs surface on their
+  // own. Silent on purpose — no skeleton flash — and paused while the tab
+  // is hidden or the user has expanded the list via "Load more".
+  useEffect(() => {
+    if (!selectedExperiments) return;
+    const intervalId = setInterval(async () => {
+      if (loadedMoreRef.current || document.hidden) return;
+      try {
+        const orderBy = sort?.key ? `${sort.key} ${sort.order}` : "";
+        const data = await getExperimentsById(
+          selectedExperiments.experiment_id,
+          { pageToken: "", orderBy }
+        );
+        setRuns(data);
+      } catch (err) {
+        // Transient failures are fine — the next tick retries.
+        // eslint-disable-next-line no-console
+        console.warn("[experiments poll] refresh failed:", err);
+      }
+    }, RUNS_POLL_INTERVAL_MS);
+    return () => clearInterval(intervalId);
+  }, [selectedExperiments, sort]);
+
   const getExperiment = async () => {
     if (selectedExperiments) {
       const orderBy = sort?.key ? `${sort?.key} ${sort?.order}` : "";
@@ -239,6 +276,16 @@ export function Experiments() {
         selectedExperiments?.experiment_id,
         experimentsDescription
       );
+      // Re-sync experiment list so the new description is what the
+      // server actually persisted (trimmed, sanitized, etc.).
+      const data = await getExperimentsList();
+      const refreshed = data.experiments.find(
+        (e) => e.experiment_id === selectedExperiments.experiment_id
+      );
+      setExperiments(data.experiments);
+      if (refreshed) {
+        setSelectedExperiments(refreshed);
+      }
     }
   };
 
@@ -254,6 +301,8 @@ export function Experiments() {
         nextPageToken: data.nextPageToken,
       };
       setRuns(runsLoadMore);
+      // Pause polling — a silent refresh would discard these extra rows.
+      loadedMoreRef.current = true;
     }
   };
 
@@ -274,18 +323,31 @@ export function Experiments() {
     }
   };
 
+  // Refresh the drawer's run info in place, without forcing the drawer open.
+  // Used after publish/unpublish so the button state reflects the new stage.
+  const refreshRunInfo = async (id: string) => {
+    const run = await getRunById(id);
+    if (run.run) {
+      setRunInfo(run.run);
+    }
+  };
+
   const publishModel = async (
     id: string,
     data: { model?: IModelType; description?: string }
   ) => {
     if (id) {
       await putPublicModelByRunId(id, data);
+      // Refresh the drawer (so the button flips to "Unpublish")
+      // and the runs table (so the stage column updates).
+      await Promise.all([refreshRunInfo(id), getExperiment()]);
     }
   };
 
   const unPublishModel = async (id?: string) => {
     if (id) {
       await putUnPublicModelByRunId(id);
+      await Promise.all([refreshRunInfo(id), getExperiment()]);
     }
   };
 
