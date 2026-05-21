@@ -11,6 +11,7 @@ import { ExperimentsModule } from './experiments/experiments.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { MLflowModule } from './mlflow/mlflow.module';
+import { EventsModule } from './events/events.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { MLflowModule } from './mlflow/mlflow.module';
     PredictionsModule,
     QueueModule,
     StorageModule,
+    EventsModule,
   ],
 })
 export class AppModule {}

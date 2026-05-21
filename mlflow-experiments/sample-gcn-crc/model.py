@@ -21,8 +21,8 @@ import os
 import mlflow
 import numpy as np
 import pandas as pd
+import shap
 import torch
-import torch.nn.functional as F
 from hyperopt import STATUS_OK, Trials, fmin, hp, tpe
 from sklearn.metrics import (
     accuracy_score,
@@ -183,12 +183,19 @@ def objective(params):
 
         print(f"Trial with params: {params}, Accuracy: {accuracy:.4f}")
 
+        # SHAP background — keep this SMALL. PermutationExplainer evaluates
+        # the GCN once per (coalition x background row); a full X_train masker
+        # (~120 rows) pushes the explain endpoints to ~70s/sample. 16 rows
+        # keeps explanations representative while bringing per-sample SHAP
+        # down to a usable range.
+        shap_background = shap.sample(X_train, 16, random_state=SEED)
+
         # Single-call: log predictor + SHAP explainer + feature_names artifact
         # through the contract. ``gcn_modules.py`` is auto-detected from the
         # wrapper's class graph and packed into the artifact.
         log_explainable_model(
             model=wrapper,
-            background=X_train,
+            background=shap_background,
             registered_name="sample-gcn-crc",
             explainer_kwargs={"algorithm": "permutation"},
             extra_pip_requirements=["torch", "torch_geometric"],
@@ -220,7 +227,7 @@ best = fmin(
     fn=objective,
     space=space,
     algo=tpe.suggest,
-    max_evals=50,
+    max_evals=5,
     trials=trials,
 )
 print("\nBest parameters:", best)

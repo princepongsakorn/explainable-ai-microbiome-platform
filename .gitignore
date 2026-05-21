@@ -1,1 +1,53 @@
+# Root .gitignore — cross-cutting patterns for the whole repo.
+# explainable-platform/ (Next.js) and explainable-platform-service/ (NestJS)
+# keep their own .gitignore for Node-specific artifacts. The Python parts
+# (mlflow-experiments/, kserve-custom-runtime/) have none, so they rely on
+# the patterns below.
+
+# --- legacy: old name of the extracted SHAP library (now mlflow_explainable) ---
 mlflow-experiments/extension/mlflow_shap/
+
+# --- macOS ---
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# --- Python: bytecode & caches ---
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# --- Python: virtual environments ---
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# --- Python: packaging / build artifacts ---
+build/
+dist/
+*.egg-info/
+.eggs/
+pytest-cache-files-*
+
+# --- Python: test & coverage ---
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# --- Editors / IDE ---
+.idea/
+.vscode/
+*.swp
+*~
+
+# --- Logs & temp ---
+*.log
+*.tmp

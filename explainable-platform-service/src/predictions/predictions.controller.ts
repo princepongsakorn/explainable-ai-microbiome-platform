@@ -43,6 +43,25 @@ export class PredictionsController {
     return this.predictionsService.cancelPrediction(predictionId);
   }
 
+  // --- Re-generate a single SHAP plot (without re-running the prediction) ---
+  @Post(':predictionId/regen/heatmap')
+  async regenHeatmap(@Param('predictionId') predictionId: string) {
+    return this.predictionsService.regenHeatmap(predictionId);
+  }
+
+  @Post(':predictionId/regen/beeswarm')
+  async regenBeeswarm(@Param('predictionId') predictionId: string) {
+    return this.predictionsService.regenBeeswarm(predictionId);
+  }
+
+  @Post(':predictionId/records/:recordId/regen/waterfall')
+  async regenWaterfall(
+    @Param('predictionId') predictionId: string,
+    @Param('recordId') recordId: string,
+  ) {
+    return this.predictionsService.regenWaterfall(predictionId, recordId);
+  }
+
   @Get()
   async getPredictions(
     @Query('page') page: number = 1,

@@ -9,6 +9,8 @@ need to import these classes from its own codebase.
 
 from __future__ import annotations
 
+import copy
+
 import numpy as np
 import pandas as pd
 import torch
@@ -116,6 +118,39 @@ class GCNTabularWrapper:
         expected by ``log_explainable_model``.
         """
         return self.predict_proba(X)
+
+    def __getstate__(self):
+        """Serialize the wrapper on CPU so the artifact loads anywhere.
+
+        The GCN is trained on whatever device is fastest locally — CUDA,
+        Apple-Silicon MPS, or CPU — but the kserve serving container is
+        CPU-only. torch tensors remember the device they live on; unpickling
+        an MPS/CUDA tensor on a plain CPU host raises an error such as
+        ``torch.UntypedStorage(): Storage device not recognized: mps``.
+        Forcing every tensor to CPU at pickle time makes the logged artifact
+        portable across hosts. Inference for a graph this small is fast on
+        CPU anyway.
+
+        This method MUST be side-effect-free: the training script keeps using
+        the live wrapper after logging (``log_explainable_model`` runs a
+        pickle self-test and then calls ``predict`` again). ``nn.Module.to()``
+        moves parameters *in place*, so the module is deep-copied first and
+        only the copy is moved — the live wrapper stays on its training
+        device, fully consistent.
+        """
+        state = self.__dict__.copy()
+        model_cpu = copy.deepcopy(self.model).to("cpu").eval()
+        state["model"] = model_cpu
+        state["edge_index"] = self.edge_index.detach().to("cpu")
+        state["device"] = torch.device("cpu")
+        return state
+
+    def __setstate__(self, state):
+        """Restore on CPU — paired with :meth:`__getstate__`."""
+        self.__dict__.update(state)
+        self.device = torch.device("cpu")
+        self.model = self.model.to(self.device).eval()
+        self.edge_index = self.edge_index.to(self.device)
 
 
 # ---------------------------------------------------------------------------

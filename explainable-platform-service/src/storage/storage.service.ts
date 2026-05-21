@@ -48,6 +48,11 @@ export class StorageService {
    *   {prefix}/{path}/{fileName}
    *
    * Returns the object key (NOT a URL). Pair with getPresignedUrl() to render in browser.
+   *
+   * Throws on failure. Earlier this method swallowed errors and returned ''
+   * — which made an upload failure indistinguishable from "no image". The
+   * caller now needs to tell those apart (to mark UPLOAD_FAILED vs
+   * IMAGE_FAILED), so the error is propagated.
    */
   async uploadToS3(
     base64Data: string,
@@ -67,7 +72,7 @@ export class StorageService {
       return key;
     } catch (error) {
       this.logger.error(`uploadToS3 failed for ${key}`, error as Error);
-      return '';
+      throw error;
     }
   }
 

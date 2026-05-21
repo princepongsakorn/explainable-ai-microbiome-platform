@@ -5,7 +5,12 @@ import { ChevronRightIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import { IPredictions } from "@/components/model/model.interface";
 import Drawer from "react-modern-drawer";
-import { getPredictions } from "../api/predict";
+import {
+  getPredictions,
+  postRegenBeeswarm,
+  postRegenHeatmap,
+} from "../api/predict";
+import { useSse } from "@/lib/useSse";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -27,8 +32,85 @@ export function History() {
   const [predictions, setPredictions] = useState<IPagination<IPredictions>>();
   const [isOpen, setIsOpen] = useState(false);
   const [selectPrediction, setSelectPrediction] = useState<IPredictions>();
+  const [regenHeatmap, setRegenHeatmap] = useState(false);
+  const [regenBeeswarm, setRegenBeeswarm] = useState(false);
 
   const currentPage = Number(router.query.page) || 1;
+
+  // Re-generate prediction-level plots. The backend queues a job and pushes
+  // the result over SSE as 'prediction:explain' (handled below).
+  const onRegenHeatmap = async () => {
+    if (!selectPrediction?.id) return;
+    setRegenHeatmap(true);
+    try {
+      await postRegenHeatmap(selectPrediction.id);
+    } catch {
+      setRegenHeatmap(false);
+    }
+  };
+
+  const onRegenBeeswarm = async () => {
+    if (!selectPrediction?.id) return;
+    setRegenBeeswarm(true);
+    try {
+      await postRegenBeeswarm(selectPrediction.id);
+    } catch {
+      setRegenBeeswarm(false);
+    }
+  };
+
+  const getPredictionsRecordList = async () => {
+    const params: IPaginationRequestParams = {
+      page: currentPage,
+    };
+    const data = await getPredictions(params);
+    setPredictions(data);
+    return data;
+  };
+
+  // Live heatmap/beeswarm updates while the drawer is open on a prediction.
+  useSse(
+    isOpen && selectPrediction?.id
+      ? `/events/predictions/${selectPrediction.id}`
+      : null,
+    {
+      // SSE has no event replay: a 'prediction:explain' emitted while the
+      // socket was down is lost. Re-fetch on (re)connect and reconcile the
+      // open drawer from the fresh list.
+      onOpen() {
+        getPredictionsRecordList().then((data) => {
+          setSelectPrediction((prev) => {
+            if (!prev) return prev;
+            return data.items.find((it) => it.id === prev.id) ?? prev;
+          });
+        });
+      },
+      onMessage(ev) {
+        if (!ev.data) return;
+        try {
+          const payload = JSON.parse(ev.data);
+          if (ev.event === "prediction:explain") {
+            setSelectPrediction((prev) =>
+              prev && prev.id === payload.predictionId
+                ? {
+                    ...prev,
+                    heatmap: payload.heatmap,
+                    heatmapError: payload.heatmapError,
+                    beeswarm: payload.beeswarm,
+                    beeswarmError: payload.beeswarmError,
+                  }
+                : prev
+            );
+            setRegenHeatmap(false);
+            setRegenBeeswarm(false);
+          }
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.warn("[prediction SSE] bad payload:", err);
+        }
+      },
+    }
+  );
 
   const onHandleChangePage = (page: number) => {
     router.query.page = page?.toString();
@@ -46,16 +128,11 @@ export function History() {
     }
   };
 
+  // Re-fetch when the page changes. Previously this only ran on mount, so
+  // paginating left the table showing the first page's data.
   useEffect(() => {
-    const getPredictionsRecordList = async () => {
-      const params: IPaginationRequestParams = {
-        page: currentPage,
-      };
-      const data = await getPredictions(params);
-      setPredictions(data);
-    };
     getPredictionsRecordList();
-  }, []);
+  }, [currentPage]);
 
   return (
     <>
@@ -188,6 +265,9 @@ export function History() {
               src={selectPrediction?.beeswarm}
               plotName="Beeswarm plot"
               showShapLabel
+              errorReason={selectPrediction?.beeswarmError}
+              onRegenerate={onRegenBeeswarm}
+              regenerating={regenBeeswarm}
             />
           </div>
           <div className="flex flex-col mb-3 mt-3 border-t-[1px] border-[#EAEAEA] pt-3">
@@ -202,6 +282,9 @@ export function History() {
               src={selectPrediction?.heatmap}
               plotName="Heatmap plot"
               showShapLabel
+              errorReason={selectPrediction?.heatmapError}
+              onRegenerate={onRegenHeatmap}
+              regenerating={regenHeatmap}
             />
           </div>
         </div>

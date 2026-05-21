@@ -1,17 +1,49 @@
 import { useEffect, useState } from "react";
 import { ShapLabel } from "../ShapLabel/ShapLabel";
 import { isNull } from "lodash";
+import { ImageGenStatus } from "@/components/model/model.interface";
 
 export const ShapPlotPlaceholder = (props: {
   src?: string;
   plotName?: string;
   showShapLabel?: boolean;
+  /** ImageGenStatus code explaining why the plot is missing, if any. */
+  errorReason?: ImageGenStatus | string | null;
+  /** When provided, an explicit "Re-generate" button is shown on the
+   *  empty state and wired to this callback. */
+  onRegenerate?: () => void;
+  /** True while a re-generation job is in flight. */
+  regenerating?: boolean;
 }) => {
   const [isError, setIsError] = useState(false);
 
   useEffect(() => {
-    setIsError(isNull(props.src));
-  }, [props]);
+    setIsError(isNull(props.src) || props.src === undefined || props.src === "");
+  }, [props.src]);
+
+  // Distinguish the two failure modes so the user knows whether the plot
+  // could not be produced at all, or was produced but failed to upload.
+  const reasonText = (): string => {
+    if (props.errorReason === ImageGenStatus.UPLOAD_FAILED) {
+      return "สร้างภาพสำเร็จ แต่อัปโหลด / สร้าง URL ไม่สำเร็จ";
+    }
+    if (props.errorReason === ImageGenStatus.IMAGE_FAILED) {
+      return "ไม่สามารถสร้างภาพได้ (inference ล้มเหลว)";
+    }
+    return `Unable to display the ${props.plotName ? props.plotName : "image"}.`;
+  };
+
+  if (props.regenerating) {
+    return (
+      <div className="bg-gray-50 text-gray-500 px-4 py-2 rounded-lg text-center h-[400px] flex flex-col items-center justify-center text-sm font-medium">
+        <div className="mb-4 h-10 w-10 rounded-full border-4 border-gray-200 border-t-blue-600 animate-spin" />
+        <div>Re-generating {props.plotName ? props.plotName : "image"}…</div>
+        <div className="text-gray-400">
+          This can take a while for neural-network models.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -33,15 +65,34 @@ export const ShapPlotPlaceholder = (props: {
               />
             </svg>
           </div>
-          <div>
-            Unable to display the {props.plotName ? props.plotName : "image"}.
-          </div>
-          <div>Please refresh the page or re-generate</div>
+          <div>{reasonText()}</div>
+          {props.onRegenerate ? (
+            <button
+              type="button"
+              onClick={props.onRegenerate}
+              className="mt-3 py-2 px-5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200"
+            >
+              Re-generate {props.plotName ? props.plotName : "image"}
+            </button>
+          ) : (
+            <div>Please refresh the page or re-generate</div>
+          )}
         </div>
       ) : (
         <>
           {props.showShapLabel && <ShapLabel />}
           <img src={props.src} onError={() => setIsError(true)} />
+          {props.onRegenerate && (
+            <div className="mt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={props.onRegenerate}
+                className="py-1.5 px-4 text-xs font-medium text-gray-700 bg-white rounded-lg border border-gray-200 hover:bg-gray-100 focus:outline-none focus:ring-4 focus:ring-gray-100"
+              >
+                Re-generate
+              </button>
+            </div>
+          )}
         </>
       )}
     </>

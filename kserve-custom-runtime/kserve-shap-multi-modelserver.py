@@ -310,18 +310,35 @@ def get_local_waterfall_plot(subject_id, shap_value_object):
 
 def transformer(input_df, input_columns, defualt_value=0):
     """Reshape the client DataFrame so the column set matches what the model
-    was trained on (drop extras, fill missing with ``defualt_value``, reorder).
+    was trained on (drop extras, fill missing with ``defualt_value``, reorder)
+    and coerce every value to numeric.
+
+    Coercion matters: clients send ``dataframe_split`` values over JSON and
+    abundance numbers often arrive as strings ("2.73449"). ``predict``
+    tolerates this (the model casts internally) but the SHAP masker does
+    arithmetic on the raw DataFrame and raises on object dtype. Coercing here
+    keeps every downstream consumer — predict and explain — on a purely
+    numeric frame.
     """
     if input_columns is None:
         logger.error("No input column information available, returning original DataFrame.")
         return input_df
+
     transformed_df = input_df.loc[
         :, input_df.columns.intersection(input_columns)
     ].copy()
-    missing_cols = set(input_columns) - set(transformed_df.columns)
-    for col in missing_cols:
-        transformed_df[col] = defualt_value
+
+    # Add missing columns in a single concat (avoids the fragmented-DataFrame
+    # PerformanceWarning from inserting columns one at a time in a loop).
+    missing_cols = [c for c in input_columns if c not in transformed_df.columns]
+    if missing_cols:
+        missing_df = pd.DataFrame(
+            defualt_value, index=transformed_df.index, columns=missing_cols
+        )
+        transformed_df = pd.concat([transformed_df, missing_df], axis=1)
+
     transformed_df = transformed_df[input_columns]
+    transformed_df = transformed_df.apply(pd.to_numeric, errors="coerce")
     logger.info("Transformed input DataFrame to match trained model schema")
     return transformed_df
 
@@ -351,13 +368,45 @@ def _parse_dataframe_split(req_json):
     return pd.DataFrame(data=data, columns=columns), None
 
 
+def _load_model_or_error(model_name):
+    """Load a model for an endpoint.
+
+    Returns ``(loaded, impl, input_columns, None)`` on success, or
+    ``(None, None, None, (response, status))`` on failure.
+
+    Status semantics:
+      * 404 — the model genuinely is not registered / not in Production.
+      * 503 — the model exists but could not be loaded (bad artifact, a
+        missing runtime dependency such as torch_geometric, an incompatible
+        contract, ...). These are server-side problems, not "not found".
+
+    The full traceback is logged in the 503 case so the real cause is
+    visible in ``docker logs inference`` instead of being buried in the
+    response body.
+    """
+    try:
+        loaded, impl, input_columns = ModelLoader(model_name).load()
+        return loaded, impl, input_columns, None
+    except ValueError as e:
+        # Raised by load_explainable_model when there is no Production version.
+        logger.warning(f"Model '{model_name}' unavailable: {e}")
+        return None, None, None, (jsonify({"error": str(e)}), 404)
+    except Exception as e:  # noqa: BLE001
+        logger.exception(f"Model '{model_name}' failed to load")
+        return None, None, None, (
+            jsonify({
+                "error": f"Model '{model_name}' exists but failed to load: {e}"
+            }),
+            503,
+        )
+
+
 # ---- explain endpoints -----------------------------------------------------
 @app.route("/v1/explain/beeswarm/<model_name>", methods=["POST"])
 def explain_beeswarm(model_name):
-    try:
-        loaded, impl, input_columns = ModelLoader(model_name).load()
-    except Exception as e:
-        return jsonify({"error": str(e)}), 404
+    loaded, impl, input_columns, err = _load_model_or_error(model_name)
+    if err:
+        return err
 
     try:
         req_json = request.get_json()
@@ -376,10 +425,9 @@ def explain_beeswarm(model_name):
 
 @app.route("/v1/explain/heatmap/<model_name>", methods=["POST"])
 def explain_heatmap(model_name):
-    try:
-        loaded, impl, input_columns = ModelLoader(model_name).load()
-    except Exception as e:
-        return jsonify({"error": str(e)}), 404
+    loaded, impl, input_columns, err = _load_model_or_error(model_name)
+    if err:
+        return err
 
     try:
         req_json = request.get_json()
@@ -398,10 +446,9 @@ def explain_heatmap(model_name):
 
 @app.route("/v1/explain/waterfall/<model_name>", methods=["POST"])
 def explain_waterfall(model_name):
-    try:
-        loaded, impl, input_columns = ModelLoader(model_name).load()
-    except Exception as e:
-        return jsonify({"error": str(e)}), 404
+    loaded, impl, input_columns, err = _load_model_or_error(model_name)
+    if err:
+        return err
 
     try:
         req_json = request.get_json()
@@ -432,10 +479,9 @@ def explain_waterfall(model_name):
 # ---- predict endpoint ------------------------------------------------------
 @app.route("/v1/predict/<model_name>", methods=["POST"])
 def predict(model_name):
-    try:
-        loaded, impl, input_columns = ModelLoader(model_name).load()
-    except Exception as e:
-        return jsonify({"error": str(e)}), 404
+    loaded, impl, input_columns, err = _load_model_or_error(model_name)
+    if err:
+        return err
 
     try:
         req_json = request.get_json()
