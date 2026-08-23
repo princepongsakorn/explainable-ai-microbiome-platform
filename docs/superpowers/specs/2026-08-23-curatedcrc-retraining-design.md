@@ -13,7 +13,7 @@ The implementation will clone both upstream repositories into a temporary workin
 
 The acquisition command will resolve and record each repository's exact commit SHA. The expected primary data source is `data/curatedCRC.csv` on SHAPMAT's `cv_notebook` branch; the implementation must verify that path against both clones rather than relying on the existing hard-coded URL. It will calculate and record the CSV's SHA-256 checksum, row count, columns, class counts, cohort counts, and source URL. If the CSV is absent, the command will stop with instructions pointing to the regeneration code found in `shapmat_paper`; it will not silently substitute a different dataset.
 
-The validated raw CSV will be kept as an input artifact for the experiment rather than replacing `sample-data/sample.csv`. The raw table must contain exactly 802 CRC/healthy samples and exactly these five studies: `YachidaS_2019`, `YuJ_2015`, `WirbelJ_2019`, `ZellerG_2014`, and `VogtmannE_2016` (allowing upstream display-name punctuation only through an explicit canonical-name mapping). Adenoma or other non-binary labels cause validation to fail.
+The validated raw CSV will be kept as an input artifact for the experiment rather than replacing `sample-data/sample.csv`. The raw table must contain exactly 802 CRC/healthy samples and exactly these five upstream study identifiers: `YachidaS_2019`, `YuJ_2015`, `WirbelJ_2018`, `ZellerG_2014`, and `VogtmannE_2016`. The source calls the Wirbel cohort `WirbelJ_2018`, although the associated study was published in 2019; reports preserve the upstream identifier and document this naming difference. Adenoma or other non-binary labels cause validation to fail.
 
 ## Package layout
 
@@ -32,14 +32,14 @@ This new directory will not import or mutate `mlflow-experiments/ryza-rynazal-cr
 
 ## Data preparation
 
-Load `curatedCRC.csv` with the subject identifier as the index. Preserve `study_name`, `CRC`, and `ajcc_stage` as metadata and pass only bacterial abundance columns to filtering.
+Load `curatedCRC.csv` with its unnamed first column as the subject identifier index, validate uniqueness, and normalize only the index name to `subject_id` for platform exports. Preserve `study_name`, `CRC`, and `ajcc_stage` as metadata and pass only bacterial abundance columns to filtering.
 
 Invoke `shapmat.abundance_filter.ab_filter` directly with:
 
 - `abundance_threshold=1e-5`
 - `prevalence_threshold=0.9`
 
-No local reimplementation of the filter is permitted. After filtering, reject NaN/infinite values, duplicate subject identifiers, missing labels, unexpected metadata columns treated as features, or an empty feature matrix. Record both the unfiltered and filtered feature counts. The platform-facing label remains the integer column `CRC`, encoded as `0` for healthy and `1` for CRC.
+No local reimplementation of the filter is permitted. SHAPMAT keeps a feature only when its zero fraction is strictly less than `0.9`, so the observed library behavior removes features with at least 90% zeros. After filtering, reject NaN/infinite values, duplicate subject identifiers, missing labels, unexpected metadata columns treated as features, or an empty feature matrix. Record both the expected observed counts (864 unfiltered and 221 filtered features) and the runtime counts, and fail if the pinned source produces different results. The platform-facing label remains the integer column `CRC`, encoded as `0` for healthy and `1` for CRC.
 
 Filtering is performed once on the validated complete curatedCRC feature matrix, matching the ordering in the upstream paper workflow, before Track A splitting or Track B cohort selection. The same filtered feature names and order are used by training, evaluation, SHAP, and the sample export.
 
@@ -87,9 +87,9 @@ RandomForestClassifier(
 )
 ```
 
-For each of the five cohorts, evaluate ROC AUC with `RepeatedStratifiedKFold(n_splits=10, n_repeats=10, random_state=0)`. Validate that every cohort/class has at least ten samples before evaluation. Save one row per cohort with sample count, healthy count, CRC count, mean ROC AUC, standard deviation across the 100 held-out folds, and confidence-supporting minimum/maximum fold scores to `outputs/track_b_cohort_cv.csv`. Print a compact `cohort -> mean ± std` table.
+For each of the five cohorts, evaluate ROC AUC with `RepeatedStratifiedKFold(n_splits=10, n_repeats=10, random_state=0)`. Validate that every cohort/class has at least ten samples before evaluation. Save one row per cohort with sample count, healthy count, CRC count, mean ROC AUC, standard deviation across the 100 held-out folds, and confidence-supporting minimum/maximum fold scores to `outputs/track_b_cohort_cv.csv`. Print a compact `cohort -> mean ± std` table. The upstream local-explanation notebook used scikit-learn's then-default 100 trees for repeated CV, while this comparison intentionally follows the task brief's explicitly requested 500-tree reference configuration.
 
-The same command also supports LODO. For each held-out cohort, train the fixed Random Forest on the other four cohorts and calculate a single held-out ROC AUC. Save results to `outputs/track_b_lodo.csv`. Cohort CV and LODO are separate result tables because a single LODO test score has no fold standard deviation.
+The same command also supports LODO. For each held-out cohort, train the fixed 500-tree Random Forest on the other four cohorts and calculate a single held-out ROC AUC. Save results to `outputs/track_b_lodo.csv`. Cohort CV and LODO are separate result tables because a single LODO test score has no fold standard deviation. The paper's checked-in LODO notebook used cohort-specific estimator counts (100, 500, or 1000); the new fixed-500 result is therefore labeled as the task-brief reproduction rather than silently presented as byte-for-byte notebook parity.
 
 ## SHAP sanity check
 
