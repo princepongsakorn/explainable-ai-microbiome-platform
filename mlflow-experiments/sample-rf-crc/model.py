@@ -45,7 +45,7 @@ X_train, X_test, y_train, y_test = train_test_split(
 # ---------------------------------------------------------------------------
 os.environ["MLFLOW_TRACKING_USERNAME"] = "b881211d-796e-4b12-8621-6246d2eeadce"
 os.environ["MLFLOW_TRACKING_PASSWORD"] = "k7uLbDEGc6beQlAWTCUJAUAmJskdr5bLUDmsiCG4"
-mlflow.set_tracking_uri("http://136.115.33.253:5000")
+mlflow.set_tracking_uri("http://35.225.129.127:5000")
 
 mlflow.set_experiment("sample-rf-crc")
 

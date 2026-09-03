@@ -25,7 +25,7 @@ os.environ.setdefault(
 os.environ.setdefault(
     "MLFLOW_TRACKING_PASSWORD", "k7uLbDEGc6beQlAWTCUJAUAmJskdr5bLUDmsiCG4"
 )
-mlflow.set_tracking_uri("http://136.115.33.253:5000")
+mlflow.set_tracking_uri("http://35.225.129.127:5000")
 
 MODEL = "sample-gcn-crc"
 SAMPLE_URL = (

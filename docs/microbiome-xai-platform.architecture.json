@@ -1,0 +1,251 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "สถาปัตยกรรม Microbiome Explainable AI Platform",
+    "output": "docs/microbiome-xai-platform.architecture.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/princepongsakorn/explainable-ai-microbiome-platform.git",
+      "revision": "9c8d1c5528539ab53a3ca3f1424d0c22b925bfd4"
+    },
+    "viewBox": [1380, 760]
+  },
+  "layout": {
+    "mode": "grid",
+    "origin": [36, 82],
+    "cols": 8,
+    "gapX": 66,
+    "gapY": 62,
+    "cellW": 132,
+    "cellH": 70
+  },
+  "components": [
+    {
+      "id": "browser",
+      "type": "external",
+      "label": "ผู้ใช้และ Browser",
+      "sublabel": "JWT + CSV upload",
+      "row": 2,
+      "col": 0,
+      "sources": [
+        { "path": "explainable-platform/pages/api/httpClient.ts", "line": 11, "label": "HTTP client + JWT" },
+        { "path": "explainable-platform/pages/upload/predict.tsx", "line": 318, "label": "prediction UI" }
+      ]
+    },
+    {
+      "id": "nginx",
+      "type": "security",
+      "label": "Nginx",
+      "sublabel": "public :80 • proxy",
+      "tag": "host service",
+      "row": 2,
+      "col": 1,
+      "sources": [
+        { "path": "deployment/nginx.conf", "line": 15, "label": "routing boundary" }
+      ]
+    },
+    {
+      "id": "nextjs",
+      "type": "frontend",
+      "label": "Next.js Frontend",
+      "sublabel": "pages + queries",
+      "tag": "Docker Compose",
+      "row": 0,
+      "col": 2,
+      "sources": [
+        { "path": "docker-compose.prod.yml", "line": 48, "label": "frontend service" },
+        { "path": "explainable-platform/pages/api/predict.ts", "line": 14, "label": "prediction API client" }
+      ]
+    },
+    {
+      "id": "nestjs",
+      "type": "backend",
+      "label": "NestJS API",
+      "sublabel": "REST + JWT + SSE",
+      "tag": "Docker Compose",
+      "row": 2,
+      "col": 2,
+      "sources": [
+        { "path": "explainable-platform-service/src/main.ts", "line": 48, "label": "/api prefix" },
+        { "path": "explainable-platform-service/src/events/events.controller.ts", "line": 16, "label": "SSE endpoints" },
+        { "path": "explainable-platform-service/src/app.module.ts", "line": 15, "label": "module composition" }
+      ]
+    },
+    {
+      "id": "redis",
+      "type": "messagebus",
+      "label": "Redis + Bull",
+      "sublabel": "predictionQueue",
+      "tag": "Docker Compose",
+      "row": 2,
+      "col": 3,
+      "sources": [
+        { "path": "docker-compose.prod.yml", "line": 29, "label": "Redis service" },
+        { "path": "explainable-platform-service/src/queue/queue.service.ts", "line": 15, "label": "job enqueue" }
+      ]
+    },
+    {
+      "id": "worker",
+      "type": "backend",
+      "label": "Prediction Worker",
+      "sublabel": "async Bull jobs",
+      "tag": "NestJS process",
+      "row": 2,
+      "col": 4,
+      "sources": [
+        { "path": "explainable-platform-service/src/predictions/prediction.processor.ts", "line": 35, "label": "queue processor" },
+        { "path": "explainable-platform-service/src/predictions/prediction.processor.ts", "line": 226, "label": "record job" }
+      ]
+    },
+    {
+      "id": "app_postgres",
+      "type": "database",
+      "label": "App PostgreSQL",
+      "sublabel": "users + predictions",
+      "tag": "Docker Compose",
+      "row": 4,
+      "col": 3,
+      "sources": [
+        { "path": "docker-compose.prod.yml", "line": 15, "label": "PostgreSQL service" },
+        { "path": "explainable-platform-service/src/app.module.ts", "line": 21, "label": "TypeORM connection" }
+      ]
+    },
+    {
+      "id": "inference",
+      "type": "backend",
+      "label": "SHAP Runtime",
+      "sublabel": "Flask + SHAP",
+      "tag": "systemd Docker",
+      "row": 2,
+      "col": 5,
+      "sources": [
+        { "path": "kserve-custom-runtime/kserve-shap-multi-modelserver.py", "line": 481, "label": "SHAP endpoints" },
+        { "path": "kserve-custom-runtime/kserve-shap-multi-modelserver.py", "line": 565, "label": "predict endpoint" },
+        { "path": "deployment/setup_inference.sh", "line": 114, "label": "systemd runtime" }
+      ]
+    },
+    {
+      "id": "model_cache",
+      "type": "database",
+      "label": "Model Cache",
+      "sublabel": "joblib /tmp/cache",
+      "tag": "host volume",
+      "row": 4,
+      "col": 5,
+      "sources": [
+        { "path": "kserve-custom-runtime/kserve-shap-multi-modelserver.py", "line": 79, "label": "joblib cache" },
+        { "path": "deployment/setup_inference.sh", "line": 119, "label": "cache mount" }
+      ]
+    },
+    {
+      "id": "mlflow",
+      "type": "cloud",
+      "label": "MLflow",
+      "sublabel": "registry + runs",
+      "tag": "systemd • basic auth",
+      "row": 2,
+      "col": 6,
+      "sources": [
+        { "path": "deployment/setup_mlflow.sh", "line": 156, "label": "MLflow service" },
+        { "path": "kserve-custom-runtime/kserve-shap-multi-modelserver.py", "line": 603, "label": "model discovery" }
+      ]
+    },
+    {
+      "id": "mlflow_postgres",
+      "type": "database",
+      "label": "MLflow PostgreSQL",
+      "sublabel": "runs + registry",
+      "tag": "VM service",
+      "row": 4,
+      "col": 6,
+      "sources": [
+        { "path": "deployment/setup_mlflow.sh", "line": 167, "label": "backend store URI" },
+        { "path": "deployment/deployment_notes.md", "line": 19, "label": "VM #1 components" }
+      ]
+    },
+    {
+      "id": "gcs",
+      "type": "cloud",
+      "label": "GCS",
+      "sublabel": "plots + artifacts",
+      "tag": "managed object storage",
+      "row": 0,
+      "col": 6,
+      "sources": [
+        { "path": "explainable-platform-service/src/storage/storage.service.ts", "line": 21, "label": "prediction images" },
+        { "path": "deployment/setup_mlflow.sh", "line": 31, "label": "artifact root" }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "GCE application VM • Nginx + Docker Compose + inference.service",
+      "wraps": ["nginx", "nextjs", "nestjs", "redis", "worker", "app_postgres", "inference", "model_cache"],
+      "pad": 22
+    },
+    {
+      "kind": "security-group",
+      "label": "Docker Compose network: platform",
+      "wraps": ["nextjs", "nestjs", "redis", "worker", "app_postgres"],
+      "pad": 14
+    },
+    {
+      "kind": "region",
+      "label": "GCE MLflow VM",
+      "wraps": ["mlflow", "mlflow_postgres"],
+      "pad": 20
+    },
+    {
+      "kind": "security-group",
+      "label": "ไม่เปิด inference ต่อสาธารณะ",
+      "wraps": ["inference", "model_cache"],
+      "pad": 12
+    }
+  ],
+  "connections": [
+    { "id": "browser_nginx", "from": "browser", "to": "nginx", "label": "HTTP/HTTPS", "variant": "security" },
+    { "id": "nginx_nextjs", "from": "nginx", "to": "nextjs", "label": "GET / และ /_next/*" },
+    { "id": "nginx_api", "from": "nginx", "to": "nestjs", "label": "REST + SSE /api/*", "variant": "emphasis", "labelAt": [393, 420] },
+    { "id": "api_redis", "from": "nestjs", "to": "redis", "label": "enqueue Bull jobs", "variant": "dashed", "labelAt": [591, 330] },
+    { "id": "redis_worker", "from": "redis", "to": "worker", "label": "predictionQueue", "variant": "emphasis" },
+    { "id": "api_db", "from": "nestjs", "to": "app_postgres", "label": "TypeORM / SQL" },
+    { "id": "worker_db", "from": "worker", "to": "app_postgres", "label": "status + prediction result" },
+    { "id": "worker_inference", "from": "worker", "to": "inference", "label": "POST /v1/predict|explain", "variant": "emphasis", "labelAt": [987, 420] },
+    { "id": "inference_cache", "from": "inference", "to": "model_cache", "label": "cache model artifacts", "labelAt": [1086, 508] },
+    { "id": "inference_mlflow", "from": "inference", "to": "mlflow", "label": "models:/ Production + REST", "variant": "security", "labelAt": [1185, 420] },
+    { "id": "worker_gcs", "from": "worker", "to": "gcs", "label": "upload PNG + V4 signed URL", "variant": "dashed" },
+    { "id": "mlflow_db", "from": "mlflow", "to": "mlflow_postgres", "label": "tracking metadata / SQL", "labelAt": [1284, 508] },
+    { "id": "mlflow_gcs", "from": "mlflow", "to": "gcs", "label": "artifact proxy → GCS", "variant": "dashed", "labelAt": [1285, 220] }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "เส้นทางการทำนาย",
+      "items": [
+        "CSV ถูก parse และบันทึกเป็น prediction/record ก่อน enqueue",
+        "Bull worker แยก prediction-level plots ออกจาก record-level jobs",
+        "ผลลัพธ์กลับ UI ผ่าน PostgreSQL query และ SSE events"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "ขอบเขตข้อมูล",
+      "items": [
+        "PostgreSQL ฝั่งแอปเก็บบัญชี สถานะ และค่าทำนาย",
+        "GCS predictions/ เก็บภาพ SHAP; signed URL มี TTL",
+        "MLflow PostgreSQL + mlflow-artifacts/ เก็บวงจรชีวิตโมเดล"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "ข้อจำกัดที่มีผลต่อการขยายระบบ",
+      "items": [
+        "EventsHub เป็น in-memory และสมมติ backend instance เดียว",
+        "Matplotlib plot generation ถูก serialize ด้วย global lock",
+        "Redis, application DB และ inference runtime เป็น single-instance"
+      ]
+    }
+  ]
+}

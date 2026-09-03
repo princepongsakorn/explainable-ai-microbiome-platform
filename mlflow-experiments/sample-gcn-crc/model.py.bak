@@ -104,12 +104,9 @@ all_X = sample_crc.drop(["CRC"], axis=1)
 all_y = sample_crc["CRC"]
 
 # Split BEFORE the prevalence filter so the filter is computed on training
-# samples only (no information leak from the test set). ``stratify=all_y``
-# keeps the 112/68 CRC class ratio in both train and test — without this,
-# random splits can hand the test set an even more imbalanced mix and tank
-# the reported metrics.
+# samples only (no information leak from the test set).
 X_train_full, X_test_full, y_train, y_test = train_test_split(
-    all_X, all_y, test_size=0.2, random_state=SEED, stratify=all_y
+    all_X, all_y, test_size=0.2, random_state=SEED
 )
 
 train_prevalence = (X_train_full > 0).mean(axis=0)
@@ -149,29 +146,14 @@ X_train_clr = pd.DataFrame(
     columns=FEATURE_NAMES,
     index=X_train.index,
 )
-EDGE_INDEX, EDGE_WEIGHT = build_edge_index(
+EDGE_INDEX = build_edge_index(
     X_train_clr,
     corr_threshold=CORR_THRESHOLD,
     include_taxonomic=True,
-    include_biomarker_guilds=True,
 )
 print(
     f"[info] graph: {EDGE_INDEX.shape[1]} edges  "
-    f"(corr_threshold |spearman_clr|>{CORR_THRESHOLD}, taxonomic + CRC biomarker guild priors ON)"
-)
-
-# Class weights for the imbalanced 112/68 CRC split. PyTorch CE loss takes
-# a ``weight`` tensor with one entry per class; the convention is
-# ``n_total / (n_classes * n_in_class)`` so the rarer class is up-weighted.
-_train_class_counts = np.bincount(y_train.values.astype(int))
-CLASS_WEIGHTS = torch.tensor(
-    [len(y_train) / (2 * c) for c in _train_class_counts],
-    dtype=torch.float,
-).to(DEVICE)
-print(
-    f"[info] class weights (controls, CRC): "
-    f"{CLASS_WEIGHTS.cpu().numpy().round(3).tolist()}  "
-    f"(train counts: {_train_class_counts.tolist()})"
+    f"(corr_threshold |spearman_clr|>{CORR_THRESHOLD}, taxonomic genus link ON)"
 )
 
 
@@ -179,14 +161,9 @@ print(
 # Training
 # ---------------------------------------------------------------------------
 def train_gcn(params, X_tr, y_tr):
-    """Apply preprocessing then train the GCN on the shared weighted graph.
-
-    Uses class-weighted cross-entropy so the model is not free to default to
-    the majority class — that was the dominant failure mode in the previous
-    iteration (accuracy ≈ majority baseline).
-    """
+    """Apply preprocessing then train the GCN on the shared edge graph."""
     X_tr_clr = preprocessor.transform(X_tr)
-    train_ds = make_graph_dataset(X_tr_clr, y_tr, EDGE_INDEX, EDGE_WEIGHT)
+    train_ds = make_graph_dataset(X_tr_clr, y_tr, EDGE_INDEX)
     train_loader = DataLoader(
         train_ds, batch_size=params["batch_size"], shuffle=True
     )
@@ -197,7 +174,6 @@ def train_gcn(params, X_tr, y_tr):
         num_layers=params["num_layers"],
         num_classes=2,
         dropout=params["dropout"],
-        edge_dropout=params["edge_dropout"],
     ).to(DEVICE)
 
     optimizer = torch.optim.Adam(
@@ -205,19 +181,14 @@ def train_gcn(params, X_tr, y_tr):
         lr=params["lr"],
         weight_decay=params["weight_decay"],
     )
-    loss_fn = torch.nn.CrossEntropyLoss(weight=CLASS_WEIGHTS)
+    loss_fn = torch.nn.CrossEntropyLoss()
 
     model.train()
     for _ in range(params["epochs"]):
         for batch in train_loader:
             batch = batch.to(DEVICE)
             optimizer.zero_grad()
-            out = model(
-                batch.x,
-                batch.edge_index,
-                batch.batch,
-                edge_weight=batch.edge_weight,
-            )
+            out = model(batch.x, batch.edge_index, batch.batch)
             loss = loss_fn(out, batch.y)
             loss.backward()
             optimizer.step()
@@ -230,7 +201,6 @@ def _cast_params(raw):
         "hidden_channels": int(raw["hidden_channels"]),
         "num_layers": int(raw["num_layers"]),
         "dropout": float(raw["dropout"]),
-        "edge_dropout": float(raw["edge_dropout"]),
         "lr": float(raw["lr"]),
         "weight_decay": float(raw["weight_decay"]),
         "epochs": int(raw["epochs"]),
@@ -257,12 +227,7 @@ def objective(params):
         # Train
         model = train_gcn(params, X_train, y_train)
         wrapper = GCNTabularWrapper(
-            model,
-            EDGE_INDEX,
-            EDGE_WEIGHT,
-            DEVICE,
-            FEATURE_NAMES,
-            preprocessor=preprocessor,
+            model, EDGE_INDEX, DEVICE, FEATURE_NAMES, preprocessor=preprocessor
         )
 
         # Evaluation
@@ -311,9 +276,6 @@ space = {
     "hidden_channels": hp.choice("hidden_channels", [32, 64, 128, 256]),
     "num_layers": hp.quniform("num_layers", 2, 4, 1),
     "dropout": hp.uniform("dropout", 0.1, 0.5),
-    # DropEdge probability (Rong et al., ICLR 2020) — fraction of edges
-    # removed per forward pass at training time.
-    "edge_dropout": hp.uniform("edge_dropout", 0.0, 0.3),
     "lr": hp.loguniform("lr", np.log(1e-4), np.log(1e-2)),
     "weight_decay": hp.loguniform("weight_decay", np.log(1e-6), np.log(1e-3)),
     "epochs": hp.choice("epochs", [50, 100, 150, 200]),

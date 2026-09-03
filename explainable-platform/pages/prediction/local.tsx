@@ -321,7 +321,6 @@ export function History() {
     useState<IPredictionRecords>();
   const [diagnosisComment, setDiagnosisComment] = useState<string>();
   const [saveCommentLoading, setSaveCommentLoading] = useState<boolean>(false);
-  const [regenWaterfall, setRegenWaterfall] = useState<boolean>(false);
   const predictionClass = usePredictionClass();
   const predictionStatus = usePredictionStatus();
 
@@ -365,15 +364,36 @@ export function History() {
   };
 
   const getPredictionsList = async () => {
-    if (predictionId) {
-      const params: IPaginationRequestParams = {
-        page: currentPage,
-        class: predictionClass,
-        status: predictionStatus,
-      };
-      const data = await getPredictionRecords(predictionId, params);
-      setPredictions(data);
-    }
+    if (!predictionId) return undefined;
+    const params: IPaginationRequestParams = {
+      page: currentPage,
+      class: predictionClass,
+      status: predictionStatus,
+    };
+    const data = await getPredictionRecords(predictionId, params);
+    setPredictions(data);
+    return data;
+  };
+
+  // Patch one record in both the open drawer and its table row, so the two
+  // never drift apart (after an SSE update or an optimistic clear).
+  const patchRecord = (
+    id: string,
+    patch: Partial<IPredictionRecords>
+  ) => {
+    setSelectPrediction((prev) =>
+      prev && prev.id === id ? { ...prev, ...patch } : prev
+    );
+    setPredictions((prev) =>
+      prev
+        ? {
+            ...prev,
+            items: prev.items.map((it) =>
+              it.id === id ? { ...it, ...patch } : it
+            ),
+          }
+        : prev
+    );
   };
 
   const onOpenPrediction = (prediction: IPredictionRecords) => {
@@ -402,16 +422,21 @@ export function History() {
     await getPredictionsList();
   };
 
-  // Re-generate just the waterfall plot for the open record. The backend
-  // queues a job; the result arrives over SSE as a 'record:update', which
-  // clears the spinner below.
+  // Re-generate just the waterfall plot for the open record. The plot is
+  // optimistically cleared so the in-progress spinner — derived from "no
+  // image + no error" — shows at once; the backend also clears it
+  // server-side, so the state survives a refresh and is scoped to this
+  // record. The result arrives over SSE as a 'record:update'.
   const onRegenWaterfall = async () => {
-    if (!selectPrediction?.id) return;
-    setRegenWaterfall(true);
+    const id = selectPrediction?.id;
+    if (!id) return;
+    patchRecord(id, { waterfall: undefined, waterfallError: undefined });
     try {
-      await postRegenWaterfall(predictionId, selectPrediction.id);
+      await postRegenWaterfall(predictionId, id);
     } catch {
-      setRegenWaterfall(false);
+      const data = await getPredictionsList();
+      const fresh = data?.items.find((it) => it.id === id);
+      if (fresh) patchRecord(id, fresh);
     }
   };
 
@@ -471,23 +496,11 @@ export function History() {
       try {
         const payload = JSON.parse(ev.data);
         if (ev.event === "record:update") {
-          setPredictions((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  items: prev.items.map((it) =>
-                    it.id === payload.id ? { ...it, ...payload } : it
-                  ),
-                }
-              : prev
-          );
-          // Keep the drawer in sync if it's open on this record.
-          setSelectPrediction((prev) =>
-            prev && prev.id === payload.id ? { ...prev, ...payload } : prev
-          );
-          // A record:update for the open record means any in-flight
-          // waterfall re-generation has finished — drop the spinner.
-          setRegenWaterfall(false);
+          // Patches the table row and the open drawer together. The waterfall
+          // spinner clears on its own here: once the event carries a
+          // waterfall URL or a waterfallError, the derived in-progress flag
+          // becomes false.
+          patchRecord(payload.id, payload);
         }
         // 'prediction:explain' fires after the heatmap/beeswarm are ready.
         // The list page on this route doesn't show them, so we ignore it
@@ -854,7 +867,12 @@ export function History() {
                 showShapLabel
                 errorReason={selectPrediction?.waterfallError}
                 onRegenerate={onRegenWaterfall}
-                regenerating={regenWaterfall}
+                regenerating={
+                  !selectPrediction?.waterfall &&
+                  !selectPrediction?.waterfallError &&
+                  selectPrediction?.status !== PredictionStatus.ERROR &&
+                  selectPrediction?.status !== PredictionStatus.CANCELED
+                }
               />
             </div>
             <div className="font-bold bg-gray-50 px-4 py-2 rounded-lg my-4">

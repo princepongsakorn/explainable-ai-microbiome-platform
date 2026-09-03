@@ -150,6 +150,28 @@ export class PredictionsService {
   // Each method validates the target exists, then enqueues a Bull job. SHAP
   // for a GCN is slow (~20s+), so we never run it inline in the HTTP request
   // — the worker handles it and pushes the result over SSE when done.
+  //
+  // Before queueing, the plot field is cleared (image + error -> null). This
+  // makes the in-progress state server-truth: the FE renders the spinner
+  // whenever a plot has neither an image nor an error, so it survives a page
+  // refresh and is correctly scoped per prediction/record (no shared flag).
+
+  // Build + emit the prediction-level explain event (heatmap + beeswarm),
+  // resolving presigned URLs so the client can render without a refetch.
+  private async emitPredictionExplain(prediction: Prediction) {
+    this.eventsHub.publishPrediction(prediction.id, 'prediction:explain', {
+      predictionId: prediction.id,
+      heatmap: prediction.heatmap
+        ? await this.storageService.getPresignedUrl(prediction.heatmap)
+        : null,
+      heatmapError: prediction.heatmapError ?? null,
+      beeswarm: prediction.beeswarm
+        ? await this.storageService.getPresignedUrl(prediction.beeswarm)
+        : null,
+      beeswarmError: prediction.beeswarmError ?? null,
+    });
+  }
+
   async regenHeatmap(predictionId: string) {
     const prediction = await this.predictionsRepository.findOne({
       where: { id: predictionId },
@@ -157,6 +179,10 @@ export class PredictionsService {
     if (!prediction) {
       throw new NotFoundException(`Prediction ID ${predictionId} not found`);
     }
+    prediction.heatmap = null;
+    prediction.heatmapError = null;
+    await this.predictionsRepository.save(prediction);
+    await this.emitPredictionExplain(prediction);
     await this.queueService.addRegenHeatmapJob(predictionId);
     return { message: 'Heatmap re-generation queued.' };
   }
@@ -168,6 +194,10 @@ export class PredictionsService {
     if (!prediction) {
       throw new NotFoundException(`Prediction ID ${predictionId} not found`);
     }
+    prediction.beeswarm = null;
+    prediction.beeswarmError = null;
+    await this.predictionsRepository.save(prediction);
+    await this.emitPredictionExplain(prediction);
     await this.queueService.addRegenBeeswarmJob(predictionId);
     return { message: 'Beeswarm re-generation queued.' };
   }
@@ -181,6 +211,18 @@ export class PredictionsService {
         `PredictionRecord ${recordId} not found for prediction ${predictionId}`,
       );
     }
+    record.waterfall = null;
+    record.waterfallError = null;
+    await this.recordsRepository.save(record);
+    this.eventsHub.publishPrediction(predictionId, 'record:update', {
+      id: record.id,
+      status: record.status,
+      proba: record.proba,
+      class: record.class,
+      errorMsg: record.errorMsg,
+      waterfall: null,
+      waterfallError: null,
+    });
     await this.queueService.addRegenWaterfallJob(predictionId, recordId);
     return { message: 'Waterfall re-generation queued.' };
   }

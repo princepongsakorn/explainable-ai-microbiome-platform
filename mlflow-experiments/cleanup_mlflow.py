@@ -29,8 +29,8 @@ from mlflow.exceptions import MlflowException
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-TRACKING_URI = "http://136.115.33.253:5000"
-TARGETS = ["sample-rf-crc", "sample-gcn-crc", "smoke-test-gcp", "_smoke_test_e2e", "_smoke_test"]
+TRACKING_URI = "http://35.225.129.127:5000"
+TARGETS = ["sample-gcn-crc", "smoke-test-gcp", "_smoke_test_e2e", "_smoke_test"]
 
 # Read from env to avoid committing creds. Falls back to the values used in
 # model.py so you can run this without exporting if you really want.

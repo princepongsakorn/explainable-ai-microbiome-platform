@@ -19,7 +19,7 @@
 
 set -euo pipefail
 
-VM_SSH="${VM_SSH:-print@34.56.19.80}"
+VM_SSH="${VM_SSH:-print@35.239.175.89}"
 VM_PROJECT_DIR="${VM_PROJECT_DIR:-/home/print/explainable-ai-microbiome-platform}"
 MAC_REPO_DIR="${MAC_REPO_DIR:-$HOME/MasterProject/project/explainable-ai-microbiome-platform}"
 
@@ -70,4 +70,4 @@ ssh -t "${VM_SSH}" '
 '
 
 echo
-echo "Done. Hard-refresh http://34.56.19.80/developer/mlflow in the browser (Cmd+Shift+R)."
+echo "Done. Hard-refresh http://35.239.175.89/developer/mlflow in the browser (Cmd+Shift+R)."

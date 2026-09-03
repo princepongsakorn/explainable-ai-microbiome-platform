@@ -6,11 +6,11 @@
 #
 # Usage:
 #   1. SCP this file to the VM:
-#        scp setup_inference.sh print@34.56.19.80:~
+#        scp setup_inference.sh print@35.239.175.89:~
 #   2. SSH in and run (supply MLflow creds via env):
-#        ssh print@34.56.19.80
+#        ssh print@35.239.175.89
 #        chmod +x setup_inference.sh
-#        sudo MLFLOW_URL=http://136.115.33.253:5000 \
+#        sudo MLFLOW_URL=http://35.225.129.127:5000 \
 #             MLFLOW_TRACKING_USERNAME=admin \
 #             MLFLOW_TRACKING_PASSWORD='<password>' \
 #             ./setup_inference.sh
@@ -24,7 +24,7 @@
 set -euo pipefail
 
 # ---------- Config ----------
-MLFLOW_URL="${MLFLOW_URL:?MLFLOW_URL is required, e.g. http://136.115.33.253:5000}"
+MLFLOW_URL="${MLFLOW_URL:?MLFLOW_URL is required, e.g. http://35.225.129.127:5000}"
 MLFLOW_TRACKING_USERNAME="${MLFLOW_TRACKING_USERNAME:?MLFLOW_TRACKING_USERNAME is required}"
 MLFLOW_TRACKING_PASSWORD="${MLFLOW_TRACKING_PASSWORD:?MLFLOW_TRACKING_PASSWORD is required}"
 

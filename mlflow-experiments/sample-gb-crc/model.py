@@ -22,7 +22,7 @@ X = train_data.loc[train_ids]
 y = train_metadata['CRC']
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-mlflow.set_tracking_uri(os.environ.get("MLFLOW_TRACKING_URI", "http://136.115.33.253:5000"))
+mlflow.set_tracking_uri(os.environ.get("MLFLOW_TRACKING_URI", "http://35.225.129.127:5000"))
 mlflow.set_experiment("sample-gradient-boosting-crc")
 
 def objective(params):

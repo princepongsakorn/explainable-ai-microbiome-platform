@@ -61,8 +61,13 @@ export function useSse(path: string | null, handlers: SseHandlers) {
           // the tab is hidden — fine in dev, but it wastes a backend slot.
           openWhenHidden: false,
           headers: (() => {
+            // Build explicitly typed as Record<string, string>: a ternary
+            // returning `{}` widens to `{ Authorization?: undefined }`, which
+            // is not assignable to the headers index signature.
+            const headers: Record<string, string> = {};
             const token = getToken();
-            return token ? { Authorization: `Bearer ${token}` } : {};
+            if (token) headers.Authorization = `Bearer ${token}`;
+            return headers;
           })(),
           async onopen(res) {
             if (

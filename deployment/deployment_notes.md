@@ -9,10 +9,10 @@
 ## VM IPs (canonical)
 | VM | Role | Public IP |
 |---|---|---|
-| VM #1 | MLflow + PostgreSQL | `136.115.33.253` |
-| VM #2 | Inference Service (Flask + SHAP) | `34.56.19.80` |
+| VM #1 | MLflow + PostgreSQL | `35.225.129.127` |
+| VM #2 | Inference Service (Flask + SHAP) | `35.239.175.89` |
 
-> หมายเหตุ: MLflow IP เคย reassign หลายครั้งแล้ว (`34.57.22.206` → `34.134.85.96` → `136.115.33.253`) เพราะ VM restart / ขอแก้ access ทุกครั้ง IP เปลี่ยน ต้อง grep หา IP เก่าใน repo + แก้ทั้งหมด — แนะนำ reserve **static external IP** ใน GCP เพื่อหยุดปัญหานี้
+> หมายเหตุ: Public IP ของ VM เปลี่ยนได้เมื่อ restart/reassign จึงควรใช้ **static external IP** เพื่อไม่ต้องแก้ค่า endpoint ในทุกครั้ง
 
 ---
 
@@ -20,7 +20,7 @@
 
 **SSH access**
 ```
-ssh print@136.115.33.253
+ssh print@35.225.129.127
 ```
 
 **Components**
@@ -35,7 +35,7 @@ ssh print@136.115.33.253
 - Credentials file on VM: `/root/mlflow_db_credentials.txt`
 
 **MLflow credentials**
-- URL: `http://136.115.33.253:5000`
+- URL: `http://35.225.129.127:5000`
 - Admin user: `admin`
 - Admin password: `BfKfqfQOwT3qpQyiB72oqDydvjAPrndz`
 - Flask secret key: saved to `/root/mlflow_credentials.txt` (drop-in `/etc/systemd/system/mlflow.service.d/override.conf`)
@@ -68,7 +68,7 @@ ssh print@136.115.33.253
 
 **SSH access**
 ```
-ssh print@34.56.19.80
+ssh print@35.239.175.89
 ```
 
 **Components**
@@ -92,16 +92,16 @@ ssh print@34.56.19.80
 - [x] Rebuild image as **amd64 บน VM** (3-5 min — native build, ไม่ต้อง emulate)
   - `docker rmi` arm64 image เก่า → `docker build` amd64 ใหม่ทับ tag เดิม
   - SCP `kserve-custom-runtime/` ขึ้น VM แล้ว build ตรง — ไม่ push Docker Hub
-- [x] Update env file `/etc/inference/inference.env` ชี้ `MLFLOW_URL=http://136.115.33.253:5000`
+- [x] Update env file `/etc/inference/inference.env` ชี้ `MLFLOW_URL=http://35.225.129.127:5000`
 - [x] Re-enable + restart `inference.service` → active (running)
-- [x] Verify `curl http://127.0.0.1:8080/v1/mlflow/tracking_uri` → `{"url":"http://136.115.33.253:5000"}` ✓
+- [x] Verify `curl http://127.0.0.1:8080/v1/mlflow/tracking_uri` → `{"url":"http://35.225.129.127:5000"}` ✓
 - [ ] เปิด GCP firewall port 8080 (เฉพาะจาก VM #3 internal IP — ทำตอน deploy backend)
 - [ ] Test `/v1/predict/*` + `/v1/explain/*` end-to-end — ต้องมี model ใน MLflow ที่ stage = Production ก่อน
 
 **Backend change (ตอน deploy backend)**
 - [ ] ENV: `INFERENCE_SERVICE_URL=http://<vm2-internal-ip>:8080`
 - [x] ลบ `Host` header pattern ของ KServe ออกจาก `mlflow.service.ts`, `experiments.service.ts`, `models.service.ts`, `prediction.processor.ts` แล้ว (รวม k6 test scripts)
-- [x] Training scripts (`mlflow-experiments/*/model.py`) แก้ `mlflow.set_tracking_uri(...)` ให้รับจาก `MLFLOW_TRACKING_URI` env (fallback `http://136.115.33.253:5000`)
+- [x] Training scripts (`mlflow-experiments/*/model.py`) แก้ `mlflow.set_tracking_uri(...)` ให้รับจาก `MLFLOW_TRACKING_URI` env (fallback `http://35.225.129.127:5000`)
 
 ---
 
