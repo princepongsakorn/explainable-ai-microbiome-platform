@@ -1,0 +1,12 @@
+{
+  "biomarker_ranks": {
+    "Fusobacterium_nucleatum": 5,
+    "Peptostreptococcus_stomatis": 3
+  },
+  "features": 221,
+  "missing_from_top_positive": [],
+  "ranking_metric": "mean positive class-1 SHAP contribution",
+  "status": "passed",
+  "test_samples": 161,
+  "top_k": 20
+}

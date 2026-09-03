@@ -57,6 +57,24 @@ Track A uses an 80/20 stratified split (`random_state=42`) and Hyperopt TPE (`ra
 
 Only the winning run calls the repository's `log_explainable_model(model, background=X_train, registered_name="crc-curatedcrc-rf")` contract. The returned version alone is transitioned to Staging with `archive_existing_versions=False`. The script snapshots every Production model version and its run metrics before and after registration and fails if any value changes. It contains no path that promotes a model to Production.
 
+### Observed Track A result
+
+The authenticated 50-trial run against `http://35.225.129.127:5000` completed on 2026-09-03 with workflow ID `b06bc547859e4abaa4330fd8f2a35636`. MLflow experiment `crc-curatedcrc-rf` (experiment ID 10) contains exactly 50 finished runs for that workflow, and every run has all five required metrics.
+
+The selected run is `4b61357e6e7945c4a265d306ac0cac01` (trial 24):
+
+| Metric | Value |
+| --- | ---: |
+| ROC AUC | 0.805728 |
+| Accuracy | 0.720497 |
+| Precision | 0.785714 |
+| Recall | 0.647059 |
+| F1 | 0.709677 |
+
+Its parameters are `n_estimators=150`, `max_depth=10`, `min_samples_leaf=5`, `min_samples_split=5`, `max_features="sqrt"`, and `class_weight=None`. The explainer-wrapped model is registered as `crc-curatedcrc-rf` version 1 and staged as Staging. A post-run server query loaded that version as an MLflow PyFunc model and reconfirmed the 50-run metric contract.
+
+Production state was byte-for-byte equivalent at the metadata/metric snapshot level before and after registration: `sample-rf-crc` version 96, `sample-gcn-crc` version 29, and `sample-xgboost-crc` version 31 remained the Production versions with the same run IDs and metrics. Full evidence is saved in `outputs/track_a_best_run.json` and `outputs/track_a_registration.json`.
+
 ## Track B: paper comparison
 
 ```bash
@@ -73,6 +91,8 @@ The checked-in paper notebook used scikit-learn's historical default of 100 tree
 ## SHAP sanity check
 
 Track A writes a beeswarm PNG, the complete positive-contribution ranking, and a JSON summary. Features are ranked by mean positive class-1 SHAP magnitude; mean absolute and signed SHAP values are retained as context. The run is flagged and exits with status 2 if either `Fusobacterium_nucleatum` or `Peptostreptococcus_stomatis` is outside the top 20. Evidence and the Staging model are preserved, but no Production promotion occurs.
+
+The observed check passed: `Peptostreptococcus_stomatis` ranked 3rd and `Fusobacterium_nucleatum` ranked 5th among positive class-1 contributors. Both are visible in `outputs/track_a_shap_beeswarm.png`; full rankings and the machine-readable verdict are in `outputs/track_a_shap_positive_contributors.csv` and `outputs/track_a_shap_summary.json`.
 
 ## Observed Track B results
 
@@ -95,4 +115,4 @@ The complete 500-tree run produced:
 | YuJ_2015 | 0.876 | 0.867 |
 | ZellerG_2014 | 0.796 | 0.771 |
 
-Machine-readable full-precision values are in `outputs/track_b_cohort_cv.csv` and `outputs/track_b_lodo.csv`. Track A run ID, metrics, model version, and final biomarker ranks will be added after authenticated execution against the MLflow server.
+Machine-readable full-precision values are in `outputs/track_b_cohort_cv.csv` and `outputs/track_b_lodo.csv`.

@@ -1,0 +1,84 @@
+{
+  "production_after": {
+    "sample-gcn-crc:29": {
+      "metrics": {
+        "accuracy": 0.75,
+        "f1": 0.725,
+        "n_edges": 2860.0,
+        "precision": 0.776,
+        "recall": 0.75,
+        "roc_auc": 0.727
+      },
+      "name": "sample-gcn-crc",
+      "run_id": "d26a65796b9e45c494ec3e282066aac5",
+      "version": "29"
+    },
+    "sample-rf-crc:96": {
+      "metrics": {
+        "accuracy": 0.861,
+        "f1": 0.86,
+        "precision": 0.86,
+        "recall": 0.861,
+        "roc_auc": 0.899
+      },
+      "name": "sample-rf-crc",
+      "run_id": "be7137a1189246239fb12f53ad7788fd",
+      "version": "96"
+    },
+    "sample-xgboost-crc:31": {
+      "metrics": {
+        "accuracy": 0.861,
+        "f1": 0.86,
+        "precision": 0.86,
+        "recall": 0.861,
+        "roc_auc": 0.929
+      },
+      "name": "sample-xgboost-crc",
+      "run_id": "709fd222b86e4748bfa18c277c3207bd",
+      "version": "31"
+    }
+  },
+  "production_before": {
+    "sample-gcn-crc:29": {
+      "metrics": {
+        "accuracy": 0.75,
+        "f1": 0.725,
+        "n_edges": 2860.0,
+        "precision": 0.776,
+        "recall": 0.75,
+        "roc_auc": 0.727
+      },
+      "name": "sample-gcn-crc",
+      "run_id": "d26a65796b9e45c494ec3e282066aac5",
+      "version": "29"
+    },
+    "sample-rf-crc:96": {
+      "metrics": {
+        "accuracy": 0.861,
+        "f1": 0.86,
+        "precision": 0.86,
+        "recall": 0.861,
+        "roc_auc": 0.899
+      },
+      "name": "sample-rf-crc",
+      "run_id": "be7137a1189246239fb12f53ad7788fd",
+      "version": "96"
+    },
+    "sample-xgboost-crc:31": {
+      "metrics": {
+        "accuracy": 0.861,
+        "f1": 0.86,
+        "precision": 0.86,
+        "recall": 0.861,
+        "roc_auc": 0.929
+      },
+      "name": "sample-xgboost-crc",
+      "run_id": "709fd222b86e4748bfa18c277c3207bd",
+      "version": "31"
+    }
+  },
+  "production_unchanged": true,
+  "registered_name": "crc-curatedcrc-rf",
+  "stage": "Staging",
+  "version": "1"
+}
