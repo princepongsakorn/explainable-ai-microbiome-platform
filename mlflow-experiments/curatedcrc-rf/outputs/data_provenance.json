@@ -1,0 +1,26 @@
+{
+  "abundance_threshold": 1e-05,
+  "class_counts": {
+    "0": 378,
+    "1": 424
+  },
+  "cohort_counts": {
+    "VogtmannE_2016": 104,
+    "WirbelJ_2018": 125,
+    "YachidaS_2019": 331,
+    "YuJ_2015": 128,
+    "ZellerG_2014": 114
+  },
+  "filtered_feature_count": 221,
+  "paper_commit": "6600175db5984a07b86f2b5591114f39181ff4dc",
+  "paper_repository": "https://github.com/ryzary/shapmat_paper",
+  "prevalence_semantics": "keep features with zero fraction strictly below 0.9",
+  "prevalence_threshold": 0.9,
+  "raw_feature_count": 864,
+  "samples": 802,
+  "sha256": "8f1258882cbedd1613ae3490f9ec94bbc97c72c041f1ed9f531f43b2030c1a8f",
+  "source_branch": "cv_notebook",
+  "source_commit": "0ca51a9ab9c859fac3305f599a81b2e2206bef49",
+  "source_path": "data/curatedCRC.csv",
+  "source_repository": "https://github.com/ryzary/shapmat"
+}
