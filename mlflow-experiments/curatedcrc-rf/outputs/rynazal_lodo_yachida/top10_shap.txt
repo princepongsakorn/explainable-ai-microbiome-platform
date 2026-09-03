@@ -1,0 +1,10 @@
+1	Peptostreptococcus_stomatis	0.025538
+2	Parvimonas_micra	0.023970
+3	Gemella_morbillorum	0.021616
+4	Dialister_pneumosintes	0.018360
+5	Fusobacterium_nucleatum	0.017965
+6	Clostridium_symbiosum	0.013393
+7	Ruthenibacterium_lactatiformans	0.012661
+8	Solobacterium_moorei	0.012659
+9	Eubacterium_eligens	0.012166
+10	Hungatella_hathewayi	0.011799
