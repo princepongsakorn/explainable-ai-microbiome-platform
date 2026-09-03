@@ -51,3 +51,6 @@ htmlcov/
 # --- Logs & temp ---
 *.log
 *.tmp
+
+# --- Local Git worktrees ---
+.worktrees/
