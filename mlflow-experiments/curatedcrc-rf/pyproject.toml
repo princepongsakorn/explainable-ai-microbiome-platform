@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=70"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "curatedcrc-rf-experiment"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "mlflow==2.19.0",
+  "matplotlib==3.10.0",
+  "numpy==2.0.2",
+  "pandas==2.2.3",
+  "scikit-learn==1.6.1",
+  "scipy==1.15.1",
+  "shap==0.49.1",
+  "shapmat==0.1.5",
+  "hyperopt==0.2.7",
+]
+
+[tool.setuptools.packages.find]
+include = ["curatedcrc*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
