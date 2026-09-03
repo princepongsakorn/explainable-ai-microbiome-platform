@@ -31,7 +31,11 @@ interventional base value (mean predicted CRC probability on YachidaS). This
 script follows the task brief (SHAPMAT defaults, TreeExplainer without
 background) and additionally records the interventional base value and the
 non-zero-SHAP feature count so the two conventions can be compared.
-``--preprocessing notebook-raw`` reproduces the notebook's unfiltered setup.
+``--preprocessing notebook-raw`` reproduces the notebook's unfiltered setup:
+it reads the notebook's own ``data/bacteria_relative_abundance_concat.csv``
+(865 raw features, 802 samples, same SAMD ids) and applies no filter. Combine
+with ``--n-estimators 1000 --explainer test-background`` for the notebook's
+YachidaS LODO parameters and its ``TreeExplainer(model, data=X_test)``.
 
 Usage
 -----
@@ -79,7 +83,7 @@ EXPERIMENT_ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY_ROOT = EXPERIMENT_ROOT.parents[1]
 sys.path.insert(0, str(EXPERIMENT_ROOT))
 
-from curatedcrc.acquire import acquire_upstream  # noqa: E402
+from curatedcrc.acquire import acquire_upstream, sha256_file  # noqa: E402
 from curatedcrc.train import production_snapshot  # noqa: E402
 
 DEFAULT_TRACKING_URI = "http://35.225.129.127:5000"
@@ -95,13 +99,10 @@ EXPECTED_COHORT_COUNTS = {
     "VogtmannE_2016": (52, 52),
 }
 METADATA_COLUMNS = ["study_name", "CRC", "ajcc_stage"]
+NOTEBOOK_DATA = Path("data") / "bacteria_relative_abundance_concat.csv"  # under shapmat_paper
+NOTEBOOK_METADATA_COLUMNS = ["study_name", "CRC"]
 REQUIRED_TEST_IDS = ("SAMD00114931", "SAMD00114739")
-RF_PARAMS: dict[str, Any] = {
-    "n_estimators": 500,
-    "max_depth": None,
-    "random_state": 0,
-    "class_weight": None,
-}
+RF_PARAM_KEYS = ("n_estimators", "max_depth", "random_state", "class_weight")
 SHAPMAT_DEFAULTS = {"abundance_threshold": 1e-15, "prevalence_threshold": 0.9}
 AUC_GUARD = (0.6, 0.85)
 PAPER_REFERENCE = {"auc": 0.72, "base_value": 0.53, "features": 549}
@@ -126,6 +127,18 @@ def parse_args() -> argparse.Namespace:
         help="shapmat-default: ab_filter(1e-15, 0.9) on all 802 rows (task brief). "
         "notebook-raw: no filtering, as LODO.ipynb actually runs.",
     )
+    parser.add_argument(
+        "--n-estimators", type=int, default=500,
+        help="500 = task brief; 1000 = the notebook's YachidaS LODO setting.",
+    )
+    parser.add_argument(
+        "--explainer",
+        choices=("path-dependent", "test-background"),
+        default="path-dependent",
+        help="Explainer logged to the platform and used for the primary SHAP report: "
+        "path-dependent = shap.TreeExplainer(model) (task brief); "
+        "test-background = shap.TreeExplainer(model, data=X_test) (paper notebook).",
+    )
     parser.add_argument("--n-jobs", type=int, default=-1)
     parser.add_argument(
         "--skip-registration",
@@ -144,20 +157,22 @@ def parse_args() -> argparse.Namespace:
 # ---------------------------------------------------------------------------
 # Data
 # ---------------------------------------------------------------------------
-def load_table(data_path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
+def load_table(
+    data_path: Path, metadata_columns: list[str] = METADATA_COLUMNS
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     table = pd.read_csv(data_path, index_col=0)
     table.index = table.index.astype(str)
     table.index.name = "sample_id"
-    missing = set(METADATA_COLUMNS).difference(table.columns)
+    missing = set(metadata_columns).difference(table.columns)
     if missing:
         raise ValueError(f"Missing metadata columns: {sorted(missing)}")
     if not table.index.is_unique:
         raise ValueError("Duplicate sample identifiers in curatedCRC")
-    metadata = table[METADATA_COLUMNS].copy()
+    metadata = table[metadata_columns].copy()
     metadata["CRC"] = pd.to_numeric(metadata["CRC"], errors="raise").astype(int)
     if set(metadata["CRC"].unique()) != {0, 1}:
         raise ValueError(f"Unexpected labels: {sorted(metadata['CRC'].unique())}")
-    X_raw = table.drop(columns=METADATA_COLUMNS).apply(pd.to_numeric, errors="raise")
+    X_raw = table.drop(columns=metadata_columns).apply(pd.to_numeric, errors="raise")
     if not np.isfinite(X_raw.to_numpy()).all() or (X_raw.to_numpy() < 0).any():
         raise ValueError("Abundance matrix must be finite and non-negative")
     return X_raw, metadata
@@ -263,11 +278,17 @@ def main() -> int:
 
     # 1. Data + preprocessing ------------------------------------------------
     source = acquire_upstream(args.checkout_dir)
-    X_raw, metadata = load_table(source.data_path)
+    if args.preprocessing == "notebook-raw":
+        data_path = Path(args.checkout_dir).resolve() / "shapmat_paper" / NOTEBOOK_DATA
+        data_sha256 = sha256_file(data_path)
+        X_raw, metadata = load_table(data_path, NOTEBOOK_METADATA_COLUMNS)
+    else:
+        data_path, data_sha256 = source.data_path, source.sha256
+        X_raw, metadata = load_table(data_path)
     cohort_counts = verify_cohorts(metadata)
     X = preprocess(X_raw, args.preprocessing)
     y = metadata["CRC"]
-    print(f"data: {source.data_path} sha256={source.sha256}")
+    print(f"data: {data_path} sha256={data_sha256}")
     print(f"cohorts verified: {json.dumps(cohort_counts, sort_keys=True)}")
     print(f"preprocessing={args.preprocessing} features: {X_raw.shape[1]} -> {X.shape[1]}")
     print("label encoding: CRC=1, control=0 (source column 'CRC')")
@@ -285,8 +306,14 @@ def main() -> int:
         raise ValueError("Sample leakage between train and test")
     print(f"train={len(X_train)} ({', '.join(TRAIN_COHORTS)}) test={len(X_test)} ({TEST_COHORT})")
 
-    model = RandomForestClassifier(**RF_PARAMS, n_jobs=args.n_jobs).fit(X_train, y_train)
-    fitted_params = {key: model.get_params()[key] for key in RF_PARAMS}
+    model = RandomForestClassifier(
+        n_estimators=args.n_estimators,
+        max_depth=None,
+        random_state=0,
+        class_weight=None,
+        n_jobs=args.n_jobs,
+    ).fit(X_train, y_train)
+    fitted_params = {key: model.get_params()[key] for key in RF_PARAM_KEYS}
     metrics = evaluate(model, X_test, y_test)
     print("test metrics (YachidaS_2019):")
     for name, value in metrics.items():
@@ -294,36 +321,50 @@ def main() -> int:
     auc_ok = AUC_GUARD[0] <= metrics["roc_auc"] <= AUC_GUARD[1]
 
     # 3. SHAP -----------------------------------------------------------------
-    explainer = shap.TreeExplainer(model)
-    shap_test = class1_values(explainer.shap_values(X_test), len(X_test), X_test.shape[1])
+    # Both conventions are always computed; ``--explainer`` picks the one that is
+    # logged to the platform and reported as primary.
+    explainer_pd = shap.TreeExplainer(model)
+    shap_pd = class1_values(explainer_pd.shap_values(X_test), len(X_test), X_test.shape[1])
+    explainer_tb = shap.TreeExplainer(model, data=X_test)
+    shap_tb = class1_values(
+        explainer_tb.shap_values(X_test, check_additivity=False), len(X_test), X_test.shape[1]
+    )
+    conventions = {
+        "path-dependent": ("shap.TreeExplainer(model)", "none", explainer_pd, shap_pd),
+        "test-background": (
+            "shap.TreeExplainer(model, data=X_test)",
+            "X_test (YachidaS_2019, 331 rows)",
+            explainer_tb,
+            shap_tb,
+        ),
+    }
+    explainer_label, background_label, explainer, shap_test = conventions[args.explainer]
     expected_value = class1_expected(explainer)
     mean_abs = pd.Series(np.abs(shap_test).mean(axis=0), index=X_test.columns, name="mean_abs_shap")
     ranking = mean_abs.sort_values(ascending=False)
     top10 = ranking.head(10)
     nonzero_features = int((mean_abs != 0).sum())
-    # Reference convention used by the paper notebook: test data as background.
-    explainer_interventional = shap.TreeExplainer(model, data=X_test)
-    shap_interventional = class1_values(
-        explainer_interventional.shap_values(X_test, check_additivity=False),
-        len(X_test),
-        X_test.shape[1],
-    )
-    expected_value_interventional = class1_expected(explainer_interventional)
-    nonzero_features_interventional = int((np.abs(shap_interventional).mean(axis=0) != 0).sum())
+    other = "test-background" if args.explainer == "path-dependent" else "path-dependent"
+    other_label, _, other_explainer, other_shap = conventions[other]
+    expected_value_other = class1_expected(other_explainer)
+    nonzero_features_other = int((np.abs(other_shap).mean(axis=0) != 0).sum())
 
-    print(f"explainer: shap.TreeExplainer(model), feature_perturbation={explainer.feature_perturbation}")
-    print(f"expected_value[CRC] = {expected_value:.4f} (paper reference 0.53)")
     print(
-        f"reference convention TreeExplainer(model, data=X_test): expected_value[CRC] = "
-        f"{expected_value_interventional:.4f}, non-zero mean(|SHAP|) features = "
-        f"{nonzero_features_interventional}/{X_test.shape[1]}"
+        f"logged explainer: {explainer_label} (feature_perturbation="
+        f"{explainer.feature_perturbation}, background={background_label})"
+    )
+    print(f"expected_value[CRC] = {expected_value:.4f} (paper reference 0.53)")
+    print(f"non-zero mean(|SHAP|) features = {nonzero_features}/{X_test.shape[1]} (paper reference 549)")
+    print(
+        f"other convention {other_label}: expected_value[CRC] = {expected_value_other:.4f}, "
+        f"non-zero mean(|SHAP|) features = {nonzero_features_other}/{X_test.shape[1]}"
     )
     print("top-10 features by mean(|SHAP|) on TEST:")
     for rank, (feature, value) in enumerate(top10.items(), start=1):
         print(f"  {rank:2d}. {feature}  {value:.5f}")
 
     beeswarm_path = args.output_dir / "shap_beeswarm.png"
-    beeswarm(shap_test, X_test, beeswarm_path, "YachidaS_2019 test, TreeExplainer(model), CRC class")
+    beeswarm(shap_test, X_test, beeswarm_path, f"YachidaS_2019 test, {explainer_label}, CRC class")
     top10_path = args.output_dir / "top10_shap.txt"
     top10_path.write_text(
         "\n".join(f"{rank}\t{feature}\t{value:.6f}" for rank, (feature, value) in enumerate(top10.items(), 1))
@@ -359,7 +400,8 @@ def main() -> int:
             "pandas": pd.__version__,
         },
         "data": {
-            "sha256": source.sha256,
+            "path": str(data_path),
+            "sha256": data_sha256,
             "shapmat_commit": source.shapmat_commit,
             "paper_commit": source.paper_commit,
             "cohort_counts": cohort_counts,
@@ -373,7 +415,8 @@ def main() -> int:
         "metrics": metrics,
         "auc_within_guard": auc_ok,
         "shap": {
-            "explainer": "shap.TreeExplainer(model)",
+            "explainer": explainer_label,
+            "background": background_label,
             "feature_perturbation": explainer.feature_perturbation,
             "expected_value_crc": expected_value,
             "nonzero_mean_abs_shap_features": nonzero_features,
@@ -381,10 +424,10 @@ def main() -> int:
                 {"rank": i, "feature": f, "mean_abs_shap": float(v)}
                 for i, (f, v) in enumerate(top10.items(), 1)
             ],
-            "reference_convention": {
-                "explainer": "shap.TreeExplainer(model, data=X_test)",
-                "expected_value_crc": expected_value_interventional,
-                "nonzero_mean_abs_shap_features": nonzero_features_interventional,
+            "other_convention": {
+                "explainer": other_label,
+                "expected_value_crc": expected_value_other,
+                "nonzero_mean_abs_shap_features": nonzero_features_other,
             },
         },
         "paper_reference": PAPER_REFERENCE,
@@ -429,39 +472,42 @@ def main() -> int:
     # 5. MLflow run + registration -----------------------------------------------
     mlflow.set_experiment(args.experiment_name)
     production_before = production_snapshot(client)
-    with mlflow.start_run(run_name="rynazal-lodo-yachida-rf500") as run:
+    with mlflow.start_run(run_name=f"{args.registered_name}-rf{args.n_estimators}") as run:
         mlflow.set_tags(
             {
                 "workflow": "rynazal-lodo-yachida",
                 "paper": "Rynazal et al. 2023 Genome Biology 24:21 Fig.1/Fig.2",
-                "dataset_sha256": source.sha256,
+                "dataset_sha256": data_sha256,
+                "dataset_path": str(data_path),
                 "source_commit": source.shapmat_commit,
                 "paper_commit": source.paper_commit,
                 "split": "leave-one-dataset-out; test=YachidaS_2019",
-                "shap_explainer": "shap.TreeExplainer(model) without background",
+                "shap_explainer": f"{explainer_label}; background={background_label}",
             }
         )
         mlflow.set_tag(
             "mlflow.note.content",
             "RF(500, max_depth=None, random_state=0, class_weight=None) trained on "
             f"{', '.join(TRAIN_COHORTS)} ({len(X_train)}), evaluated on {TEST_COHORT} "
-            f"({len(X_test)}); SHAPMAT ab_filter defaults; {X_raw.shape[1]}->{X.shape[1]} features; "
-            "SHAP = TreeExplainer(model) on the test set.",
+            f"({len(X_test)}); preprocessing={args.preprocessing}; {X_raw.shape[1]}->{X.shape[1]} features; "
+            f"SHAP = {explainer_label} on the test set.",
         )
         mlflow.log_params(
             {
                 **fitted_params,
                 "model_type": "RandomForest",
                 "preprocessing": args.preprocessing,
-                "abundance_threshold": SHAPMAT_DEFAULTS["abundance_threshold"],
-                "prevalence_threshold": SHAPMAT_DEFAULTS["prevalence_threshold"],
+                "abundance_threshold": SHAPMAT_DEFAULTS["abundance_threshold"] if args.preprocessing == "shapmat-default" else "none",
+                "prevalence_threshold": SHAPMAT_DEFAULTS["prevalence_threshold"] if args.preprocessing == "shapmat-default" else "none",
                 "features_raw": X_raw.shape[1],
                 "features": X.shape[1],
+                "dataset_file": data_path.name,
                 "train_cohorts": "+".join(TRAIN_COHORTS),
                 "test_cohort": TEST_COHORT,
                 "train_samples": len(X_train),
                 "test_samples": len(X_test),
-                "shap_explainer": "TreeExplainer(model)",
+                "shap_explainer": explainer_label,
+                "shap_background": background_label,
                 "shap_feature_perturbation": explainer.feature_perturbation,
                 "sklearn_version": sklearn.__version__,
                 "shap_version": shap.__version__,
@@ -471,7 +517,8 @@ def main() -> int:
             {
                 **metrics,
                 "shap_expected_value_crc": expected_value,
-                "shap_expected_value_crc_test_background": expected_value_interventional,
+                "shap_expected_value_crc_path_dependent": class1_expected(explainer_pd),
+                "shap_expected_value_crc_test_background": class1_expected(explainer_tb),
                 "shap_nonzero_features": nonzero_features,
             }
         )
@@ -542,9 +589,11 @@ def main() -> int:
     print("\n=== Deliverables ===")
     print(f"RF params: {fitted_params}")
     print(f"versions: scikit-learn={sklearn.__version__} shap={shap.__version__} mlflow={mlflow.__version__} python={platform.python_version()}")
-    print(f"features after filtering: {X.shape[1]} (raw {X_raw.shape[1]}; {args.preprocessing})")
+    print(f"raw feature count: {X_raw.shape[1]} ({data_path.name}); features used by the model: {X.shape[1]} ({args.preprocessing})")
+    print(f"non-zero mean(|SHAP|) features on TEST: {nonzero_features}/{X.shape[1]} (paper: 549)")
     print("test metrics: " + ", ".join(f"{k}={v:.3f}" for k, v in metrics.items()))
-    print(f"expected_value[CRC]: {expected_value:.4f} (TreeExplainer(model)); {expected_value_interventional:.4f} with data=X_test")
+    print(f"logged explainer: {explainer_label}; background={background_label}; expected_value[CRC]={expected_value:.4f}")
+    print(f"other convention {other_label}: expected_value[CRC]={expected_value_other:.4f}")
     print("top-10 mean(|SHAP|): " + ", ".join(f"{i}.{f}" for i, f in enumerate(top10.index, 1)))
     print(f"MLflow: run_id={run_id} registered={args.registered_name} version={version} stage=Staging")
     print(f"production_unchanged={production_before == production_after}")
