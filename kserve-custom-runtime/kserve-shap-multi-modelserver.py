@@ -7,6 +7,8 @@ contract (``predict`` + ``shap_explain``). The runtime no longer needs to
 know which framework (sklearn, XGBoost, torch GCN, ...) backs a given model.
 """
 
+from __future__ import annotations
+
 import base64
 import json
 import logging
@@ -144,9 +146,61 @@ class ModelLoader:
 # ---------------------------------------------------------------------------
 # SHAP — uniform consumption of the contract's ``shap_explain`` output
 # ---------------------------------------------------------------------------
-def get_shap_value(impl, X):
+def _aggregate_shap_by_genus(
+    values: pd.DataFrame | "np.ndarray",  # noqa: F821
+    data: "np.ndarray",  # noqa: F821
+    feature_names: list,
+):
+    """Sum SHAP values / abundance within each genus.
+
+    For microbiome data where column names follow ``Genus_species``, the
+    per-species view is too granular for GCN-style models that reason at
+    the guild/genus level — individual species get tiny SHAP values that
+    look like noise even when the model genuinely uses (say) "the
+    Fusobacterium genus" as a signal.
+
+    Summing is the right operator because SHAP is additive: per-feature
+    sums = ``f(x) - E[f(x)]``, and group sums preserve that, so the
+    aggregated waterfall still adds up correctly. ``data`` (used for
+    beeswarm color) is summed too = total relative abundance of the genus.
+    """
+    import numpy as np
+
+    values = np.asarray(values)
+    data = np.asarray(data)
+    feature_names = list(feature_names)
+
+    # Map column -> genus, preserving first-seen order so the plot order is
+    # stable across requests.
+    genera_per_col = [c.split("_")[0] if c else c for c in feature_names]
+    seen: list = []
+    seen_set: set = set()
+    for g in genera_per_col:
+        if g not in seen_set:
+            seen.append(g)
+            seen_set.add(g)
+
+    n_features = len(feature_names)
+    n_genera = len(seen)
+    # One-hot mask of shape (n_features, n_genera); matrix-mul collapses.
+    mask = np.zeros((n_features, n_genera), dtype=np.float32)
+    genus_to_idx = {g: i for i, g in enumerate(seen)}
+    for i, g in enumerate(genera_per_col):
+        mask[i, genus_to_idx[g]] = 1.0
+
+    values_agg = values @ mask
+    data_agg = data @ mask
+    return values_agg, data_agg, seen
+
+
+def get_shap_value(impl, X, aggregate_by: str | None = None):
     """Call ``impl.shap_explain(X)`` and reshape into the legacy
-    ``ShapValueObject`` shape so the plotting helpers can stay unchanged.
+    ``ShapValueObject`` so the plotting helpers can stay unchanged.
+
+    ``aggregate_by="genus"`` collapses ``Genus_species`` columns into a
+    single per-genus attribution before plotting — recommended for the
+    GCN-backed model, where per-species SHAP looks diffuse because the
+    GCN aggregates information across the bacterial graph internally.
     """
     out = impl.shap_explain(X)
     values = out["values"]
@@ -176,8 +230,19 @@ def get_shap_value(impl, X):
     else:
         base_scalar = float(base_value)
 
-    feature_names = X.columns
+    feature_names = list(X.columns)
     patient_ids = X.index
+
+    # Optional aggregation. Done AFTER class selection so we operate on the
+    # 2D (n_samples, n_features) matrix the plots actually consume.
+    if aggregate_by == "genus":
+        values_class, data, feature_names = _aggregate_shap_by_genus(
+            values_class, data, feature_names
+        )
+        logger.info(
+            f"aggregated SHAP by genus: {len(feature_names)} genera "
+            f"(from {len(X.columns)} species)"
+        )
 
     explanation = shap.Explanation(
         values_class, data=data, feature_names=feature_names
@@ -191,6 +256,19 @@ def get_shap_value(impl, X):
 # ---------------------------------------------------------------------------
 # Plot helpers (unchanged from before — operate on ShapValueObject)
 # ---------------------------------------------------------------------------
+def _is_summary_row(label: str) -> bool:
+    """True for SHAP's collapsed "Sum of N other features" row.
+
+    SHAP groups features beyond ``max_display`` into a single summary row.
+    That label is not a taxon name, so it must stay upright while every real
+    feature label is italicised (species-name convention). Detect it by text
+    rather than by index: the summary row's position depends on the feature
+    count, and the previous index-based guess also un-italicised the top
+    (most important) real feature.
+    """
+    return "other features" in label.lower()
+
+
 def get_beeswarm(explanation):
     with _plt_lock:
         plt.ioff()
@@ -208,13 +286,13 @@ def get_beeswarm(explanation):
         ax.set_yticklabels([])
         feature_position = x_min - 0.030 * x_range
 
-        for i, (y, label) in enumerate(zip(yticks, yticklabels)):
+        for y, label in zip(yticks, yticklabels):
             ax.text(
                 feature_position,
                 y,
                 label.replace("_", " "),
                 fontsize=12,
-                fontstyle="italic" if i not in (0, len(yticklabels) - 1) else "normal",
+                fontstyle="normal" if _is_summary_row(label) else "italic",
                 verticalalignment="center",
                 horizontalalignment="right",
             )
@@ -244,13 +322,13 @@ def get_heatmap(explanation):
         ax.set_yticks([])
         ax.set_yticklabels([])
 
-        for i, (y, label) in enumerate(zip(yticks, yticklabels)):
+        for y, label in zip(yticks, yticklabels):
             ax.text(
                 -1,
                 y,
                 label.replace("_", " "),
                 fontsize=12,
-                fontstyle="italic" if i not in (0, len(yticklabels) - 1) else "normal",
+                fontstyle="normal" if _is_summary_row(label) else "italic",
                 verticalalignment="center",
                 horizontalalignment="right",
             )
@@ -294,7 +372,7 @@ def get_local_waterfall_plot(subject_id, shap_value_object):
                 y,
                 label.replace("_", " "),
                 fontsize=12,
-                fontstyle="italic" if label != yticklabels[0] else "normal",
+                fontstyle="normal" if _is_summary_row(label) else "italic",
                 verticalalignment="center",
                 horizontalalignment="right",
             )
@@ -415,7 +493,10 @@ def explain_beeswarm(model_name):
             return err
         input_data = transformer(input_df, input_columns)
 
-        shap_object = get_shap_value(impl, X=input_data)
+        # Query param ?aggregate_by=genus collapses Genus_species columns
+        # into single per-genus attributions — recommended for GCN models.
+        aggregate_by = request.args.get("aggregate_by")
+        shap_object = get_shap_value(impl, X=input_data, aggregate_by=aggregate_by)
         beeswarm = get_beeswarm(shap_object.explanation)
         return jsonify({"explain": beeswarm})
     except Exception as e:
@@ -436,7 +517,10 @@ def explain_heatmap(model_name):
             return err
         input_data = transformer(input_df, input_columns)
 
-        shap_object = get_shap_value(impl, X=input_data)
+        # Query param ?aggregate_by=genus collapses Genus_species columns
+        # into single per-genus attributions — recommended for GCN models.
+        aggregate_by = request.args.get("aggregate_by")
+        shap_object = get_shap_value(impl, X=input_data, aggregate_by=aggregate_by)
         heatmap = get_heatmap(shap_object.explanation)
         return jsonify({"explain": heatmap})
     except Exception as e:
@@ -460,7 +544,10 @@ def explain_waterfall(model_name):
         if len(input_data) != 1:
             return jsonify({"error": "Waterfall explanation requires exactly one row of input"}), 400
 
-        shap_object = get_shap_value(impl, X=input_data)
+        # Query param ?aggregate_by=genus collapses Genus_species columns
+        # into single per-genus attributions — recommended for GCN models.
+        aggregate_by = request.args.get("aggregate_by")
+        shap_object = get_shap_value(impl, X=input_data, aggregate_by=aggregate_by)
         explain = [
             {
                 "id": idx,

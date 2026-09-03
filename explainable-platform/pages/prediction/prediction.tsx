@@ -32,30 +32,55 @@ export function History() {
   const [predictions, setPredictions] = useState<IPagination<IPredictions>>();
   const [isOpen, setIsOpen] = useState(false);
   const [selectPrediction, setSelectPrediction] = useState<IPredictions>();
-  const [regenHeatmap, setRegenHeatmap] = useState(false);
-  const [regenBeeswarm, setRegenBeeswarm] = useState(false);
 
   const currentPage = Number(router.query.page) || 1;
 
-  // Re-generate prediction-level plots. The backend queues a job and pushes
-  // the result over SSE as 'prediction:explain' (handled below).
+  // Patch one prediction in both the open drawer and its list row, so the
+  // two never drift apart (after an SSE update or an optimistic clear).
+  const patchPrediction = (id: string, patch: Partial<IPredictions>) => {
+    setSelectPrediction((prev) =>
+      prev && prev.id === id ? { ...prev, ...patch } : prev
+    );
+    setPredictions((prev) =>
+      prev
+        ? {
+            ...prev,
+            items: prev.items.map((it) =>
+              it.id === id ? { ...it, ...patch } : it
+            ),
+          }
+        : prev
+    );
+  };
+
+  // Re-generate prediction-level plots. The plot is optimistically cleared so
+  // the in-progress spinner — derived from "no image + no error" — shows at
+  // once. The backend also clears it server-side, so the state is correct
+  // after a refresh and is scoped to this prediction (no shared flag). The
+  // final result arrives over SSE as 'prediction:explain'.
   const onRegenHeatmap = async () => {
-    if (!selectPrediction?.id) return;
-    setRegenHeatmap(true);
+    const id = selectPrediction?.id;
+    if (!id) return;
+    patchPrediction(id, { heatmap: undefined, heatmapError: undefined });
     try {
-      await postRegenHeatmap(selectPrediction.id);
+      await postRegenHeatmap(id);
     } catch {
-      setRegenHeatmap(false);
+      const data = await getPredictionsRecordList();
+      const fresh = data.items.find((it) => it.id === id);
+      if (fresh) patchPrediction(id, fresh);
     }
   };
 
   const onRegenBeeswarm = async () => {
-    if (!selectPrediction?.id) return;
-    setRegenBeeswarm(true);
+    const id = selectPrediction?.id;
+    if (!id) return;
+    patchPrediction(id, { beeswarm: undefined, beeswarmError: undefined });
     try {
-      await postRegenBeeswarm(selectPrediction.id);
+      await postRegenBeeswarm(id);
     } catch {
-      setRegenBeeswarm(false);
+      const data = await getPredictionsRecordList();
+      const fresh = data.items.find((it) => it.id === id);
+      if (fresh) patchPrediction(id, fresh);
     }
   };
 
@@ -90,19 +115,12 @@ export function History() {
         try {
           const payload = JSON.parse(ev.data);
           if (ev.event === "prediction:explain") {
-            setSelectPrediction((prev) =>
-              prev && prev.id === payload.predictionId
-                ? {
-                    ...prev,
-                    heatmap: payload.heatmap,
-                    heatmapError: payload.heatmapError,
-                    beeswarm: payload.beeswarm,
-                    beeswarmError: payload.beeswarmError,
-                  }
-                : prev
-            );
-            setRegenHeatmap(false);
-            setRegenBeeswarm(false);
+            patchPrediction(payload.predictionId, {
+              heatmap: payload.heatmap,
+              heatmapError: payload.heatmapError,
+              beeswarm: payload.beeswarm,
+              beeswarmError: payload.beeswarmError,
+            });
           }
         } catch (err) {
           // eslint-disable-next-line no-console
@@ -267,7 +285,9 @@ export function History() {
               showShapLabel
               errorReason={selectPrediction?.beeswarmError}
               onRegenerate={onRegenBeeswarm}
-              regenerating={regenBeeswarm}
+              regenerating={
+                !selectPrediction?.beeswarm && !selectPrediction?.beeswarmError
+              }
             />
           </div>
           <div className="flex flex-col mb-3 mt-3 border-t-[1px] border-[#EAEAEA] pt-3">
@@ -284,7 +304,9 @@ export function History() {
               showShapLabel
               errorReason={selectPrediction?.heatmapError}
               onRegenerate={onRegenHeatmap}
-              regenerating={regenHeatmap}
+              regenerating={
+                !selectPrediction?.heatmap && !selectPrediction?.heatmapError
+              }
             />
           </div>
         </div>

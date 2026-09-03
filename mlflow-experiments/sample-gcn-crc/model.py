@@ -1,19 +1,22 @@
 """
 sample-gcn-crc
 ==============
-GCN-based CRC classifier on the same shapmat microbiome sample dataset used
-by ``sample-rf-crc``. Logged through the ``mlflow_explainable`` contract — the
-trained predictor *and* its SHAP explainer end up in a single self-contained
-pyfunc artifact. The kserve runtime loads them with a uniform interface and
-does not need to import any of the GCN classes from its own codebase.
+GCN-based CRC classifier on the shapmat microbiome sample dataset.
 
-Graph construction (per sample):
-    nodes        = bacteria (one node per feature column)
-    node feature = relative abundance of that bacterium for the given sample
-    edges        = shared bacteria co-abundance graph built from the
-                   *training* Spearman correlation matrix (top-k absolute
-                   correlations per node, symmetrised and de-duplicated)
-    label        = CRC status (graph-level binary classification)
+Graph construction reflects microbiome biology rather than treating
+abundances as generic tabular data:
+
+* CLR-transformed Spearman correlation thresholded at >0.4 — compositional-
+  aware co-abundance edges, no per-node top-k cap (so isolated bacteria
+  stay isolated instead of being lassoed to k random partners).
+* Same-genus taxonomic prior — pairs of features whose column names share a
+  genus token are always linked. With only 180 training samples this gives
+  the model a biological scaffold that a correlation-only graph cannot
+  recover from data alone.
+
+Per-sample preprocessing (low-abundance noise floor + CLR) lives INSIDE
+the wrapper, so the serving runtime stays microbiome-agnostic and uploads
+that arrive un-denoised are cleaned with the same recipe used at training.
 """
 
 import os
@@ -36,12 +39,10 @@ from torch_geometric.loader import DataLoader
 
 from mlflow_explainable import log_explainable_model
 
-# Class definitions live in their own module so that the autodetector in
-# ``log_explainable_model`` can resolve them to a file and pack them into the
-# artifact. The serving runtime never needs to import these names directly.
 from gcn_modules import (
     GCNClassifier,
     GCNTabularWrapper,
+    MicrobiomePreprocessor,
     build_edge_index,
     make_graph_dataset,
 )
@@ -73,20 +74,55 @@ print(f"[info] using device: {DEVICE}")
 
 
 # ---------------------------------------------------------------------------
-# Data (identical to sample-rf-crc)
+# Preprocessing config (fixed at training; pickled into the artifact)
+# ---------------------------------------------------------------------------
+# Drop bacteria present in < 15% of TRAIN samples — these contribute almost
+# entirely to noise correlations. The kept feature list is encoded into the
+# artifact via the wrapper's feature_names, so the runtime transformer
+# automatically narrows uploads to the same columns.
+PREVALENCE_THRESHOLD = 0.15
+
+# Zero out abundances below 1e-4 (~0.01% relative). Sits below p1 of the
+# non-zero values in the shapmat sample — clearly sequencing noise.
+NOISE_FLOOR = 1e-4
+
+# Small constant added before log() so CLR is defined on zeros.
+CLR_PSEUDOCOUNT = 1e-6
+
+# Spearman threshold on CLR-transformed training data. 0.4 is strict
+# enough to suppress noise correlations on 180 samples while still
+# producing a non-trivial number of statistical edges.
+CORR_THRESHOLD = 0.4
+
+
+# ---------------------------------------------------------------------------
+# Data
 # ---------------------------------------------------------------------------
 sample_url = "https://raw.githubusercontent.com/ryzary/shapmat/refs/heads/cv_notebook/data/sample.csv"
 sample_crc = pd.read_csv(sample_url, index_col=0)
-train_data = sample_crc.drop(["CRC"], axis=1)
-train_metadata = sample_crc[["CRC"]]
-train_ids = train_data.index
+all_X = sample_crc.drop(["CRC"], axis=1)
+all_y = sample_crc["CRC"]
 
-X = train_data.loc[train_ids]
-y = train_metadata["CRC"]
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=SEED
+# Split BEFORE the prevalence filter so the filter is computed on training
+# samples only (no information leak from the test set). ``stratify=all_y``
+# keeps the 112/68 CRC class ratio in both train and test — without this,
+# random splits can hand the test set an even more imbalanced mix and tank
+# the reported metrics.
+X_train_full, X_test_full, y_train, y_test = train_test_split(
+    all_X, all_y, test_size=0.2, random_state=SEED, stratify=all_y
 )
 
+train_prevalence = (X_train_full > 0).mean(axis=0)
+KEPT_FEATURES = list(train_prevalence[train_prevalence >= PREVALENCE_THRESHOLD].index)
+DROPPED_FEATURES = len(X_train_full.columns) - len(KEPT_FEATURES)
+print(
+    f"[info] prevalence filter: kept {len(KEPT_FEATURES)} / "
+    f"{len(X_train_full.columns)} features "
+    f"(dropped {DROPPED_FEATURES} with prevalence < {PREVALENCE_THRESHOLD * 100:.0f}%)"
+)
+
+X_train = X_train_full[KEPT_FEATURES]
+X_test = X_test_full[KEPT_FEATURES]
 FEATURE_NAMES = list(X_train.columns)
 N_FEATURES = len(FEATURE_NAMES)
 
@@ -96,16 +132,61 @@ N_FEATURES = len(FEATURE_NAMES)
 # ---------------------------------------------------------------------------
 os.environ["MLFLOW_TRACKING_USERNAME"] = "***REMOVED***"
 os.environ["MLFLOW_TRACKING_PASSWORD"] = "***REMOVED***"
-mlflow.set_tracking_uri("http://136.115.33.253:5000")
+mlflow.set_tracking_uri("http://<mlflow-host>:5000")
 mlflow.set_experiment("sample-gcn-crc")
+
+
+# ---------------------------------------------------------------------------
+# Preprocessor + graph — built once, shared across all hyperopt trials and
+# pickled into the artifact via the wrapper.
+# ---------------------------------------------------------------------------
+preprocessor = MicrobiomePreprocessor(
+    noise_floor=NOISE_FLOOR,
+    clr_pseudocount=CLR_PSEUDOCOUNT,
+)
+X_train_clr = pd.DataFrame(
+    preprocessor.transform(X_train),
+    columns=FEATURE_NAMES,
+    index=X_train.index,
+)
+EDGE_INDEX, EDGE_WEIGHT = build_edge_index(
+    X_train_clr,
+    corr_threshold=CORR_THRESHOLD,
+    include_taxonomic=True,
+    include_biomarker_guilds=True,
+)
+print(
+    f"[info] graph: {EDGE_INDEX.shape[1]} edges  "
+    f"(corr_threshold |spearman_clr|>{CORR_THRESHOLD}, taxonomic + CRC biomarker guild priors ON)"
+)
+
+# Class weights for the imbalanced 112/68 CRC split. PyTorch CE loss takes
+# a ``weight`` tensor with one entry per class; the convention is
+# ``n_total / (n_classes * n_in_class)`` so the rarer class is up-weighted.
+_train_class_counts = np.bincount(y_train.values.astype(int))
+CLASS_WEIGHTS = torch.tensor(
+    [len(y_train) / (2 * c) for c in _train_class_counts],
+    dtype=torch.float,
+).to(DEVICE)
+print(
+    f"[info] class weights (controls, CRC): "
+    f"{CLASS_WEIGHTS.cpu().numpy().round(3).tolist()}  "
+    f"(train counts: {_train_class_counts.tolist()})"
+)
 
 
 # ---------------------------------------------------------------------------
 # Training
 # ---------------------------------------------------------------------------
 def train_gcn(params, X_tr, y_tr):
-    edge_index = build_edge_index(X_tr, top_k=params["top_k"])
-    train_ds = make_graph_dataset(X_tr, y_tr, edge_index)
+    """Apply preprocessing then train the GCN on the shared weighted graph.
+
+    Uses class-weighted cross-entropy so the model is not free to default to
+    the majority class — that was the dominant failure mode in the previous
+    iteration (accuracy ≈ majority baseline).
+    """
+    X_tr_clr = preprocessor.transform(X_tr)
+    train_ds = make_graph_dataset(X_tr_clr, y_tr, EDGE_INDEX, EDGE_WEIGHT)
     train_loader = DataLoader(
         train_ds, batch_size=params["batch_size"], shuffle=True
     )
@@ -116,6 +197,7 @@ def train_gcn(params, X_tr, y_tr):
         num_layers=params["num_layers"],
         num_classes=2,
         dropout=params["dropout"],
+        edge_dropout=params["edge_dropout"],
     ).to(DEVICE)
 
     optimizer = torch.optim.Adam(
@@ -123,27 +205,32 @@ def train_gcn(params, X_tr, y_tr):
         lr=params["lr"],
         weight_decay=params["weight_decay"],
     )
-    loss_fn = torch.nn.CrossEntropyLoss()
+    loss_fn = torch.nn.CrossEntropyLoss(weight=CLASS_WEIGHTS)
 
     model.train()
     for _ in range(params["epochs"]):
         for batch in train_loader:
             batch = batch.to(DEVICE)
             optimizer.zero_grad()
-            out = model(batch.x, batch.edge_index, batch.batch)
+            out = model(
+                batch.x,
+                batch.edge_index,
+                batch.batch,
+                edge_weight=batch.edge_weight,
+            )
             loss = loss_fn(out, batch.y)
             loss.backward()
             optimizer.step()
 
-    return model, edge_index
+    return model
 
 
 def _cast_params(raw):
     return {
-        "top_k": int(raw["top_k"]),
         "hidden_channels": int(raw["hidden_channels"]),
         "num_layers": int(raw["num_layers"]),
         "dropout": float(raw["dropout"]),
+        "edge_dropout": float(raw["edge_dropout"]),
         "lr": float(raw["lr"]),
         "weight_decay": float(raw["weight_decay"]),
         "epochs": int(raw["epochs"]),
@@ -155,13 +242,28 @@ def objective(params):
     with mlflow.start_run():
         params = _cast_params(params)
 
+        # Log preprocessing config (fixed across trials) + model params + graph stats
         mlflow.log_param("features_bacteria", N_FEATURES)
+        mlflow.log_param("features_dropped_by_prevalence", DROPPED_FEATURES)
+        mlflow.log_param("prevalence_threshold", PREVALENCE_THRESHOLD)
+        mlflow.log_param("noise_floor", NOISE_FLOOR)
+        mlflow.log_param("clr_pseudocount", CLR_PSEUDOCOUNT)
+        mlflow.log_param("corr_threshold", CORR_THRESHOLD)
+        mlflow.log_param("graph_taxonomic_prior", True)
+        mlflow.log_metric("n_edges", int(EDGE_INDEX.shape[1]))
         mlflow.log_param("model_type", "GCN")
         mlflow.log_params(params)
 
         # Train
-        model, edge_index = train_gcn(params, X_train, y_train)
-        wrapper = GCNTabularWrapper(model, edge_index, DEVICE, FEATURE_NAMES)
+        model = train_gcn(params, X_train, y_train)
+        wrapper = GCNTabularWrapper(
+            model,
+            EDGE_INDEX,
+            EDGE_WEIGHT,
+            DEVICE,
+            FEATURE_NAMES,
+            preprocessor=preprocessor,
+        )
 
         # Evaluation
         y_pred = wrapper.predict(X_test)
@@ -179,15 +281,12 @@ def objective(params):
         mlflow.log_metric("recall", round(recall, 3))
         mlflow.log_metric("f1", round(f1, 3))
         mlflow.log_metric("roc_auc", round(roc_auc, 3))
-        mlflow.log_metric("n_edges", int(edge_index.shape[1]))
 
         print(f"Trial with params: {params}, Accuracy: {accuracy:.4f}")
 
-        # SHAP background — keep this SMALL. PermutationExplainer evaluates
-        # the GCN once per (coalition x background row); a full X_train masker
-        # (~120 rows) pushes the explain endpoints to ~70s/sample. 16 rows
-        # keeps explanations representative while bringing per-sample SHAP
-        # down to a usable range.
+        # SHAP background — keep small. PermutationExplainer evaluates the GCN
+        # once per (coalition x background row); a full X_train masker pushes
+        # the explain endpoints to ~70s/sample. 16 rows keeps it usable.
         shap_background = shap.sample(X_train, 16, random_state=SEED)
 
         # Single-call: log predictor + SHAP explainer + feature_names artifact
@@ -205,13 +304,16 @@ def objective(params):
 
 
 # ---------------------------------------------------------------------------
-# Search space
+# Search space (graph hyperparameters are fixed at the top of the file; only
+# the model is tuned by hyperopt).
 # ---------------------------------------------------------------------------
 space = {
-    "top_k": hp.quniform("top_k", 3, 15, 1),
     "hidden_channels": hp.choice("hidden_channels", [32, 64, 128, 256]),
     "num_layers": hp.quniform("num_layers", 2, 4, 1),
     "dropout": hp.uniform("dropout", 0.1, 0.5),
+    # DropEdge probability (Rong et al., ICLR 2020) — fraction of edges
+    # removed per forward pass at training time.
+    "edge_dropout": hp.uniform("edge_dropout", 0.0, 0.3),
     "lr": hp.loguniform("lr", np.log(1e-4), np.log(1e-2)),
     "weight_decay": hp.loguniform("weight_decay", np.log(1e-6), np.log(1e-3)),
     "epochs": hp.choice("epochs", [50, 100, 150, 200]),
@@ -227,7 +329,7 @@ best = fmin(
     fn=objective,
     space=space,
     algo=tpe.suggest,
-    max_evals=5,
+    max_evals=50,
     trials=trials,
 )
 print("\nBest parameters:", best)

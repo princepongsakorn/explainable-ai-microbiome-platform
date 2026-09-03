@@ -16,9 +16,15 @@ export const ShapPlotPlaceholder = (props: {
   regenerating?: boolean;
 }) => {
   const [isError, setIsError] = useState(false);
+  // Whether the <img> for the CURRENT src has finished downloading. Reset on
+  // every src change so switching drawers shows a skeleton instead of the
+  // previous prediction's stale image while the new (often large, presigned)
+  // PNG is still loading over the network.
+  const [imgLoaded, setImgLoaded] = useState(false);
 
   useEffect(() => {
     setIsError(isNull(props.src) || props.src === undefined || props.src === "");
+    setImgLoaded(false);
   }, [props.src]);
 
   // Distinguish the two failure modes so the user knows whether the plot
@@ -39,7 +45,7 @@ export const ShapPlotPlaceholder = (props: {
         <div className="mb-4 h-10 w-10 rounded-full border-4 border-gray-200 border-t-blue-600 animate-spin" />
         <div>Re-generating {props.plotName ? props.plotName : "image"}…</div>
         <div className="text-gray-400">
-          This can take a while for neural-network models.
+          This can take a while depending on the model and dataset size.
         </div>
       </div>
     );
@@ -81,7 +87,18 @@ export const ShapPlotPlaceholder = (props: {
       ) : (
         <>
           {props.showShapLabel && <ShapLabel />}
-          <img src={props.src} onError={() => setIsError(true)} />
+          <div className={`relative ${imgLoaded ? "" : "h-[400px]"}`}>
+            {!imgLoaded && (
+              <div className="absolute inset-0 rounded-lg bg-gray-100 animate-pulse" />
+            )}
+            <img
+              key={props.src}
+              src={props.src}
+              onLoad={() => setImgLoaded(true)}
+              onError={() => setIsError(true)}
+              className={imgLoaded ? "w-full" : "opacity-0"}
+            />
+          </div>
           {props.onRegenerate && (
             <div className="mt-2 flex justify-end">
               <button

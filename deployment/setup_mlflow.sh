@@ -6,8 +6,8 @@
 #          (reads credentials from /root/mlflow_db_credentials.txt)
 #
 # Usage:
-#   scp setup_mlflow.sh print@34.57.22.206:~
-#   ssh print@34.57.22.206
+#   scp setup_mlflow.sh print@<mlflow-host>:~
+#   ssh print@<mlflow-host>
 #   chmod +x setup_mlflow.sh
 #   sudo ./setup_mlflow.sh
 #
