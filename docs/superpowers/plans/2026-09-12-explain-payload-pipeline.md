@@ -800,6 +800,86 @@ git commit -m "feat(web): render the global SHAP bar chart from the explain payl
 
 ---
 
+### Task 10: Stop re-unpickling the model on every request
+
+**Files:** Modify `kserve-custom-runtime/kserve-shap-multi-modelserver.py:88-104`
+
+`@memory.cache` on `_load_pyfunc_cached` is a **disk** cache: every "hit" hashes the args, then reads
+and unpickles the stored value. Measured ~2.3 ms/MB warm, so a 200-400 MB torch+shap bundle costs
+**0.5-1.0 s of blocking work per request** before any real work starts, and hands each caller a fresh
+object so no warm explainer state survives.
+
+- [ ] **Step 1:** Wrap the joblib-cached loader in a process-local `functools.lru_cache(maxsize=4)`
+  keyed on `model_uri`. Keep the joblib layer as the cold-start path — it is what avoids re-downloading
+  artifacts when a pod restarts.
+- [ ] **Step 2:** Confirm with two consecutive identical requests that the second does no disk read
+  (log a line in the loader and check it appears once).
+- [ ] **Step 3:** Commit.
+
+---
+
+### Task 11: Cache the MLflow registry lookup
+
+**Files:** Modify `kserve-custom-runtime/kserve-shap-multi-modelserver.py:92-104`
+
+`load_explainable_model` builds a fresh `MlflowClient` and calls `get_latest_versions` on every
+request — a blocking 10-200 ms round trip to the tracking server, which also makes the whole service
+fail whenever MLflow is briefly unreachable.
+
+- [ ] **Step 1:** Add a TTL cache (30-60 s) over `model_name -> (version, run_id)`. Fold it into the
+  same cache as Task 10 if that is simpler.
+- [ ] **Step 2:** Decide and document what happens when the lookup fails but a cached entry exists —
+  serving the cached version is almost certainly right, and is the point of the change.
+- [ ] **Step 3:** Commit.
+
+---
+
+### Task 12: One preamble for the five model endpoints
+
+**Files:** Modify `kserve-custom-runtime/kserve-shap-multi-modelserver.py` — `explain_values`,
+`explain_beeswarm`, `explain_heatmap`, `explain_waterfall`, `predict`
+
+All five repeat `_load_model_or_error` -> `get_json` -> `_parse_dataframe_split` -> `transformer`, and
+three carry a byte-identical `?aggregate_by=genus` comment that duplicates `get_shap_value`'s docstring.
+**They have already drifted**: only `explain_values` maps `PayloadError` to 400; the others fall to a
+generic 500 for the same bad input.
+
+- [ ] **Step 1:** Extract `_prepare(model_name) -> (loaded, impl, X, None) | (None, None, None, (resp, status))`.
+- [ ] **Step 2:** Rewrite the five handlers to use it; delete the three duplicated comments.
+- [ ] **Step 3:** Decide deliberately whether a malformed JSON body should now surface as Flask's 400
+  rather than the current 500 — it is a behaviour change either way, so make it on purpose.
+- [ ] **Step 4:** Verify all four explain endpoints and predict still respond identically for a good
+  request, and consistently for a bad one. Commit.
+
+---
+
+### Task 13: Faster JSON serialization (optional, adds a dependency)
+
+**Files:** Modify `kserve-custom-runtime/requirements.txt`, `kserve-shap-multi-modelserver.py`
+
+Measured on a 7 MB payload: `jsonify` 181 ms, stdlib `json.dumps` 203 ms (**slower** — Flask already
+uses the C encoder), `orjson.dumps` **38 ms**. After Task 10-12, serialization is the dominant remaining
+cost of the endpoint.
+
+- [ ] **Step 1:** Pin `orjson` and return `Response(orjson.dumps(payload), mimetype="application/json")`
+  from `/v1/explain/values` only — leave the small JSON endpoints on `jsonify`.
+- [ ] **Step 2:** Confirm the response bytes parse identically to the `jsonify` output.
+- [ ] **Step 3:** Commit.
+
+Skip this task if adding a dependency to the runtime image is not wanted; Tasks 10-12 are worth far
+more than it is.
+
+---
+
+## Not a task: committed credentials
+
+`deployment/01.set-mlflow-secret.yaml` contains `MLFLOW_TRACKING_PASSWORD: cGFzc3dvcmQ=` (base64 of
+`password`) and an AWS access key id, committed to the repository. Base64 is an encoding, not
+encryption. These should be treated as disclosed and **rotated**, and replaced with a sealed secret or
+an external secret store. This is the owner's call to make, not a refactor to schedule.
+
+---
+
 ## Definition of done
 
 - A Prediction produces exactly one queue job and one GCS object.
