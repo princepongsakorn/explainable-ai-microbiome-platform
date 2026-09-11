@@ -77,6 +77,49 @@ export class StorageService {
   }
 
   /**
+   * Store an already-gzipped JSON payload.
+   *
+   * Deliberately separate from uploadToS3(), which takes base64 and hardcodes
+   * image/png. Storing the bytes gzipped and serving them through with
+   * `Content-Encoding: gzip` avoids a decompress/recompress hop on every read.
+   */
+  async uploadJsonGzip(
+    gzipped: Buffer,
+    path: string,
+    fileName: string,
+  ): Promise<string> {
+    const key = `${this.prefix}/${path}/${fileName}`;
+    try {
+      await this.bucket.file(key).save(gzipped, {
+        contentType: 'application/json',
+        resumable: false,
+        metadata: {
+          // contentEncoding belongs to the object's metadata, not to SaveOptions.
+          // Setting it here is what lets the bytes be served through to the browser
+          // still compressed.
+          contentEncoding: 'gzip',
+          cacheControl: 'private, max-age=0, must-revalidate',
+        },
+      });
+      return key;
+    } catch (error) {
+      this.logger.error(`uploadJsonGzip failed for ${key}`, error as Error);
+      throw error;
+    }
+  }
+
+  /** Stream stored bytes straight to the response. */
+  createReadStream(key: string): NodeJS.ReadableStream {
+    return this.bucket.file(key).createReadStream();
+  }
+
+  /** Read a stored object into memory — used to slice one Sample out of the matrix. */
+  async download(key: string): Promise<Buffer> {
+    const [contents] = await this.bucket.file(key).download();
+    return contents;
+  }
+
+  /**
    * Generate a V4 signed URL for read access (default TTL: 1 hour).
    *
    * Requires the compute SA to have roles/iam.serviceAccountTokenCreator
