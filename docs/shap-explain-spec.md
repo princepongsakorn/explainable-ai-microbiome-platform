@@ -74,12 +74,18 @@ rather than coercing them (see §2.1).
 | --- | --- | --- |
 | I1 | `values.length === data.length === base_values.length === n` | producer + consumer validation |
 | I2 | every row of `values` and `data` has length `feature_names.length === p` | producer + consumer validation |
-| I3 | `base_values[i] + Σ values[i]` equals the Model output for Sample `i` **within 1e-3 relative tolerance** | test only — the payload does not carry `f(x)` |
+| I3 | `base_values[i] + Σ values[i]` equals the Model output for Sample `i` **within 1e-3 absolute** | test only — the payload does not carry `f(x)` |
 | I4 | no `NaN`, no `Infinity`, no `null` in `values`, `data`, `base_values` | producer |
 | I5 | `contract_version` is an integer the consumer recognises, else the consumer throws a named error | consumer |
 
 I3's tolerance is a consequence of §1.4: 4-significant-figure rounding breaks exact additivity.
 Tests MUST use the tolerance and MUST NOT assert exact equality.
+
+The tolerance is **absolute, not relative**, and that is deliberate. The Model output is a probability
+which can be exactly `0`, and a relative tolerance against zero is meaningless — it either divides by
+zero or, guarded with an epsilon, reports an astronomical error for a rounding difference of 1e-8.
+Measured on the 201-Feature fixture, unrounded additivity error is **1.4e-08** and post-rounding error
+is **1.09e-04**; the error grows roughly with √p, so 1e-3 leaves headroom at p = 865.
 
 ---
 

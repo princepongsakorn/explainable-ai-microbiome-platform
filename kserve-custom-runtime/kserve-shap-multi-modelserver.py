@@ -30,6 +30,8 @@ from mlflow.server import get_app_client  # noqa: E402
 
 from mlflow_explainable import ExplainableModel  # noqa: E402
 
+from explain_payload import build_payload  # noqa: E402
+
 # Matplotlib uses global pyplot state. Flask serves requests in multiple
 # threads by default (threaded=True since Flask 1.0), so concurrent
 # /v1/explain/* calls can race on plt.figure() / plt.savefig() / plt.close()
@@ -58,8 +60,14 @@ def safe_jsonify(obj):
 
 
 class ShapValueObject:
-    def __init__(self, base_value, shap_df, explanation):
+    def __init__(self, base_value, shap_df, explanation, base_values=None):
+        # Scalar, for the matplotlib waterfall helper which requires one.
         self.base_value = base_value
+        # Per-sample, for the JSON payload. See docs/shap-explain-spec.md 1.3:
+        # collapsing to sample 0's value is correct for TreeExplainer (which
+        # tiles one expected value across every row) and wrong for the
+        # permutation path (which computes one per row).
+        self.base_values = base_values
         self.shap_df = shap_df
         self.explanation = explanation
 
@@ -250,7 +258,24 @@ def get_shap_value(impl, X, aggregate_by: str | None = None):
     shap_df = pd.DataFrame(
         values_class, columns=feature_names, index=patient_ids
     )
-    return ShapValueObject(base_scalar, shap_df, explanation)
+
+    # Broadcast to one base value per sample without assuming they are equal.
+    import numpy as np  # local import: numpy is already a transitive dependency
+
+    base_arr = np.asarray(base_value, dtype=float).ravel()
+    n_rows = values_class.shape[0]
+    if base_arr.size == n_rows:
+        base_values = base_arr
+    elif base_arr.size == 1:
+        base_values = np.repeat(base_arr, n_rows)
+    else:
+        logger.warning(
+            "base_values has size %s for %s samples; falling back to the scalar",
+            base_arr.size, n_rows,
+        )
+        base_values = np.repeat(np.asarray([base_scalar], dtype=float), n_rows)
+
+    return ShapValueObject(base_scalar, shap_df, explanation, base_values=base_values)
 
 
 # ---------------------------------------------------------------------------
@@ -443,7 +468,18 @@ def _parse_dataframe_split(req_json):
         )
     columns = req_json["dataframe_split"]["columns"]
     data = req_json["dataframe_split"]["data"]
-    return pd.DataFrame(data=data, columns=columns), None
+    # `index` is optional and ignored by the plot endpoints. /v1/explain/values
+    # uses it to label each Sample with the caller's own identifier.
+    index = req_json["dataframe_split"].get("index")
+    if index is not None and len(index) != len(data):
+        return None, (
+            jsonify({
+                "error": f"dataframe_split.index has {len(index)} entries "
+                         f"but data has {len(data)} rows."
+            }),
+            400,
+        )
+    return pd.DataFrame(data=data, columns=columns, index=index), None
 
 
 def _load_model_or_error(model_name):
@@ -480,6 +516,46 @@ def _load_model_or_error(model_name):
 
 
 # ---- explain endpoints -----------------------------------------------------
+@app.route("/v1/explain/values/<model_name>", methods=["POST"])
+def explain_values(model_name):
+    """Return SHAP values as JSON — docs/shap-explain-spec.md 1.
+
+    Unlike the three plot endpoints below this holds no matplotlib lock: it is
+    pure numerics, so concurrent requests actually run concurrently.
+    """
+    loaded, impl, input_columns, err = _load_model_or_error(model_name)
+    if err:
+        return err
+
+    try:
+        req_json = request.get_json()
+        input_df, err = _parse_dataframe_split(req_json)
+        if err:
+            return err
+        input_data = transformer(input_df, input_columns)
+
+        aggregate_by = request.args.get("aggregate_by")
+        shap_object = get_shap_value(impl, X=input_data, aggregate_by=aggregate_by)
+
+        payload = build_payload(
+            values=shap_object.shap_df.values,
+            base_values=shap_object.base_values,
+            data=shap_object.explanation.data,
+            feature_names=list(shap_object.shap_df.columns),
+            sample_ids=[str(i) for i in shap_object.shap_df.index],
+            model_name=model_name,
+        )
+        return jsonify(payload)
+    except ValueError as e:
+        # build_payload raises this for non-finite values, which means the caller
+        # sent something transformer() could not coerce. That is a client error.
+        logger.warning("explain_values rejected input for '%s': %s", model_name, e)
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:  # noqa: BLE001
+        logger.exception("explain_values failed")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/v1/explain/beeswarm/<model_name>", methods=["POST"])
 def explain_beeswarm(model_name):
     loaded, impl, input_columns, err = _load_model_or_error(model_name)
