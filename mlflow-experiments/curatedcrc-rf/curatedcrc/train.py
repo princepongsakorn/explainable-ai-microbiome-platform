@@ -1,4 +1,4 @@
-"""Track A: Hyperopt tuning, MLflow logging, and safe model registration."""
+"""Track A: fixed-parameter reference training, MLflow logging, and safe registration."""
 
 from __future__ import annotations
 
@@ -11,14 +11,13 @@ from typing import Any
 import mlflow
 import numpy as np
 import pandas as pd
-from hyperopt import STATUS_OK, Trials, fmin, hp, tpe
 from mlflow.tracking import MlflowClient
 from mlflow_explainable import log_explainable_model
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import RepeatedStratifiedKFold, cross_validate
 
 from .data import PreparedDataset
+from .evaluate import reference_model
 
 
 DEFAULT_TRACKING_URI = "http://35.225.129.127:5000"
@@ -26,18 +25,13 @@ DEFAULT_EXPERIMENT_NAME = "crc-curatedcrc-rf"
 DEFAULT_REGISTERED_NAME = "crc-curatedcrc-rf"
 PROTECTED_MODEL_NAMES = frozenset({"sample-rf-crc", "ryza-rynazal-crc"})
 REQUIRED_METRICS = ("roc_auc", "accuracy", "precision", "recall", "f1")
+CV_SPLITS = 10
+CV_REPEATS = 10
+CV_RANDOM_STATE = 0
 
 
 @dataclass(frozen=True)
-class HoldoutSplit:
-    X_train: pd.DataFrame
-    X_test: pd.DataFrame
-    y_train: pd.Series
-    y_test: pd.Series
-
-
-@dataclass(frozen=True)
-class TrialResult:
+class TrainedModel:
     run_id: str
     model: RandomForestClassifier
     params: dict[str, Any]
@@ -50,59 +44,72 @@ class RegistrationResult:
     name: str
     version: str
     stage: str
+    archived_versions: list[str]
     production_before: dict[str, dict[str, Any]]
     production_after: dict[str, dict[str, Any]]
 
 
-def make_holdout(
+def reference_params() -> dict[str, Any]:
+    """The Rynazal comparison parameters, read off the shared reference model."""
+    params = reference_model().get_params()
+    return {
+        "n_estimators": params["n_estimators"],
+        "max_depth": params["max_depth"],
+        "random_state": params["random_state"],
+        "class_weight": params["class_weight"],
+    }
+
+
+def labels_for(prepared: PreparedDataset) -> pd.Series:
+    return prepared.metadata.loc[prepared.X.index, "CRC"]
+
+
+def cross_validated_metrics(
     prepared: PreparedDataset,
     *,
-    test_size: float = 0.2,
-    random_state: int = 42,
-) -> HoldoutSplit:
-    y = prepared.metadata.loc[prepared.X.index, "CRC"]
-    X_train, X_test, y_train, y_test = train_test_split(
-        prepared.X,
-        y,
-        test_size=test_size,
-        random_state=random_state,
-        stratify=y,
-    )
-    return HoldoutSplit(X_train, X_test, y_train, y_test)
-
-
-def evaluate_model(
-    model: RandomForestClassifier,
-    X_test: pd.DataFrame,
-    y_test: pd.Series,
+    n_splits: int = CV_SPLITS,
+    n_repeats: int = CV_REPEATS,
+    random_state: int = CV_RANDOM_STATE,
 ) -> dict[str, float]:
-    prediction = model.predict(X_test)
-    probability = model.predict_proba(X_test)[:, 1]
-    return {
-        "roc_auc": float(roc_auc_score(y_test, probability)),
-        "accuracy": float(accuracy_score(y_test, prediction)),
-        "precision": float(precision_score(y_test, prediction, zero_division=0)),
-        "recall": float(recall_score(y_test, prediction, zero_division=0)),
-        "f1": float(f1_score(y_test, prediction, zero_division=0)),
-    }
+    """Pooled repeated stratified CV over all 802 samples with the fixed model."""
+    splitter = RepeatedStratifiedKFold(
+        n_splits=n_splits,
+        n_repeats=n_repeats,
+        random_state=random_state,
+    )
+    scores = cross_validate(
+        reference_model(),
+        prepared.X,
+        labels_for(prepared),
+        cv=splitter,
+        scoring={name: name for name in REQUIRED_METRICS},
+        n_jobs=1,
+    )
+    metrics: dict[str, float] = {}
+    for name in REQUIRED_METRICS:
+        fold_scores = scores[f"test_{name}"]
+        metrics[name] = float(np.mean(fold_scores))
+        metrics[f"{name}_std"] = float(np.std(fold_scores, ddof=0))
+    metrics["cv_fits"] = float(len(scores[f"test_{REQUIRED_METRICS[0]}"]))
+    return metrics
 
 
-def search_space() -> dict[str, Any]:
-    return {
-        "n_estimators": hp.quniform("n_estimators", 50, 1000, 50),
-        "max_depth": hp.choice("max_depth", [10, 20, 50, 100, None]),
-        "min_samples_leaf": hp.quniform("min_samples_leaf", 1, 5, 1),
-        "min_samples_split": hp.quniform("min_samples_split", 2, 6, 1),
-        "class_weight": hp.choice("class_weight", [None, "balanced"]),
-        "max_features": hp.choice("max_features", ["sqrt", "log2", None]),
-    }
-
-
-def _coerce_params(params: dict[str, Any]) -> dict[str, Any]:
-    result = dict(params)
-    for key in ("n_estimators", "min_samples_leaf", "min_samples_split"):
-        result[key] = int(result[key])
-    return result
+def paper_comparison_metrics(output_dir: Path) -> dict[str, float]:
+    """Per-cohort CV and LODO AUCs from Track B, so one run carries every paper number."""
+    output_dir = Path(output_dir)
+    metrics: dict[str, float] = {}
+    cohort_path = output_dir / "track_b_cohort_cv.csv"
+    if cohort_path.is_file():
+        cohort_table = pd.read_csv(cohort_path)
+        for row in cohort_table.itertuples(index=False):
+            metrics[f"cv10x10_auc_{row.evaluation_group}"] = float(row.mean_auc)
+    lodo_path = output_dir / "track_b_lodo.csv"
+    if lodo_path.is_file():
+        lodo_table = pd.read_csv(lodo_path)
+        for row in lodo_table.itertuples(index=False):
+            metrics[f"lodo_auc_{row.held_out_cohort}"] = float(row.roc_auc)
+        metrics["lodo_mean_auc"] = float(lodo_table["roc_auc"].mean())
+    return metrics
 
 
 def _provenance_tags(prepared: PreparedDataset, workflow_id: str) -> dict[str, str]:
@@ -112,74 +119,63 @@ def _provenance_tags(prepared: PreparedDataset, workflow_id: str) -> dict[str, s
         "dataset_sha256": str(prepared.provenance["sha256"]),
         "source_commit": str(prepared.provenance["source_commit"]),
         "paper_commit": str(prepared.provenance["paper_commit"]),
-        "split": "stratified-80-20-random_state-42",
-        "selection_metric": "roc_auc",
+        "training_data": "full-802-no-holdout",
+        "hyperparameter_search": "none-fixed-rynazal-parameters",
+        "evaluation": f"pooled-{CV_SPLITS}-fold-{CV_REPEATS}-repeat-cv",
     }
 
 
-def run_hyperopt(
+def train_reference_model(
     prepared: PreparedDataset,
     *,
     tracking_uri: str = DEFAULT_TRACKING_URI,
     experiment_name: str = DEFAULT_EXPERIMENT_NAME,
-    max_evals: int = 50,
-    random_state: int = 0,
-) -> tuple[TrialResult, HoldoutSplit, list[TrialResult]]:
-    if max_evals < 1:
-        raise ValueError("max_evals must be positive")
+    extra_metrics: dict[str, float] | None = None,
+) -> TrainedModel:
+    """Score the fixed model by repeated CV, then fit it on every sample."""
     mlflow.set_tracking_uri(tracking_uri)
     mlflow.set_experiment(experiment_name)
-    split = make_holdout(prepared)
     workflow_id = uuid.uuid4().hex
-    trial_results: list[TrialResult] = []
+    params = reference_params()
+    y = labels_for(prepared)
 
-    def objective(raw_params: dict[str, Any]) -> dict[str, Any]:
-        params = _coerce_params(raw_params)
-        trial_number = len(trial_results) + 1
-        with mlflow.start_run(run_name=f"curatedcrc-trial-{trial_number:02d}") as run:
-            mlflow.set_tags(_provenance_tags(prepared, workflow_id))
-            mlflow.set_tag(
-                "mlflow.note.content",
-                "802-sample curatedCRC RF tuning; SHAPMAT ab_filter(1e-5, 0.9); "
-                f"{prepared.raw_feature_count}->{prepared.filtered_feature_count} features.",
-            )
-            mlflow.log_params(
-                {
-                    **params,
-                    "random_state": 0,
-                    "model_type": "RandomForest",
-                    "samples": len(prepared.X),
-                    "features_bacteria_raw": prepared.raw_feature_count,
-                    "features_bacteria": prepared.filtered_feature_count,
-                    "abundance_threshold": prepared.provenance["abundance_threshold"],
-                    "prevalence_threshold": prepared.provenance["prevalence_threshold"],
-                }
-            )
-            model = RandomForestClassifier(**params, random_state=0, n_jobs=-1)
-            model.fit(split.X_train, split.y_train)
-            metrics = evaluate_model(model, split.X_test, split.y_test)
-            mlflow.log_metrics(metrics)
-            result = TrialResult(run.info.run_id, model, params, metrics, workflow_id)
-            trial_results.append(result)
-            print(
-                f"trial={trial_number:02d}/{max_evals} run_id={run.info.run_id} "
-                f"roc_auc={metrics['roc_auc']:.4f} accuracy={metrics['accuracy']:.4f}"
-            )
-            return {"loss": -metrics["roc_auc"], "status": STATUS_OK}
-
-    fmin(
-        fn=objective,
-        space=search_space(),
-        algo=tpe.suggest,
-        max_evals=max_evals,
-        trials=Trials(),
-        rstate=np.random.default_rng(random_state),
-    )
-    best = max(trial_results, key=lambda item: item.metrics["roc_auc"])
-    with mlflow.start_run(run_id=best.run_id):
-        mlflow.set_tag("selection_status", "best")
-        mlflow.set_tag("selection_metric", "roc_auc")
-    return best, split, trial_results
+    with mlflow.start_run(run_name="curatedcrc-reference-rf-500") as run:
+        mlflow.set_tags(_provenance_tags(prepared, workflow_id))
+        mlflow.set_tag(
+            "mlflow.note.content",
+            "802-sample curatedCRC RF with Rynazal et al. parameters (no tuning); "
+            "SHAPMAT ab_filter(1e-5, 0.9); "
+            f"{prepared.raw_feature_count}->{prepared.filtered_feature_count} features. "
+            "Metrics are pooled 10-fold x 10-repeat CV; the registered model is fit on all "
+            "802 samples.",
+        )
+        mlflow.log_params(
+            {
+                **params,
+                "model_type": "RandomForest",
+                "parameter_source": "Rynazal et al. comparison protocol",
+                "samples": len(prepared.X),
+                "features_bacteria_raw": prepared.raw_feature_count,
+                "features_bacteria": prepared.filtered_feature_count,
+                "abundance_threshold": prepared.provenance["abundance_threshold"],
+                "prevalence_threshold": prepared.provenance["prevalence_threshold"],
+                "cv_splits": CV_SPLITS,
+                "cv_repeats": CV_REPEATS,
+                "cv_random_state": CV_RANDOM_STATE,
+            }
+        )
+        print(
+            f"cross-validating {CV_SPLITS}-fold x {CV_REPEATS}-repeat "
+            f"({CV_SPLITS * CV_REPEATS} fits) on {len(prepared.X)} samples...",
+            flush=True,
+        )
+        metrics = cross_validated_metrics(prepared)
+        if extra_metrics:
+            metrics.update(extra_metrics)
+        mlflow.log_metrics(metrics)
+        print("fitting the registered model on all samples...", flush=True)
+        model = reference_model().fit(prepared.X, y)
+        return TrainedModel(run.info.run_id, model, params, metrics, workflow_id)
 
 
 def production_snapshot(client: MlflowClient) -> dict[str, dict[str, Any]]:
@@ -214,9 +210,9 @@ def _resolve_version(info: Any, client: MlflowClient, name: str, run_id: str) ->
     return str(matches[0].version)
 
 
-def register_best_model(
-    best: TrialResult,
-    split: HoldoutSplit,
+def register_model(
+    trained: TrainedModel,
+    background: pd.DataFrame,
     *,
     registered_name: str = DEFAULT_REGISTERED_NAME,
     explainer: Any | None = None,
@@ -226,20 +222,25 @@ def register_best_model(
         raise ValueError(f"Refusing protected registered model name: {registered_name}")
     client = MlflowClient()
     before = production_snapshot(client)
-    with mlflow.start_run(run_id=best.run_id):
+    superseded = [
+        str(version.version)
+        for version in client.search_model_versions(f"name = '{registered_name}'")
+        if version.current_stage == "Staging"
+    ]
+    with mlflow.start_run(run_id=trained.run_id):
         info = log_explainable_model(
-            model=best.model,
-            background=split.X_train,
+            model=trained.model,
+            background=background,
             registered_name=registered_name,
             explainer=explainer,
             extra_artifacts=extra_artifacts,
         )
-    version = _resolve_version(info, client, registered_name, best.run_id)
+    version = _resolve_version(info, client, registered_name, trained.run_id)
     client.transition_model_version_stage(
         name=registered_name,
         version=version,
         stage="Staging",
-        archive_existing_versions=False,
+        archive_existing_versions=True,
     )
     after = production_snapshot(client)
     if after != before:
@@ -251,23 +252,26 @@ def register_best_model(
         name=registered_name,
         version=version,
         stage="Staging",
+        archived_versions=sorted(item for item in superseded if item != version),
         production_before=before,
         production_after=after,
     )
 
 
-def save_best_run(
-    best: TrialResult,
-    split: HoldoutSplit,
+def save_run_summary(
+    trained: TrainedModel,
+    prepared: PreparedDataset,
     destination: Path,
 ) -> None:
     payload = {
-        "workflow_id": best.workflow_id,
-        "best_run_id": best.run_id,
-        "selection_metric": "roc_auc",
-        "params": best.params,
-        "metrics": best.metrics,
-        "train_samples": len(split.X_train),
-        "test_samples": len(split.X_test),
+        "workflow_id": trained.workflow_id,
+        "run_id": trained.run_id,
+        "hyperparameter_search": "none",
+        "parameter_source": "Rynazal et al. comparison protocol",
+        "params": trained.params,
+        "metrics": trained.metrics,
+        "evaluation": f"pooled {CV_SPLITS}-fold x {CV_REPEATS}-repeat stratified CV",
+        "training_samples": int(len(prepared.X)),
+        "holdout_samples": 0,
     }
     Path(destination).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")

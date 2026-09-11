@@ -49,31 +49,61 @@ The old `sample-data/sample-60-row.csv` is not reused because it comes from the 
 
 ```bash
 .venv/bin/python mlflow-experiments/curatedcrc-rf/scripts/train_track_a.py \
-  --tracking-uri http://35.225.129.127:5000 \
-  --max-evals 50
+  --tracking-uri http://35.225.129.127:5000
 ```
 
-Track A uses an 80/20 stratified split (`random_state=42`) and Hyperopt TPE (`random_state=0`). Every trial logs `roc_auc`, `accuracy`, `precision`, `recall`, and `f1`. The search covers 50–1000 estimators plus `max_depth`, `min_samples_leaf`, `min_samples_split`, `max_features`, and `class_weight` choices used by `sample-rf-crc`, but selection is by holdout ROC AUC instead of the old script's accuracy.
+Track A runs no hyperparameter search. It trains the same fixed model Track B compares against — `RandomForestClassifier(n_estimators=500, max_depth=None, random_state=0, class_weight=None)`, the parameters Rynazal et al. use — on all 802 samples with no holdout held back. `curatedcrc.train.reference_params` reads those values off `curatedcrc.evaluate.reference_model`, so the registered model and the paper comparison cannot drift apart.
 
-Only the winning run calls the repository's `log_explainable_model(model, background=X_train, registered_name="crc-curatedcrc-rf")` contract. The returned version alone is transitioned to Staging with `archive_existing_versions=False`. The script snapshots every Production model version and its run metrics before and after registration and fails if any value changes. It contains no path that promotes a model to Production.
+Because the registered model sees every sample, the run's `roc_auc`, `accuracy`, `precision`, `recall`, and `f1` are pooled 10-fold × 10-repeat stratified CV means over those same 802 samples (100 fits, `random_state=0`), each logged next to a matching `*_std`. Track B's per-cohort and leave-one-dataset-out AUCs are read from `outputs/track_b_cohort_cv.csv` and `outputs/track_b_lodo.csv` and logged onto the same run as `cv10x10_auc_<group>` and `lodo_auc_<cohort>`, so every number in the paper hangs off one MLflow run and one model version. Run Track B first when those files are absent; the training run still succeeds without them and simply omits those metrics.
+
+The run calls the repository's `log_explainable_model(model, background=X, registered_name="crc-curatedcrc-rf")` contract and transitions the returned version to Staging with `archive_existing_versions=True`, so any earlier Staging version of this model is archived and the platform resolves a single current model. The script snapshots every Production model version and its run metrics before and after registration and fails if any value changes. It contains no path that promotes a model to Production.
 
 ### Observed Track A result
 
-The authenticated 50-trial run against `http://35.225.129.127:5000` completed on 2026-09-03 with workflow ID `b06bc547859e4abaa4330fd8f2a35636`. MLflow experiment `crc-curatedcrc-rf` (experiment ID 10) contains exactly 50 finished runs for that workflow, and every run has all five required metrics.
+The run completed against `http://35.225.129.127:5000` on 2026-09-03 with workflow ID `f24eb733b4544979ae18c65d4acde015`. It is a single run, `74621d1f28db48c5861302672d80c11b`, in MLflow experiment `crc-curatedcrc-rf` (experiment ID 10).
 
-The selected run is `4b61357e6e7945c4a265d306ac0cac01` (trial 24):
+Pooled 10-fold × 10-repeat CV over all 802 samples (100 fits):
 
-| Metric | Value |
-| --- | ---: |
-| ROC AUC | 0.805728 |
-| Accuracy | 0.720497 |
-| Precision | 0.785714 |
-| Recall | 0.647059 |
-| F1 | 0.709677 |
+| Metric | Mean | Std |
+| --- | ---: | ---: |
+| ROC AUC | 0.808967 | 0.043275 |
+| Accuracy | 0.727676 | 0.046149 |
+| Precision | 0.747618 | 0.051810 |
+| Recall | 0.736728 | 0.066661 |
+| F1 | 0.740205 | 0.047448 |
 
-Its parameters are `n_estimators=150`, `max_depth=10`, `min_samples_leaf=5`, `min_samples_split=5`, `max_features="sqrt"`, and `class_weight=None`. The explainer-wrapped model is registered as `crc-curatedcrc-rf` version 1 and staged as Staging. A post-run server query loaded that version as an MLflow PyFunc model and reconfirmed the 50-run metric contract.
+The same run also carries the Track B per-cohort AUCs as `cv10x10_auc_*`, the leave-one-dataset-out AUCs as `lodo_auc_*`, and their mean as `lodo_mean_auc` (0.807629).
 
-Production state was byte-for-byte equivalent at the metadata/metric snapshot level before and after registration: `sample-rf-crc` version 96, `sample-gcn-crc` version 29, and `sample-xgboost-crc` version 31 remained the Production versions with the same run IDs and metrics. Full evidence is saved in `outputs/track_a_best_run.json` and `outputs/track_a_registration.json`.
+The model fit on all 802 samples is registered as `crc-curatedcrc-rf` version 2 and staged as Staging; version 1 — the earlier tuned model — was archived by the same transition, so the registry exposes exactly one current curatedCRC model. A follow-up server query loaded version 2 as an MLflow PyFunc model, which returned `Y_proba`/`Y_class` for the 60-row sample and exposed a working `shap_explain`.
+
+Production state was unchanged across registration: `sample-rf-crc` version 96, `sample-gcn-crc` version 29, and `sample-xgboost-crc` version 31 remained the Production versions with the same run IDs and metrics. Full evidence is saved in `outputs/track_a_model_run.json` and `outputs/track_a_registration.json`.
+
+## Deployment to the platform
+
+The inference service only loads registered models whose stage is `Production` (`load_explainable_model` in `kserve-custom-runtime/kserve-shap-multi-modelserver.py`), and the platform UI lists exactly what `GET /v1/models` returns. Training never promotes; promotion is a separate, deliberate step:
+
+```python
+client.update_model_version(name="crc-curatedcrc-rf", version="2", description=json.dumps(
+    {"model": "e5dd86c6-56c3-499a-af4f-9f01d29d9803",
+     "description": "curatedCRC RF - 802 samples, Rynazal parameters (500 trees), 221 features"}))
+client.transition_model_version_stage(
+    name="crc-curatedcrc-rf", version="2", stage="Production", archive_existing_versions=False)
+```
+
+The description is JSON because `ModelsService.fetchProductionModels` parses it to resolve the model-type UUID used by the other platform models; `archive_existing_versions=False` keeps `sample-rf-crc` 96, `sample-gcn-crc` 29, and `sample-xgboost-crc` 31 in Production untouched.
+
+Version 2 was promoted on 2026-09-03 and verified end-to-end against `http://35.239.175.89:8080` with `sample-data/curatedCRC-60-row.csv`:
+
+| Endpoint | Result |
+| --- | --- |
+| `POST /v1/predict/crc-curatedcrc-rf` | 200, 60 probabilities and classes |
+| `POST /v1/explain/beeswarm/crc-curatedcrc-rf` | 200 |
+| `POST /v1/explain/heatmap/crc-curatedcrc-rf` | 200 |
+| `POST /v1/explain/waterfall/crc-curatedcrc-rf` | 200 for a single row (the endpoint rejects multi-row input by design) |
+
+The server's `transformer` aligns uploaded columns to the model's `feature_names`, so the sample's `subject_id` and `CRC` columns are dropped before inference and no manual editing is needed.
+
+**The 60-row sample is drawn from the same 802 samples the model was fit on.** Its predictions agree with its own `CRC` column on all 60 rows, which demonstrates the interface end to end and must not be reported as a performance estimate. Every accuracy claim belongs to the cross-validated numbers above.
 
 ## Track B: paper comparison
 
@@ -81,7 +111,7 @@ Production state was byte-for-byte equivalent at the metadata/metric snapshot le
 .venv/bin/python mlflow-experiments/curatedcrc-rf/scripts/evaluate_track_b.py
 ```
 
-The fixed reference model is `RandomForestClassifier(n_estimators=500, max_depth=None, random_state=0, class_weight=None)`. The command writes:
+The fixed reference model is `RandomForestClassifier(n_estimators=500, max_depth=None, random_state=0, class_weight=None)` — the same estimator Track A registers. The command writes:
 
 - `outputs/track_b_cohort_cv.csv`: 10-fold × 10-repeat ROC AUC for all five cohorts plus YachidaS controls vs Stage III–IV CRC (the subset corresponding to the paper's quoted 0.82).
 - `outputs/track_b_lodo.csv`: fixed-500 leave-one-dataset-out AUC and the paper's reported values for comparison.
@@ -90,7 +120,7 @@ The checked-in paper notebook used scikit-learn's historical default of 100 tree
 
 ## SHAP sanity check
 
-Track A writes a beeswarm PNG, the complete positive-contribution ranking, and a JSON summary. Features are ranked by mean positive class-1 SHAP magnitude; mean absolute and signed SHAP values are retained as context. The run is flagged and exits with status 2 if either `Fusobacterium_nucleatum` or `Peptostreptococcus_stomatis` is outside the top 20. Evidence and the Staging model are preserved, but no Production promotion occurs.
+Track A writes a beeswarm PNG, the complete positive-contribution ranking, and a JSON summary, computed over all 802 samples with the same 802 rows as the SHAP background — the identical explainer that is pickled into the registered model, so the platform UI and the paper figures share one explanation. Features are ranked by mean positive class-1 SHAP magnitude; mean absolute and signed SHAP values are retained as context. The run is flagged and exits with status 2 if either `Fusobacterium_nucleatum` or `Peptostreptococcus_stomatis` is outside the top 20. Evidence and the Staging model are preserved, but no Production promotion occurs.
 
 The observed check passed: `Peptostreptococcus_stomatis` ranked 3rd and `Fusobacterium_nucleatum` ranked 5th among positive class-1 contributors. Both are visible in `outputs/track_a_shap_beeswarm.png`; full rankings and the machine-readable verdict are in `outputs/track_a_shap_positive_contributors.csv` and `outputs/track_a_shap_summary.json`.
 

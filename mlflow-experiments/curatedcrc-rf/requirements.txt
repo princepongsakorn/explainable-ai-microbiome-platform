@@ -7,7 +7,6 @@ scikit-learn==1.6.1
 scipy==1.15.1
 shap==0.49.1
 shapmat==0.1.5
-hyperopt==0.2.7
 boto3
 joblib
 setuptools==75.6.0

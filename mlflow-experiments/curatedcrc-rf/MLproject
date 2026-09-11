@@ -9,9 +9,8 @@ entry_points:
   track_a:
     parameters:
       checkout_dir: {type: path, default: .upstream}
-      max_evals: {type: int, default: 50}
       tracking_uri: {type: string, default: "http://35.225.129.127:5000"}
-    command: "python scripts/train_track_a.py --checkout-dir {checkout_dir} --max-evals {max_evals} --tracking-uri {tracking_uri}"
+    command: "python scripts/train_track_a.py --checkout-dir {checkout_dir} --tracking-uri {tracking_uri}"
   track_b:
     parameters:
       checkout_dir: {type: path, default: .upstream}

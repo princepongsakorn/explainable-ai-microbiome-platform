@@ -83,22 +83,22 @@ def rank_positive_contributors(
 
 def create_shap_report(
     model: Any,
-    X_train: pd.DataFrame,
-    X_test: pd.DataFrame,
+    background: pd.DataFrame,
+    X_explain: pd.DataFrame,
     output_dir: Path,
     *,
     top_k: int = 20,
 ) -> ShapReport:
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    explainer = shap.Explainer(model, X_train)
-    explanation = explainer(X_test, check_additivity=False)
+    explainer = shap.Explainer(model, background)
+    explanation = explainer(X_explain, check_additivity=False)
     class1_values = normalize_class1_shap(
         explanation,
-        n_samples=len(X_test),
-        n_features=X_test.shape[1],
+        n_samples=len(X_explain),
+        n_features=X_explain.shape[1],
     )
-    ranking = rank_positive_contributors(class1_values, X_test.columns.tolist())
+    ranking = rank_positive_contributors(class1_values, X_explain.columns.tolist())
     ranking_path = output_dir / "track_a_shap_positive_contributors.csv"
     ranking.to_csv(ranking_path, index=False)
 
@@ -122,8 +122,8 @@ def create_shap_report(
         "ranking_metric": "mean positive class-1 SHAP contribution",
         "biomarker_ranks": ranks,
         "missing_from_top_positive": list(missing),
-        "test_samples": int(len(X_test)),
-        "features": int(X_test.shape[1]),
+        "explained_samples": int(len(X_explain)),
+        "features": int(X_explain.shape[1]),
     }
     summary_path = output_dir / "track_a_shap_summary.json"
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
@@ -131,8 +131,8 @@ def create_shap_report(
     beeswarm_path = output_dir / "track_a_shap_beeswarm.png"
     plot_explanation = shap.Explanation(
         values=class1_values,
-        data=X_test.to_numpy(),
-        feature_names=X_test.columns.tolist(),
+        data=X_explain.to_numpy(),
+        feature_names=X_explain.columns.tolist(),
     )
     plt.figure(figsize=(11, 8))
     shap.plots.beeswarm(plot_explanation, max_display=20, show=False)
