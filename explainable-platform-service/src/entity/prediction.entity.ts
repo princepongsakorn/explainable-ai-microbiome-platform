@@ -19,12 +19,23 @@ export class Prediction {
 
   @Column('jsonb')
   dfColumns: string[]
+  
+  @Column({ type: 'decimal', precision: 10, scale: 4, default: 0.5 })
+  threshold: number;
 
-  @Column({ nullable: true })
-  heatmap: string;
+  @Column({ type: 'text', nullable: true })
+  heatmap?: string | null;
 
-  @Column({ nullable: true })
-  beeswarm: string;
+  // Set when `heatmap` could not be produced — ImageGenStatus code, else null.
+  @Column({ type: 'text', nullable: true })
+  heatmapError?: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  beeswarm?: string | null;
+
+  // Set when `beeswarm` could not be produced — ImageGenStatus code, else null.
+  @Column({ type: 'text', nullable: true })
+  beeswarmError?: string | null;
 
   @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;

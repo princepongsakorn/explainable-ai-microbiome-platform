@@ -17,7 +17,6 @@ import e from 'express';
 @Injectable()
 export class MlflowService {
   private inferenceServiceURL: string;
-  private hostHeader = 'kserve-custom-inference-service.default.example.com';
 
   constructor(
     @InjectRepository(ThirdPartyToken)
@@ -35,7 +34,6 @@ export class MlflowService {
       const response = await lastValueFrom(
         this.httpService.get<{ url: string }>(
           `${this.inferenceServiceURL}/v1/mlflow/tracking_uri`,
-          { headers: { Host: this.hostHeader } },
         ),
       );
       return response.data;
@@ -85,9 +83,6 @@ export class MlflowService {
       const response = await lastValueFrom(
         this.httpService.get<{ user: { username: string } }>(
           `${this.inferenceServiceURL}/v1/mlflow/user/${userId}`,
-          {
-            headers: { Host: this.hostHeader },
-          },
         ),
       );
       mlflowUser = response.data?.user?.username;
@@ -103,9 +98,6 @@ export class MlflowService {
               username: user.id,
               password: token,
             },
-            {
-              headers: { Host: this.hostHeader },
-            },
           ),
         );
       } else {
@@ -115,9 +107,6 @@ export class MlflowService {
             {
               username: user.id,
               password: token,
-            },
-            {
-              headers: { Host: this.hostHeader },
             },
           ),
         );

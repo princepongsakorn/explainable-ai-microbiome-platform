@@ -1,0 +1,9 @@
+name: curatedcrc-rf-env
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12.6
+  - pip<=24.3.1
+  - pip:
+      - -r requirements.txt
+      - -e ../extension/mlflow_explainable

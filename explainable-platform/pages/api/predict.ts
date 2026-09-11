@@ -62,3 +62,41 @@ export const getPredictionRecords = async (
   );
   return data;
 };
+
+export const postRegenWaterfall = async (
+  predictionId: string,
+  recordId: string
+) => {
+  const { data } = await httpClient.post(
+    `/predict/${predictionId}/records/${recordId}/regen/waterfall`
+  );
+  return data;
+};
+
+export const postRegenHeatmap = async (predictionId: string) => {
+  const { data } = await httpClient.post(
+    `/predict/${predictionId}/regen/heatmap`
+  );
+  return data;
+};
+
+export const postRegenBeeswarm = async (predictionId: string) => {
+  const { data } = await httpClient.post(
+    `/predict/${predictionId}/regen/beeswarm`
+  );
+  return data;
+};
+
+export const patchPredictionRecordsComment = async (
+  predictionId: string,
+  predictionRecordsId: string,
+  comment?: string
+) => {
+  const { data } = await httpClient.patch<IPredictionsPagination>(
+    `predict/${predictionId}/records/${predictionRecordsId}/comment`,
+    {
+      comment: comment ?? "",
+    }
+  );
+  return data;
+};

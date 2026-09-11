@@ -1,0 +1,150 @@
+{
+  "auc_within_guard": true,
+  "data": {
+    "cohort_counts": {
+      "VogtmannE_2016": {
+        "control": 52,
+        "crc": 52,
+        "total": 104
+      },
+      "WirbelJ_2018": {
+        "control": 65,
+        "crc": 60,
+        "total": 125
+      },
+      "YachidaS_2019": {
+        "control": 146,
+        "crc": 185,
+        "total": 331
+      },
+      "YuJ_2015": {
+        "control": 54,
+        "crc": 74,
+        "total": 128
+      },
+      "ZellerG_2014": {
+        "control": 61,
+        "crc": 53,
+        "total": 114
+      }
+    },
+    "paper_commit": "6600175db5984a07b86f2b5591114f39181ff4dc",
+    "path": "/Users/pongsakorn/MasterProject/project/explainable-ai-microbiome-platform/mlflow-experiments/curatedcrc-rf/.upstream/shapmat_paper/data/bacteria_relative_abundance_concat.csv",
+    "sha256": "104797329c402ce6de71bfade1993126a4150283ff97bb9269b56f84fb72fc24",
+    "shapmat_commit": "0ca51a9ab9c859fac3305f599a81b2e2206bef49"
+  },
+  "exports": {
+    "labels_csv": "/Users/pongsakorn/MasterProject/project/explainable-ai-microbiome-platform/sample-data/yachidas_2019_test_labels.csv",
+    "test_csv": "/Users/pongsakorn/MasterProject/project/explainable-ai-microbiome-platform/sample-data/yachidas_2019_test.csv"
+  },
+  "features": 865,
+  "features_raw": 865,
+  "filter": null,
+  "metrics": {
+    "accuracy": 0.649546827794562,
+    "f1": 0.6813186813186813,
+    "precision": 0.6927374301675978,
+    "recall": 0.6702702702702703,
+    "roc_auc": 0.7227138097001111
+  },
+  "paper_reference": {
+    "auc": 0.72,
+    "base_value": 0.53,
+    "features": 549
+  },
+  "preprocessing": "notebook-raw",
+  "registered_name": "crc-rynazal-notebook",
+  "registration": {
+    "production_unchanged": true,
+    "run_id": "8e4e264d324e4caf9138252a5d2e5833",
+    "stage": "Staging",
+    "version": "1"
+  },
+  "rf_params": {
+    "class_weight": null,
+    "max_depth": null,
+    "n_estimators": 1000,
+    "random_state": 0
+  },
+  "shap": {
+    "background": "X_test (YachidaS_2019, 331 rows)",
+    "expected_value_crc": 0.5238200000000003,
+    "explainer": "shap.TreeExplainer(model, data=X_test)",
+    "feature_perturbation": "interventional",
+    "nonzero_mean_abs_shap_features": 562,
+    "other_convention": {
+      "expected_value_crc": 0.5077388535031844,
+      "explainer": "shap.TreeExplainer(model)",
+      "nonzero_mean_abs_shap_features": 714
+    },
+    "top10_mean_abs_shap": [
+      {
+        "feature": "Peptostreptococcus_stomatis",
+        "mean_abs_shap": 0.020348950212050743,
+        "rank": 1
+      },
+      {
+        "feature": "Parvimonas_micra",
+        "mean_abs_shap": 0.017394602132250747,
+        "rank": 2
+      },
+      {
+        "feature": "Fusobacterium_nucleatum",
+        "mean_abs_shap": 0.01336298881515016,
+        "rank": 3
+      },
+      {
+        "feature": "Gemella_morbillorum",
+        "mean_abs_shap": 0.011088815472807248,
+        "rank": 4
+      },
+      {
+        "feature": "Clostridium_symbiosum",
+        "mean_abs_shap": 0.010646553223743591,
+        "rank": 5
+      },
+      {
+        "feature": "Dialister_pneumosintes",
+        "mean_abs_shap": 0.009358008898886938,
+        "rank": 6
+      },
+      {
+        "feature": "Solobacterium_moorei",
+        "mean_abs_shap": 0.009280126612395748,
+        "rank": 7
+      },
+      {
+        "feature": "Ruthenibacterium_lactatiformans",
+        "mean_abs_shap": 0.009250874088220246,
+        "rank": 8
+      },
+      {
+        "feature": "Escherichia_coli",
+        "mean_abs_shap": 0.008179272438535773,
+        "rank": 9
+      },
+      {
+        "feature": "Eubacterium_eligens",
+        "mean_abs_shap": 0.007923216266576345,
+        "rank": 10
+      }
+    ]
+  },
+  "test_cohort": "YachidaS_2019",
+  "test_samples": 331,
+  "train_cohorts": [
+    "YuJ_2015",
+    "WirbelJ_2018",
+    "ZellerG_2014",
+    "VogtmannE_2016"
+  ],
+  "train_samples": 471,
+  "versions": {
+    "mlflow": "2.19.0",
+    "numpy": "2.0.2",
+    "pandas": "2.2.3",
+    "python": "3.12.6",
+    "scikit-learn": "1.6.1",
+    "shap": "0.49.1"
+  }
+}

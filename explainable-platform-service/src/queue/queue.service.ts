@@ -25,6 +25,19 @@ export class QueueService {
     });
   }
 
+  // --- Targeted plot re-generation (without re-running the prediction) ---
+  async addRegenWaterfallJob(predictionId: string, recordId: string) {
+    await this.predictionQueue.add('regenWaterfall', { predictionId, recordId });
+  }
+
+  async addRegenHeatmapJob(predictionId: string) {
+    await this.predictionQueue.add('regenHeatmap', { predictionId });
+  }
+
+  async addRegenBeeswarmJob(predictionId: string) {
+    await this.predictionQueue.add('regenBeeswarm', { predictionId });
+  }
+
   async cancelPredictionJob(predictionId: string) {
     const jobs: Job[] = await this.predictionQueue.getJobs([
       'active',

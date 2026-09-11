@@ -1,0 +1,338 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Microbiome XAI Platform",
+    "output": "microbiome-xai-platform.architecture.detailed.html",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1180,
+      620
+    ],
+    "views": [
+      {
+        "id": "predict-path",
+        "label": "เส้นทาง Prediction",
+        "focus": [
+          "users",
+          "nginx",
+          "backend",
+          "pgapp",
+          "redis",
+          "inference",
+          "gcs"
+        ],
+        "note": "CSV → Prediction/Record → Bull queue → PredictionProcessor เรียก /v1/predict + /v1/explain/* → เก็บ SHAP PNG ลง GCS แล้วส่ง Signed URL กลับ"
+      },
+      {
+        "id": "realtime",
+        "label": "Realtime ผ่าน SSE",
+        "focus": [
+          "users",
+          "nginx",
+          "frontend",
+          "backend"
+        ],
+        "note": "EventsHub (in-memory Subject) ส่ง record:update ผ่าน /api/events/* — nginx ปิด buffering และเปิด read timeout 1 ชั่วโมงสำหรับ SSE โดยเฉพาะ"
+      },
+      {
+        "id": "mlops",
+        "label": "MLOps / Model Registry",
+        "focus": [
+          "backend",
+          "inference",
+          "mlflow",
+          "pgml",
+          "gcs"
+        ],
+        "note": "ทุกโมเดล log ผ่าน mlflow_explainable — Flask โหลดจาก MLflow Registry, แคชด้วย joblib.Memory และเป็น proxy /v1/mlflow/* ให้ backend"
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "users",
+      "type": "external",
+      "label": "ผู้ใช้งาน",
+      "sublabel": "Browser (JWT ใน cookie)",
+      "pos": [
+        30,
+        330
+      ],
+      "size": [
+        130,
+        64
+      ]
+    },
+    {
+      "id": "nginx",
+      "type": "security",
+      "label": "nginx",
+      "sublabel": "reverse proxy :80",
+      "tag": "SSE no-buffering",
+      "pos": [
+        230,
+        330
+      ],
+      "size": [
+        140,
+        68
+      ]
+    },
+    {
+      "id": "frontend",
+      "type": "frontend",
+      "label": "Next.js Frontend",
+      "sublabel": "explainable-platform :3001",
+      "pos": [
+        440,
+        200
+      ],
+      "size": [
+        160,
+        68
+      ]
+    },
+    {
+      "id": "backend",
+      "type": "backend",
+      "label": "NestJS Backend",
+      "sublabel": "explainable-platform-service :3000",
+      "tag": "Bull worker ในตัว",
+      "pos": [
+        430,
+        330
+      ],
+      "size": [
+        195,
+        72
+      ]
+    },
+    {
+      "id": "pgapp",
+      "type": "database",
+      "label": "PostgreSQL 14",
+      "sublabel": "explainable_platform_db",
+      "pos": [
+        440,
+        500
+      ],
+      "size": [
+        160,
+        64
+      ]
+    },
+    {
+      "id": "redis",
+      "type": "messagebus",
+      "label": "Redis 7",
+      "sublabel": "Bull predictionQueue",
+      "pos": [
+        650,
+        500
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "inference",
+      "type": "backend",
+      "label": "Inference Service",
+      "sublabel": "Flask + SHAP :8080 (systemd)",
+      "tag": "ไม่เปิด public",
+      "pos": [
+        700,
+        330
+      ],
+      "size": [
+        180,
+        72
+      ]
+    },
+    {
+      "id": "mlflow",
+      "type": "backend",
+      "label": "MLflow Server",
+      "sublabel": "tracking + registry :5000",
+      "tag": "basic auth",
+      "pos": [
+        960,
+        200
+      ],
+      "size": [
+        170,
+        68
+      ]
+    },
+    {
+      "id": "pgml",
+      "type": "database",
+      "label": "PostgreSQL 15",
+      "sublabel": "mlflow_db (backend store)",
+      "pos": [
+        960,
+        60
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "gcs",
+      "type": "cloud",
+      "label": "Google Cloud Storage",
+      "sublabel": "gs://microbiome_xai_platform",
+      "tag": "ADC + compute SA",
+      "pos": [
+        960,
+        500
+      ],
+      "size": [
+        180,
+        68
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "GCP VM #2 — Platform (docker compose + systemd)",
+      "wraps": [
+        "nginx",
+        "frontend",
+        "backend",
+        "pgapp",
+        "redis",
+        "inference"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "GCP VM #1 — MLflow",
+      "wraps": [
+        "mlflow",
+        "pgml"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "users-nginx",
+      "from": "users",
+      "to": "nginx",
+      "label": "HTTP :80",
+      "variant": "emphasis"
+    },
+    {
+      "id": "nginx-frontend",
+      "from": "nginx",
+      "to": "frontend",
+      "label": "/ , /_next/*",
+      "fromSide": "top",
+      "toSide": "left"
+    },
+    {
+      "id": "nginx-backend",
+      "from": "nginx",
+      "to": "backend",
+      "label": "/api/* (รวม SSE)",
+      "variant": "emphasis",
+      "labelDy": -28
+    },
+    {
+      "id": "backend-pgapp",
+      "from": "backend",
+      "to": "pgapp",
+      "label": "TypeORM :5432",
+      "labelDy": 24,
+      "labelDx": -50,
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "backend-redis",
+      "from": "backend",
+      "to": "redis",
+      "label": "enqueue jobs"
+    },
+    {
+      "id": "backend-inference",
+      "from": "backend",
+      "to": "inference",
+      "label": "/v1/predict · /v1/explain/* · /v1/mlflow/*",
+      "variant": "emphasis",
+      "labelDy": -23
+    },
+    {
+      "id": "backend-gcs",
+      "from": "backend",
+      "to": "gcs",
+      "label": "อัปโหลด SHAP PNG → Signed URL",
+      "fromSide": "bottom",
+      "toSide": "left"
+    },
+    {
+      "id": "inference-mlflow",
+      "from": "inference",
+      "to": "mlflow",
+      "label": "โหลดโมเดล / registry API"
+    },
+    {
+      "id": "inference-gcs",
+      "from": "inference",
+      "to": "gcs",
+      "label": "ดึง artifacts (cache /tmp/cache)",
+      "variant": "dashed",
+      "toSide": "left",
+      "labelSegment": 0,
+      "labelDy": 53
+    },
+    {
+      "id": "mlflow-pgml",
+      "from": "mlflow",
+      "to": "pgml",
+      "label": "backend store"
+    },
+    {
+      "id": "mlflow-gcs",
+      "from": "mlflow",
+      "to": "gcs",
+      "label": "mlflow-artifacts/",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Edge และ Realtime",
+      "items": [
+        "nginx เป็น origin เดียว — frontend :3001 และ backend :3000 bind localhost เท่านั้น",
+        "SSE ผ่าน /api/events/* — ปิด proxy_buffering, read timeout 1 ชม.",
+        "Frontend ใช้ fetch-event-source เพื่อแนบ Bearer JWT ให้ SSE stream"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Prediction Pipeline",
+      "items": [
+        "CSV 1 ไฟล์ → 1 Prediction + N Record → Bull job ต่อ record",
+        "Worker เรียก /v1/predict + /v1/explain/* ต่อ record — PNG ที่ render ล้มเหลวมี job regen แยก",
+        "PNG เก็บใน GCS (predictions/) → Signed URL V4 → push ผ่าน SSE"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "MLOps",
+      "items": [
+        "ทุกโมเดล (XGBoost, RF, GB, GCN) log ผ่าน mlflow_explainable — contract เดียว: predict + shap_explain",
+        "Flask เป็น multi-model runtime: โหลดจาก MLflow Registry, แคช artifacts ด้วย joblib.Memory (/tmp/cache)",
+        "Backend ไม่คุย MLflow ตรง ๆ — proxy ผ่าน /v1/mlflow/* ของ inference service"
+      ]
+    }
+  ]
+}

@@ -9,7 +9,7 @@ import { yupResolver } from "@hookform/resolvers/yup";
 import { useEffect, useState } from "react";
 import Cookies from "js-cookie";
 import { dialogError } from "@/lib/dialog";
-import { MainButton } from "@/components/ui/Button/button";
+import { MainButton } from "@/components/ui/Button/Button";
 
 const loginValidateSchema = yup.object({
   username: yup.string().required("Required"),

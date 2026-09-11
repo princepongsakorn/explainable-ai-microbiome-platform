@@ -45,16 +45,24 @@ export interface ICreatePredictions {
   predictionId: string;
 }
 
+// Why a SHAP plot is missing — mirrors the backend ImageGenStatus enum.
+export enum ImageGenStatus {
+  IMAGE_FAILED = "IMAGE_FAILED",
+  UPLOAD_FAILED = "UPLOAD_FAILED",
+}
+
 export interface IPredictionRecords {
   id: string;
+  record_number: number;
   proba?: number;
   class?: number;
   waterfall?: string;
+  waterfallError?: ImageGenStatus | string | null;
   status?: PredictionStatus;
   dfColumns?: string[];
   dfData?: string[];
   errorMsg?: string;
-  record_number: number;
+  comment?: string
 }
 export interface IPredictions {
   id: string;
@@ -67,7 +75,9 @@ export interface IPredictions {
   };
   createdAt: string;
   heatmap?: string;
+  heatmapError?: ImageGenStatus | string | null;
   beeswarm?: string;
+  beeswarmError?: ImageGenStatus | string | null;
 }
 
 export interface IPredictionsPagination {
