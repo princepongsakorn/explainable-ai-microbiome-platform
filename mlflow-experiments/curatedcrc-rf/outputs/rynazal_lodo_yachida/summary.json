@@ -1,0 +1,150 @@
+{
+  "auc_within_guard": true,
+  "data": {
+    "cohort_counts": {
+      "VogtmannE_2016": {
+        "control": 52,
+        "crc": 52,
+        "total": 104
+      },
+      "WirbelJ_2018": {
+        "control": 65,
+        "crc": 60,
+        "total": 125
+      },
+      "YachidaS_2019": {
+        "control": 146,
+        "crc": 185,
+        "total": 331
+      },
+      "YuJ_2015": {
+        "control": 54,
+        "crc": 74,
+        "total": 128
+      },
+      "ZellerG_2014": {
+        "control": 61,
+        "crc": 53,
+        "total": 114
+      }
+    },
+    "paper_commit": "6600175db5984a07b86f2b5591114f39181ff4dc",
+    "sha256": "8f1258882cbedd1613ae3490f9ec94bbc97c72c041f1ed9f531f43b2030c1a8f",
+    "shapmat_commit": "0ca51a9ab9c859fac3305f599a81b2e2206bef49"
+  },
+  "exports": {
+    "labels_csv": "/Users/pongsakorn/MasterProject/project/explainable-ai-microbiome-platform/sample-data/yachidas_2019_test_labels.csv",
+    "test_csv": "/Users/pongsakorn/MasterProject/project/explainable-ai-microbiome-platform/sample-data/yachidas_2019_test.csv"
+  },
+  "features": 228,
+  "features_raw": 864,
+  "filter": {
+    "abundance_threshold": 1e-15,
+    "prevalence_threshold": 0.9
+  },
+  "metrics": {
+    "accuracy": 0.6586102719033232,
+    "f1": 0.6904109589041096,
+    "precision": 0.7,
+    "recall": 0.6810810810810811,
+    "roc_auc": 0.7297297297297298
+  },
+  "paper_reference": {
+    "auc": 0.72,
+    "base_value": 0.53,
+    "features": 549
+  },
+  "preprocessing": "shapmat-default",
+  "registered_name": "crc-rynazal-lodo-yachida",
+  "registration": {
+    "run_id": "c6c6898e5b38462da9b3024a3be42c89",
+    "stage": "Staging",
+    "version": "1"
+  },
+  "rf_params": {
+    "class_weight": null,
+    "max_depth": null,
+    "n_estimators": 500,
+    "random_state": 0
+  },
+  "shap": {
+    "expected_value_crc": 0.5079108280254775,
+    "explainer": "shap.TreeExplainer(model)",
+    "feature_perturbation": "tree_path_dependent",
+    "nonzero_mean_abs_shap_features": 228,
+    "reference_convention": {
+      "expected_value_crc": 0.5255600000000004,
+      "explainer": "shap.TreeExplainer(model, data=X_test)",
+      "nonzero_mean_abs_shap_features": 228
+    },
+    "top10_mean_abs_shap": [
+      {
+        "feature": "Peptostreptococcus_stomatis",
+        "mean_abs_shap": 0.025537734700264245,
+        "rank": 1
+      },
+      {
+        "feature": "Parvimonas_micra",
+        "mean_abs_shap": 0.02396983579253254,
+        "rank": 2
+      },
+      {
+        "feature": "Gemella_morbillorum",
+        "mean_abs_shap": 0.02161604607154967,
+        "rank": 3
+      },
+      {
+        "feature": "Dialister_pneumosintes",
+        "mean_abs_shap": 0.018359688472139337,
+        "rank": 4
+      },
+      {
+        "feature": "Fusobacterium_nucleatum",
+        "mean_abs_shap": 0.01796480845672153,
+        "rank": 5
+      },
+      {
+        "feature": "Clostridium_symbiosum",
+        "mean_abs_shap": 0.013392662695449765,
+        "rank": 6
+      },
+      {
+        "feature": "Ruthenibacterium_lactatiformans",
+        "mean_abs_shap": 0.012661226549624616,
+        "rank": 7
+      },
+      {
+        "feature": "Solobacterium_moorei",
+        "mean_abs_shap": 0.012658782960433983,
+        "rank": 8
+      },
+      {
+        "feature": "Eubacterium_eligens",
+        "mean_abs_shap": 0.012166295880050347,
+        "rank": 9
+      },
+      {
+        "feature": "Hungatella_hathewayi",
+        "mean_abs_shap": 0.011798799780573696,
+        "rank": 10
+      }
+    ]
+  },
+  "test_cohort": "YachidaS_2019",
+  "test_samples": 331,
+  "train_cohorts": [
+    "YuJ_2015",
+    "WirbelJ_2018",
+    "ZellerG_2014",
+    "VogtmannE_2016"
+  ],
+  "train_samples": 471,
+  "versions": {
+    "mlflow": "2.19.0",
+    "numpy": "2.0.2",
+    "pandas": "2.2.3",
+    "python": "3.12.6",
+    "scikit-learn": "1.6.1",
+    "shap": "0.49.1"
+  }
+}

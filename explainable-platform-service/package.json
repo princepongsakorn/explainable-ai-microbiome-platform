@@ -29,7 +29,7 @@
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.8",
     "@nestjs/typeorm": "^11.0.0",
-    "aws-sdk": "^2.1692.0",
+    "@google-cloud/storage": "^7.13.0",
     "axios": "^1.7.9",
     "bcryptjs": "^3.0.2",
     "bull": "^4.16.5",

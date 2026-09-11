@@ -1,0 +1,17 @@
+name: curatedcrc-rf
+python_env: python_env.yaml
+
+entry_points:
+  prepare:
+    parameters:
+      checkout_dir: {type: path, default: .upstream}
+    command: "python scripts/prepare_data.py --checkout-dir {checkout_dir}"
+  track_a:
+    parameters:
+      checkout_dir: {type: path, default: .upstream}
+      tracking_uri: {type: string, default: "http://35.225.129.127:5000"}
+    command: "python scripts/train_track_a.py --checkout-dir {checkout_dir} --tracking-uri {tracking_uri}"
+  track_b:
+    parameters:
+      checkout_dir: {type: path, default: .upstream}
+    command: "python scripts/evaluate_track_b.py --checkout-dir {checkout_dir}"

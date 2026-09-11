@@ -16,7 +16,6 @@ import { validate as isUuid } from 'uuid';
 @Injectable()
 export class ExperimentsService {
   private inferenceServiceURL: string;
-  private hostHeader = 'kserve-custom-inference-service.default.example.com';
 
   constructor(
     private httpService: HttpService,
@@ -32,9 +31,6 @@ export class ExperimentsService {
       const response = await lastValueFrom(
         this.httpService.get<IExperimentResponse>(
           `${this.inferenceServiceURL}/v1/mlflow/experiments`,
-          {
-            headers: { Host: this.hostHeader },
-          },
         ),
       );
       return response.data;
@@ -54,7 +50,6 @@ export class ExperimentsService {
         this.httpService.get<IExperimentsRunResponse>(
           `${this.inferenceServiceURL}/v1/mlflow/experiment/${experimentId}`,
           {
-            headers: { Host: this.hostHeader },
             params: { order_by: orderBy, page_token: pageToken },
           },
         ),
@@ -92,7 +87,6 @@ export class ExperimentsService {
         this.httpService.post<IRunResponse>(
           `${this.inferenceServiceURL}/v1/mlflow/experiments/description/${experimentId}`,
           { description: description },
-          { headers: { Host: this.hostHeader } },
         ),
       );
       return response.data;
@@ -107,9 +101,6 @@ export class ExperimentsService {
       const response = await lastValueFrom(
         this.httpService.get<{ run: IRunResponse }>(
           `${this.inferenceServiceURL}/v1/mlflow/run/${runId}`,
-          {
-            headers: { Host: this.hostHeader },
-          },
         ),
       );
       console.log('response', response)
@@ -155,7 +146,6 @@ export class ExperimentsService {
             description: description,
             archive_existing_versions: true,
           },
-          { headers: { Host: this.hostHeader } },
         ),
       );
       return response.data;
@@ -165,12 +155,30 @@ export class ExperimentsService {
     }
   }
 
+  async registerModelByRunId(
+    runId: string,
+    name: string,
+    description: string,
+  ) {
+    try {
+      const response = await lastValueFrom(
+        this.httpService.post(
+          `${this.inferenceServiceURL}/v1/mlflow/run/${runId}/register`,
+          { name, description },
+        ),
+      );
+      return response.data;
+    } catch (error) {
+      console.error(`Failed to register model by run id`, error);
+      throw error;
+    }
+  }
+
   async getRegisteredModel() {
     try {
       const response = await lastValueFrom(
         this.httpService.get(
           `${this.inferenceServiceURL}/v1/mlflow/registered-models`,
-          { headers: { Host: this.hostHeader } },
         ),
       );
       return response.data;

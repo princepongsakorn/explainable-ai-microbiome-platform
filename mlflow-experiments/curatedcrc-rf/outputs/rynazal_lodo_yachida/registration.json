@@ -1,0 +1,79 @@
+{
+  "experiment_name": "crc-rynazal-lodo-yachida",
+  "production_versions": {
+    "crc-curatedcrc-rf:2": {
+      "metrics": {
+        "accuracy": 0.7276759259259259,
+        "accuracy_std": 0.04614868556434925,
+        "cv10x10_auc_VogtmannE_2016": 0.6436666666666666,
+        "cv10x10_auc_WirbelJ_2018": 0.8925198412698415,
+        "cv10x10_auc_YachidaS_2019": 0.7508886104149262,
+        "cv10x10_auc_YachidaS_2019_stage_III_IV": 0.7820952380952382,
+        "cv10x10_auc_YuJ_2015": 0.844297619047619,
+        "cv10x10_auc_ZellerG_2014": 0.8563492063492063,
+        "cv_fits": 100.0,
+        "f1": 0.7402045276845068,
+        "f1_std": 0.0474479447744795,
+        "lodo_auc_VogtmannE_2016": 0.7670118343195267,
+        "lodo_auc_WirbelJ_2018": 0.8733333333333333,
+        "lodo_auc_YachidaS_2019": 0.7253239540910774,
+        "lodo_auc_YuJ_2015": 0.876001001001001,
+        "lodo_auc_ZellerG_2014": 0.7964738632848747,
+        "lodo_mean_auc": 0.8076287972059626,
+        "precision": 0.7476183412938542,
+        "precision_std": 0.05181005208955215,
+        "recall": 0.7367275747508307,
+        "recall_std": 0.06666066273741289,
+        "roc_auc": 0.8089666340584334,
+        "roc_auc_std": 0.04327547690864032
+      },
+      "name": "crc-curatedcrc-rf",
+      "run_id": "74621d1f28db48c5861302672d80c11b",
+      "version": "2"
+    },
+    "sample-gcn-crc:29": {
+      "metrics": {
+        "accuracy": 0.75,
+        "f1": 0.725,
+        "n_edges": 2860.0,
+        "precision": 0.776,
+        "recall": 0.75,
+        "roc_auc": 0.727
+      },
+      "name": "sample-gcn-crc",
+      "run_id": "d26a65796b9e45c494ec3e282066aac5",
+      "version": "29"
+    },
+    "sample-rf-crc:96": {
+      "metrics": {
+        "accuracy": 0.861,
+        "f1": 0.86,
+        "precision": 0.86,
+        "recall": 0.861,
+        "roc_auc": 0.899
+      },
+      "name": "sample-rf-crc",
+      "run_id": "be7137a1189246239fb12f53ad7788fd",
+      "version": "96"
+    },
+    "sample-xgboost-crc:31": {
+      "metrics": {
+        "accuracy": 0.861,
+        "f1": 0.86,
+        "precision": 0.86,
+        "recall": 0.861,
+        "roc_auc": 0.929
+      },
+      "name": "sample-xgboost-crc",
+      "run_id": "709fd222b86e4748bfa18c277c3207bd",
+      "version": "31"
+    }
+  },
+  "registered_name": "crc-rynazal-lodo-yachida",
+  "run_id": "c6c6898e5b38462da9b3024a3be42c89",
+  "served_base_value_crc": 0.5079108280254775,
+  "stage": "Staging",
+  "tracking_uri": "http://35.225.129.127:5000",
+  "verified_by": "--verify-version",
+  "version": "1"
+}

@@ -1,71 +1,92 @@
+"""sample-xgboost-crc — XGBoost CRC classifier on the shapmat sample dataset.
+
+Mirrors the ``sample-rf-crc`` template: tunes a tree-based classifier on the
+shapmat sample microbiome data with hyperopt and logs the predictor + SHAP
+``TreeExplainer`` as a single self-contained pyfunc artifact through the
+``mlflow_explainable`` contract.
+
+Search space is tuned for microbiome characteristics — high-dimensional,
+sparse, small-N — favouring shallow trees, aggressive column subsampling,
+and L1/L2 regularisation.
+"""
+
+import os
+
 import mlflow
-import mlflow.xgboost
 import pandas as pd
-
-import joblib
-import shap
-
-from mlflow.models import infer_signature
-
-from xgboost import XGBClassifier
+from hyperopt import STATUS_OK, Trials, fmin, hp, tpe
+from sklearn.metrics import (
+    accuracy_score,
+    f1_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, roc_auc_score, precision_score, recall_score, f1_score
+from xgboost import XGBClassifier
 
-from hyperopt import fmin, tpe, hp, Trials, STATUS_OK
+from mlflow_explainable import log_explainable_model
 
-#TODO: Make it to Third-party Package
-def log_explainer(model, data, file_path='shap_explainer.pkl'):
-    """
-    Save a SHAP explainer for the given model and data.
 
-    Parameters:
-    model: The trained model to explain.
-    data: The data used to initialize the SHAP explainer.
-    file_path (str): The file path to save the SHAP explainer (default: 'shap_explainer.pkl').
-
-    Returns:
-    str: The file path where the SHAP explainer is saved.
-    """
-    # Create SHAP explainer
-    explainer = shap.Explainer(model, data)
-
-    # Save explainer to file
-    with open(file_path, 'wb') as f:
-        joblib.dump(explainer, f)
-
-    mlflow.log_artifact(file_path, artifact_path="shap_explainer")
-
+# ---------------------------------------------------------------------------
+# Data
+# ---------------------------------------------------------------------------
 sample_url = "https://raw.githubusercontent.com/ryzary/shapmat/refs/heads/cv_notebook/data/sample.csv"
 sample_crc = pd.read_csv(sample_url, index_col=0)
-train_data = sample_crc.drop(['CRC'],axis=1)
-train_metadata = sample_crc[['CRC']]
+train_data = sample_crc.drop(["CRC"], axis=1)
+train_metadata = sample_crc[["CRC"]]
 train_ids = train_data.index
 
 X = train_data.loc[train_ids]
-y = train_metadata['CRC']
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+y = train_metadata["CRC"]
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
 
-mlflow.set_tracking_uri("http://ec2-3-1-102-14.ap-southeast-1.compute.amazonaws.com:5000")
+
+# ---------------------------------------------------------------------------
+# MLflow tracking
+# ---------------------------------------------------------------------------
+os.environ["MLFLOW_TRACKING_USERNAME"] = "b881211d-796e-4b12-8621-6246d2eeadce"
+os.environ["MLFLOW_TRACKING_PASSWORD"] = "k7uLbDEGc6beQlAWTCUJAUAmJskdr5bLUDmsiCG4"
+mlflow.set_tracking_uri("http://35.225.129.127:5000")
+
 mlflow.set_experiment("sample-xgboost-crc")
 
+
+# ---------------------------------------------------------------------------
+# Hyperopt objective
+# ---------------------------------------------------------------------------
 def objective(params):
-    with mlflow.start_run() as run:
+    with mlflow.start_run():
         params["n_estimators"] = int(params["n_estimators"])
         params["max_depth"] = int(params["max_depth"])
-        # Train with tuned RandomForest
+
+        # Log params
         mlflow.log_param("features_bacteria", train_data.shape[1])
+        mlflow.log_param("model_type", "XGBoost")
         mlflow.log_params(params)
 
-        model = XGBClassifier(**params, random_state=42, use_label_encoder=False, eval_metric="logloss").fit(X_train ,y_train)
+        # Train — fixed kwargs (not tuned) kept outside the search space
+        model = XGBClassifier(
+            **params,
+            objective="binary:logistic",
+            tree_method="hist",
+            eval_metric="auc",
+            random_state=42,
+            n_jobs=-1,
+        ).fit(X_train, y_train)
 
-        # Evaluation on test data
+        # Evaluation
         y_pred = model.predict(X_test)
-        y_pred_proba = model.predict_proba(X_test)[:, 1] 
+        y_pred_proba = model.predict_proba(X_test)[:, 1]
         accuracy = accuracy_score(y_test, y_pred)
-        precision = precision_score(y_test, y_pred, average='weighted')
-        recall = recall_score(y_test, y_pred, average='weighted')
-        f1 = f1_score(y_test, y_pred, average='weighted')
-        roc_auc = roc_auc_score(y_test, y_pred_proba, multi_class='ovr', average='weighted')
+        precision = precision_score(y_test, y_pred, average="weighted")
+        recall = recall_score(y_test, y_pred, average="weighted")
+        f1 = f1_score(y_test, y_pred, average="weighted")
+        roc_auc = roc_auc_score(
+            y_test, y_pred_proba, multi_class="ovr", average="weighted"
+        )
 
         mlflow.log_metric("accuracy", round(accuracy, 3))
         mlflow.log_metric("precision", round(precision, 3))
@@ -75,31 +96,47 @@ def objective(params):
 
         print(f"Trial with params: {params}, Accuracy: {accuracy:.4f}")
 
-        # Log shap_explainer and model
-        log_explainer(model, X_train)
-        mlflow.sklearn.log_model( 
-            sk_model=model,
-            artifact_path="model",
-            registered_model_name="sample-xgboost-crc",
-            input_example = X_test[:3],
-            signature = infer_signature(X_test[:3], model.predict(X_test[:3]))
+        # Single-call: predictor + SHAP explainer + feature_names artifact
+        # are all logged under the contract. shap.Explainer picks TreeExplainer
+        # automatically for gradient-boosted trees.
+        log_explainable_model(
+            model=model,
+            background=X_train,
+            registered_name="sample-xgboost-crc",
         )
+
         return {"loss": -accuracy, "status": STATUS_OK}
 
-# Search Space
-search_space = {
-    "n_estimators": hp.quniform("n_estimators", 50, 500, 50),
-    "learning_rate": hp.loguniform("learning_rate", -3, 0),
-    "max_depth": hp.choice("max_depth", [3, 5, 7, 9, 11]),
+
+# ---------------------------------------------------------------------------
+# Search space
+# ---------------------------------------------------------------------------
+# Rationale for microbiome (high-dim, sparse, small-N):
+#   * n_estimators 100–800       — enough rounds at low learning rates.
+#   * learning_rate loguniform   — exp(-4..-1) ≈ 0.018–0.37.
+#   * max_depth [3,4,5,6,8]      — shallow trees curb overfitting on wide data.
+#   * min_child_weight 1–10      — penalise splits on tiny noisy leaves.
+#   * subsample 0.6–1.0          — row bagging.
+#   * colsample_bytree 0.4–1.0   — column bagging analogue to RF max_features.
+#   * gamma 0–5                  — minimum split-loss gain regulariser.
+#   * reg_alpha / reg_lambda     — L1 (sparsity) and L2 smoothing,
+#     loguniform(-3..2)            ≈ 0.05–7.4.
+space = {
+    "n_estimators": hp.quniform("n_estimators", 100, 800, 50),
+    "learning_rate": hp.loguniform("learning_rate", -4, -1),
+    "max_depth": hp.choice("max_depth", [3, 4, 5, 6, 8]),
     "min_child_weight": hp.uniform("min_child_weight", 1, 10),
-    "subsample": hp.uniform("subsample", 0.5, 1.0),
-    "colsample_bytree": hp.uniform("colsample_bytree", 0.5, 1.0),
+    "subsample": hp.uniform("subsample", 0.6, 1.0),
+    "colsample_bytree": hp.uniform("colsample_bytree", 0.4, 1.0),
     "gamma": hp.uniform("gamma", 0, 5),
-    "reg_alpha": hp.loguniform("reg_alpha", -3, 2), 
-    "reg_lambda": hp.loguniform("reg_lambda", -3, 2)
+    "reg_alpha": hp.loguniform("reg_alpha", -3, 2),
+    "reg_lambda": hp.loguniform("reg_lambda", -3, 2),
 }
 
-# Run Hyperopt Optimization
+
+# ---------------------------------------------------------------------------
+# Run Hyperopt
+# ---------------------------------------------------------------------------
 trials = Trials()
-best = fmin(fn=objective, space=search_space, algo=tpe.suggest, max_evals=100, trials=trials)
+best = fmin(fn=objective, space=space, algo=tpe.suggest, max_evals=50, trials=trials)
 print("\nBest parameters:", best)

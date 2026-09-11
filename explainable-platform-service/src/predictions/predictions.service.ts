@@ -13,6 +13,7 @@ import {
   PredictionClass,
   PredictionStatus,
 } from 'src/interface/prediction-class.enum';
+import { EventsHub } from 'src/events/events.hub';
 
 @Injectable()
 export class PredictionsService {
@@ -23,6 +24,7 @@ export class PredictionsService {
     private recordsRepository: Repository<PredictionRecord>,
     private readonly queueService: QueueService,
     private storageService: StorageService,
+    private readonly eventsHub: EventsHub,
   ) {}
 
   async createPrediction(file: Multer.File, modelName: string) {
@@ -90,7 +92,23 @@ export class PredictionsService {
       throw new NotFoundException('No failed records found for re-prediction.');
     }
 
+    // Flip the records back to PENDING immediately and announce it so the FE
+    // can show the new state without waiting for the worker to pick them up.
     for (const record of failedRecords) {
+      record.status = PredictionStatus.PENDING;
+      record.errorMsg = null;
+      await this.recordsRepository.save(record);
+      this.eventsHub.publishPrediction(predictionId, 'record:update', {
+        id: record.id,
+        status: record.status,
+        proba: record.proba,
+        class: record.class,
+        errorMsg: record.errorMsg,
+        waterfall: record.waterfall
+          ? await this.storageService.getPresignedUrl(record.waterfall)
+          : null,
+        waterfallError: record.waterfallError ?? null,
+      });
       await this.queueService.addPredictionRecordJob(predictionId, record.id);
     }
 
@@ -101,7 +119,112 @@ export class PredictionsService {
 
   async cancelPrediction(predictionId: string) {
     await this.queueService.cancelPredictionJob(predictionId);
+
+    // QueueService bulk-updates records to CANCELED via repository.update(),
+    // which bypasses entity listeners. Re-read the affected records here so
+    // we can broadcast each new state to any open SSE subscriber.
+    const canceledRecords = await this.recordsRepository.find({
+      where: {
+        prediction: { id: predictionId },
+        status: PredictionStatus.CANCELED,
+      },
+    });
+    for (const record of canceledRecords) {
+      this.eventsHub.publishPrediction(predictionId, 'record:update', {
+        id: record.id,
+        status: record.status,
+        proba: record.proba,
+        class: record.class,
+        errorMsg: record.errorMsg,
+        waterfall: record.waterfall
+          ? await this.storageService.getPresignedUrl(record.waterfall)
+          : null,
+        waterfallError: record.waterfallError ?? null,
+      });
+    }
+
     return { message: `Prediction job for ${predictionId} was canceled.` };
+  }
+
+  // --- Targeted plot re-generation -------------------------------------
+  // Each method validates the target exists, then enqueues a Bull job. SHAP
+  // for a GCN is slow (~20s+), so we never run it inline in the HTTP request
+  // — the worker handles it and pushes the result over SSE when done.
+  //
+  // Before queueing, the plot field is cleared (image + error -> null). This
+  // makes the in-progress state server-truth: the FE renders the spinner
+  // whenever a plot has neither an image nor an error, so it survives a page
+  // refresh and is correctly scoped per prediction/record (no shared flag).
+
+  // Build + emit the prediction-level explain event (heatmap + beeswarm),
+  // resolving presigned URLs so the client can render without a refetch.
+  private async emitPredictionExplain(prediction: Prediction) {
+    this.eventsHub.publishPrediction(prediction.id, 'prediction:explain', {
+      predictionId: prediction.id,
+      heatmap: prediction.heatmap
+        ? await this.storageService.getPresignedUrl(prediction.heatmap)
+        : null,
+      heatmapError: prediction.heatmapError ?? null,
+      beeswarm: prediction.beeswarm
+        ? await this.storageService.getPresignedUrl(prediction.beeswarm)
+        : null,
+      beeswarmError: prediction.beeswarmError ?? null,
+    });
+  }
+
+  async regenHeatmap(predictionId: string) {
+    const prediction = await this.predictionsRepository.findOne({
+      where: { id: predictionId },
+    });
+    if (!prediction) {
+      throw new NotFoundException(`Prediction ID ${predictionId} not found`);
+    }
+    prediction.heatmap = null;
+    prediction.heatmapError = null;
+    await this.predictionsRepository.save(prediction);
+    await this.emitPredictionExplain(prediction);
+    await this.queueService.addRegenHeatmapJob(predictionId);
+    return { message: 'Heatmap re-generation queued.' };
+  }
+
+  async regenBeeswarm(predictionId: string) {
+    const prediction = await this.predictionsRepository.findOne({
+      where: { id: predictionId },
+    });
+    if (!prediction) {
+      throw new NotFoundException(`Prediction ID ${predictionId} not found`);
+    }
+    prediction.beeswarm = null;
+    prediction.beeswarmError = null;
+    await this.predictionsRepository.save(prediction);
+    await this.emitPredictionExplain(prediction);
+    await this.queueService.addRegenBeeswarmJob(predictionId);
+    return { message: 'Beeswarm re-generation queued.' };
+  }
+
+  async regenWaterfall(predictionId: string, recordId: string) {
+    const record = await this.recordsRepository.findOne({
+      where: { id: recordId, prediction: { id: predictionId } },
+    });
+    if (!record) {
+      throw new NotFoundException(
+        `PredictionRecord ${recordId} not found for prediction ${predictionId}`,
+      );
+    }
+    record.waterfall = null;
+    record.waterfallError = null;
+    await this.recordsRepository.save(record);
+    this.eventsHub.publishPrediction(predictionId, 'record:update', {
+      id: record.id,
+      status: record.status,
+      proba: record.proba,
+      class: record.class,
+      errorMsg: record.errorMsg,
+      waterfall: null,
+      waterfallError: null,
+    });
+    await this.queueService.addRegenWaterfallJob(predictionId, recordId);
+    return { message: 'Waterfall re-generation queued.' };
   }
 
   async getPredictions(page: number = 1, limit: number = 10) {
@@ -110,7 +233,9 @@ export class PredictionsService {
         'id',
         'modelName',
         'heatmap',
+        'heatmapError',
         'beeswarm',
+        'beeswarmError',
         'createdAt',
         'prediction_number',
       ],
@@ -151,9 +276,11 @@ export class PredictionsService {
           heatmap: prediction.heatmap
             ? await this.storageService.getPresignedUrl(prediction.heatmap)
             : null,
+          heatmapError: prediction.heatmapError ?? null,
           beeswarm: prediction.beeswarm
             ? await this.storageService.getPresignedUrl(prediction.beeswarm)
             : null,
+          beeswarmError: prediction.beeswarmError ?? null,
         };
       }),
     );
@@ -177,7 +304,7 @@ export class PredictionsService {
   ) {
     const prediction = await this.predictionsRepository.findOne({
       where: { id: predictionId },
-      select: ['id', 'prediction_number', 'modelName'],
+      select: ['id', 'prediction_number', 'modelName', 'dfColumns'],
     });
 
     if (!prediction)
@@ -209,13 +336,15 @@ export class PredictionsService {
       .createQueryBuilder('record')
       .select([
         'record.id',
+        'record.record_number',
         'record.proba',
         'record.class',
         'record.waterfall',
+        'record.waterfallError',
         'record.status',
         'record.errorMsg',
         'record.dfData',
-        'record.record_number',
+        'record.comment',
       ])
       .where(whereCondition)
       .orderBy(
@@ -243,6 +372,7 @@ export class PredictionsService {
           waterfall: predictionRow.waterfall
             ? await this.storageService.getPresignedUrl(predictionRow.waterfall)
             : null,
+          waterfallError: predictionRow.waterfallError ?? null,
         };
       }),
     );
@@ -263,5 +393,26 @@ export class PredictionsService {
       },
       meta,
     };
+  }
+
+  async updatePredictionRecordsComment(
+    predictionId: string,
+    predictionRecordsId: string,
+    comment: string,
+  ): Promise<PredictionRecord> {
+    const record = await this.recordsRepository.findOne({
+      where: {
+        id: predictionRecordsId,
+        prediction: { id: predictionId },
+      },
+      relations: ['prediction'],
+    });
+    if (!record) {
+      throw new NotFoundException(
+        `PredictionRecord with id ${predictionRecordsId} not found`,
+      );
+    }
+    record.comment = comment;
+    return await this.recordsRepository.save(record);
   }
 }

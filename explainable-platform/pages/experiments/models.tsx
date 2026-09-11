@@ -16,7 +16,7 @@ import {
   IPaginationRequestParams,
 } from "@/components/model/pagination.interface";
 import { useRouter } from "next/router";
-import { queryToString } from "../utils/queryToString";
+import { queryToString } from "@/lib/queryToString";
 import { ShapPlotPlaceholder } from "@/components/ui/ImageEmpty/ImageEmpty";
 import { Dropdown } from "@/components/ui/Dropdown/Dropdown";
 import {
@@ -50,7 +50,7 @@ export function History() {
           : null;
         return productionVersion || null;
       })
-      .filter((v) => v !== null);
+      .filter((v): v is IRegisteredModelLatestVersions => v !== null);
     console.log(model);
     setModels(model);
   };

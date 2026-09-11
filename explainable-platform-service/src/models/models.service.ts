@@ -11,7 +11,6 @@ import { validate as isUuid } from 'uuid';
 @Injectable()
 export class ModelsService {
   private inferenceServiceURL: string;
-  private hostHeader = 'kserve-custom-inference-service.default.example.com';
 
   constructor(
     private httpService: HttpService,
@@ -28,9 +27,6 @@ export class ModelsService {
       const response = await lastValueFrom(
         this.httpService.get<IProductionModels[]>(
           `${this.inferenceServiceURL}/v1/models`,
-          {
-            headers: { Host: this.hostHeader },
-          },
         ),
       );
       const models = response.data;

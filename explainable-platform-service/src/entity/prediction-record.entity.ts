@@ -21,8 +21,16 @@ export class PredictionRecord {
   @Column({ nullable: true })
   class?: number;
 
+  @Column({ type: 'text', nullable: true })
+  waterfall?: string | null;
+
+  // Set when `waterfall` could not be produced — stores an ImageGenStatus
+  // code (IMAGE_FAILED / UPLOAD_FAILED). null when the waterfall is fine.
+  @Column({ type: 'text', nullable: true })
+  waterfallError?: string | null;
+
   @Column({ nullable: true })
-  waterfall?: string;
+  barPlot?: string;
 
   @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;
@@ -32,4 +40,7 @@ export class PredictionRecord {
 
   @Column({ type: 'text', nullable: true })
   errorMsg?: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  comment?: string;
 }

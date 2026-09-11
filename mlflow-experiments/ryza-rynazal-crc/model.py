@@ -3,8 +3,7 @@ import mlflow.shap
 import mlflow.sklearn
 import pandas as pd
 
-import joblib
-import shap
+from mlflow_shap import log_explainer
 
 from mlflow.models import infer_signature
 
@@ -12,28 +11,6 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import RepeatedStratifiedKFold
 from sklearn.model_selection import cross_validate
 from shapmat.abundance_filter import ab_filter
-
-#TODO: Make it to Third-party Package
-def log_explainer(model, data, file_path='shap_explainer.pkl'):
-    """
-    Save a SHAP explainer for the given model and data.
-
-    Parameters:
-    model: The trained model to explain.
-    data: The data used to initialize the SHAP explainer.
-    file_path (str): The file path to save the SHAP explainer (default: 'shap_explainer.pkl').
-
-    Returns:
-    str: The file path where the SHAP explainer is saved.
-    """
-    # Create SHAP explainer
-    explainer = shap.Explainer(model, data)
-
-    # Save explainer to file
-    with open(file_path, 'wb') as f:
-        joblib.dump(explainer, f)
-
-    mlflow.log_artifact(file_path, artifact_path="shap_explainer")
 
 # Log the Dataset to an MLflow run by using the `log_input` API
 with mlflow.start_run() as run:
