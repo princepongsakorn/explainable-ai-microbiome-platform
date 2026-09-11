@@ -6,6 +6,7 @@ import pandas as pd
 from curatedcrc.data import BIOMARKERS, EXPECTED_FILTERED_FEATURES
 from curatedcrc.evaluate import reference_model
 from curatedcrc.shap_report import normalize_class1_shap
+from curatedcrc.train import reference_params
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -17,6 +18,15 @@ def test_reference_model_matches_comparison_protocol():
     assert params["max_depth"] is None
     assert params["random_state"] == 0
     assert params["class_weight"] is None
+
+
+def test_registered_model_uses_the_same_fixed_parameters():
+    assert reference_params() == {
+        "n_estimators": 500,
+        "max_depth": None,
+        "random_state": 0,
+        "class_weight": None,
+    }
 
 
 def test_class1_shap_normalization_supports_current_random_forest_shape():

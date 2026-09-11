@@ -1,4 +1,7 @@
 {
+  "archived_versions": [
+    "1"
+  ],
   "production_after": {
     "sample-gcn-crc:29": {
       "metrics": {
@@ -80,5 +83,5 @@
   "production_unchanged": true,
   "registered_name": "crc-curatedcrc-rf",
   "stage": "Staging",
-  "version": "1"
+  "version": "2"
 }
