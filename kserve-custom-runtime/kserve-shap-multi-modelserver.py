@@ -21,6 +21,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
 import mlflow  # noqa: E402
+import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 import shap  # noqa: E402
 from flask import Flask, jsonify, request  # noqa: E402
@@ -30,7 +31,7 @@ from mlflow.server import get_app_client  # noqa: E402
 
 from mlflow_explainable import ExplainableModel  # noqa: E402
 
-from explain_payload import build_payload  # noqa: E402
+from explain_payload import PayloadError, build_payload  # noqa: E402
 
 # Matplotlib uses global pyplot state. Flask serves requests in multiple
 # threads by default (threaded=True since Flask 1.0), so concurrent
@@ -60,16 +61,23 @@ def safe_jsonify(obj):
 
 
 class ShapValueObject:
-    def __init__(self, base_value, shap_df, explanation, base_values=None):
-        # Scalar, for the matplotlib waterfall helper which requires one.
-        self.base_value = base_value
-        # Per-sample, for the JSON payload. See docs/shap-explain-spec.md 1.3:
-        # collapsing to sample 0's value is correct for TreeExplainer (which
-        # tiles one expected value across every row) and wrong for the
-        # permutation path (which computes one per row).
-        self.base_values = base_values
+    """SHAP values for a set of samples, with one base value per sample.
+
+    There is deliberately no scalar ``base_value`` here. Collapsing to sample 0's
+    value is correct for TreeExplainer, which tiles one expected value across
+    every row, and wrong for the permutation path, which computes one per row —
+    see docs/shap-explain-spec.md 1.3. The one consumer that genuinely needs a
+    scalar (``waterfall_legacy``) selects the value for the sample it is drawing.
+    """
+
+    def __init__(self, shap_df, explanation, base_values):
+        self.base_values = np.asarray(base_values, dtype=float)
         self.shap_df = shap_df
         self.explanation = explanation
+
+    def base_value_for(self, subject_id) -> float:
+        """The base value of one sample, by its index label."""
+        return float(self.base_values[self.shap_df.index.get_loc(subject_id)])
 
 
 # ---------------------------------------------------------------------------
@@ -155,8 +163,8 @@ class ModelLoader:
 # SHAP — uniform consumption of the contract's ``shap_explain`` output
 # ---------------------------------------------------------------------------
 def _aggregate_shap_by_genus(
-    values: pd.DataFrame | "np.ndarray",  # noqa: F821
-    data: "np.ndarray",  # noqa: F821
+    values: pd.DataFrame | np.ndarray,
+    data: np.ndarray,
     feature_names: list,
 ):
     """Sum SHAP values / abundance within each genus.
@@ -172,8 +180,6 @@ def _aggregate_shap_by_genus(
     aggregated waterfall still adds up correctly. ``data`` (used for
     beeswarm color) is summed too = total relative abundance of the genus.
     """
-    import numpy as np
-
     values = np.asarray(values)
     data = np.asarray(data)
     feature_names = list(feature_names)
@@ -231,13 +237,6 @@ def get_shap_value(impl, X, aggregate_by: str | None = None):
     else:
         raise ValueError(f"Unsupported SHAP values shape: {values.shape}")
 
-    # When ``base_value`` is per-sample, the legacy waterfall helper expects
-    # a scalar — use the first sample's value (they're usually identical).
-    if hasattr(base_value, "ndim") and base_value.ndim >= 1:
-        base_scalar = float(base_value.ravel()[0])
-    else:
-        base_scalar = float(base_value)
-
     feature_names = list(X.columns)
     patient_ids = X.index
 
@@ -259,23 +258,22 @@ def get_shap_value(impl, X, aggregate_by: str | None = None):
         values_class, columns=feature_names, index=patient_ids
     )
 
-    # Broadcast to one base value per sample without assuming they are equal.
-    import numpy as np  # local import: numpy is already a transitive dependency
-
+    # One base value per sample, without assuming they are equal. An unexpected
+    # size is a real shape problem — inventing n copies of one value would make
+    # every downstream additivity check pass while reporting the wrong number.
     base_arr = np.asarray(base_value, dtype=float).ravel()
     n_rows = values_class.shape[0]
     if base_arr.size == n_rows:
         base_values = base_arr
     elif base_arr.size == 1:
-        base_values = np.repeat(base_arr, n_rows)
+        base_values = np.full(n_rows, base_arr[0])
     else:
-        logger.warning(
-            "base_values has size %s for %s samples; falling back to the scalar",
-            base_arr.size, n_rows,
+        raise ValueError(
+            f"base_values has size {base_arr.size} for {n_rows} samples; "
+            "expected one per sample or a single shared value"
         )
-        base_values = np.repeat(np.asarray([base_scalar], dtype=float), n_rows)
 
-    return ShapValueObject(base_scalar, shap_df, explanation, base_values=base_values)
+    return ShapValueObject(shap_df, explanation, base_values)
 
 
 # ---------------------------------------------------------------------------
@@ -372,7 +370,7 @@ def get_local_waterfall_plot(subject_id, shap_value_object):
         plt.figure()
         max_display = 8
         shap_df = shap_value_object.shap_df
-        base_value = shap_value_object.base_value
+        base_value = shap_value_object.base_value_for(subject_id)
         fig = shap.plots._waterfall.waterfall_legacy(
             base_value,
             shap_df.loc[subject_id],
@@ -468,8 +466,9 @@ def _parse_dataframe_split(req_json):
         )
     columns = req_json["dataframe_split"]["columns"]
     data = req_json["dataframe_split"]["data"]
-    # `index` is optional and ignored by the plot endpoints. /v1/explain/values
-    # uses it to label each Sample with the caller's own identifier.
+    # `index` is optional, and honoured by every endpoint as the DataFrame index
+    # — so it also sets the `id` each waterfall response reports.
+    # /v1/explain/values additionally serializes it as `sample_ids`.
     index = req_json["dataframe_split"].get("index")
     if index is not None and len(index) != len(data):
         return None, (
@@ -546,9 +545,13 @@ def explain_values(model_name):
             model_name=model_name,
         )
         return jsonify(payload)
-    except ValueError as e:
-        # build_payload raises this for non-finite values, which means the caller
-        # sent something transformer() could not coerce. That is a client error.
+    except PayloadError as e:
+        # The caller sent something transformer() could not coerce to a number.
+        # Narrowly typed on purpose: a bare ValueError here would also catch
+        # get_shap_value's "unsupported SHAP shape", which is a server fault —
+        # and the chunked job upstream does not retry 4xx, so mislabelling it
+        # would turn a transient server problem into a permanently failed
+        # prediction blamed on the user.
         logger.warning("explain_values rejected input for '%s': %s", model_name, e)
         return jsonify({"error": str(e)}), 400
     except Exception as e:  # noqa: BLE001

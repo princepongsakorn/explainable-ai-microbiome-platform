@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import sys
 
 import matplotlib
 
@@ -33,42 +34,18 @@ REPO = pathlib.Path(__file__).resolve().parents[2]
 OUT = REPO / "explainable-platform/packages/shap-svg/fixtures"
 SEED = 0
 
-
-# ---------------------------------------------------------------------------
-# Payload construction — mirrors kserve-custom-runtime/explain_payload.py
-# ---------------------------------------------------------------------------
-def sigfig(x: float, digits: int = 4) -> float:
-    """Spec §1.4 — 4 significant figures as a JSON-safe float."""
-    x = float(x)
-    if x == 0.0:
-        return 0.0
-    return float("%.*g" % (digits, x))
-
-
-def to_payload(values, base_values, data, feature_names, sample_ids=None) -> dict:
-    values = np.asarray(values, dtype=float)
-    data = np.asarray(data, dtype=float)
-    base = np.asarray(base_values, dtype=float).ravel()
-    if not (np.isfinite(values).all() and np.isfinite(data).all() and np.isfinite(base).all()):
-        raise ValueError("refusing to write a fixture containing non-finite values")
-
-    payload = {
-        "contract_version": 1,
-        "values": [[sigfig(v) for v in row] for row in values],
-        "base_values": [sigfig(b) for b in base],
-        "data": [[sigfig(v) for v in row] for row in data],
-        "feature_names": [str(n) for n in feature_names],
-    }
-    if sample_ids is not None:
-        payload["sample_ids"] = [str(s) for s in sample_ids]
-    return payload
+# The fixtures are the acceptance criterion for shap-svg, so they must be produced by
+# the same builder the runtime uses — a second implementation could drift and the
+# golden tests would keep passing against a payload the server no longer emits.
+sys.path.insert(0, str(REPO / "kserve-custom-runtime"))
+from explain_payload import build_payload, sigfig  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
 # Explaining
 # ---------------------------------------------------------------------------
 def explain(X: pd.DataFrame, y: pd.Series, n_estimators: int = 60):
-    """Fit a small forest and return (values[n,p], base_values[n], X).
+    """Fit a small forest and return (values[n,p], base_values[n]).
 
     TreeExplainer with a background is `interventional`; it tiles one expected value
     across every row, which is why `base_values` comes back constant here.
@@ -78,7 +55,7 @@ def explain(X: pd.DataFrame, y: pd.Series, n_estimators: int = 60):
     values = out.values[:, :, 1] if out.values.ndim == 3 else out.values
     base = out.base_values[:, 1] if np.ndim(out.base_values) == 2 else out.base_values
     base = np.broadcast_to(np.asarray(base, dtype=float).ravel(), (len(X),))
-    return values, base, X
+    return values, base
 
 
 def capture_bar(values, base_values, data, feature_names, max_display: int) -> dict:
@@ -93,8 +70,8 @@ def capture_bar(values, base_values, data, feature_names, max_display: int) -> d
     def spy(self, y, width, *args, **kwargs):
         captured.setdefault("values", [float(w) for w in np.asarray(width, dtype=float)])
         colors = kwargs.get("color")
-        if colors is not None and "colors" not in captured:
-            captured["colors"] = [matplotlib.colors.to_hex(c) for c in colors]
+        if colors is not None:
+            captured.setdefault("colors", [matplotlib.colors.to_hex(c) for c in colors])
         return original(self, y, width, *args, **kwargs)
 
     matplotlib.axes.Axes.barh = spy
@@ -144,8 +121,8 @@ def main() -> None:
     # substituting synthetic Gaussian data here.
     real_df = pd.read_csv(REPO / "sample-data/sample.csv", index_col=0)
     real_X = real_df.drop(columns=["CRC"])
-    real_v, real_b, _ = explain(real_X, real_df["CRC"])
-    write("real.json", to_payload(real_v, real_b, real_X.values, real_X.columns, real_X.index))
+    real_v, real_b = explain(real_X, real_df["CRC"])
+    write("real.json", build_payload(real_v, real_b, real_X.values, real_X.columns, real_X.index))
     write("real.bar.golden.json", capture_bar(real_v, real_b, real_X.values, real_X.columns, 10))
 
     # --- tiny: 20 Samples x the 50 most important Features -------------------
@@ -154,7 +131,7 @@ def main() -> None:
     tiny_b = real_b[:20]
     tiny_d = real_X.values[:20][:, top50]
     tiny_names = real_X.columns[top50]
-    write("tiny.json", to_payload(tiny_v, tiny_b, tiny_d, tiny_names, real_X.index[:20]))
+    write("tiny.json", build_payload(tiny_v, tiny_b, tiny_d, tiny_names, real_X.index[:20]))
     write("tiny.bar.golden.json", capture_bar(tiny_v, tiny_b, tiny_d, tiny_names, 10))
 
     # --- large: 331 Samples x 865 Features, for performance only -------------
@@ -162,8 +139,8 @@ def main() -> None:
     large_y = pd.read_csv(
         REPO / "sample-data/yachidas_2019_test_labels.csv", index_col=0
     ).loc[large_X.index, "label"]
-    large_v, large_b, _ = explain(large_X, large_y, n_estimators=30)
-    write("large.json", to_payload(large_v, large_b, large_X.values, large_X.columns, large_X.index))
+    large_v, large_b = explain(large_X, large_y, n_estimators=30)
+    write("large.json", build_payload(large_v, large_b, large_X.values, large_X.columns, large_X.index))
 
     # --- edge: the shapes that break naive renderers -------------------------
     names6 = list(tiny_names[:6])
@@ -172,16 +149,16 @@ def main() -> None:
     write(
         "edge.json",
         {
-            "single_sample": to_payload(
+            "single_sample": build_payload(
                 [tiny_v[0]], [tiny_b[0]], [tiny_d[0]], tiny_names, [real_X.index[0]]
             ),
-            "zero_feature_column": to_payload(
+            "zero_feature_column": build_payload(
                 [[0.0] + row_v[1:]], [tiny_b[0]], [[0.0] + row_d[1:]], names6, ["s0"]
             ),
-            "all_negative": to_payload(
+            "all_negative": build_payload(
                 [[-abs(v) for v in row_v]], [tiny_b[0]], [row_d], names6, ["s0"]
             ),
-            "fewer_features_than_max_display": to_payload(
+            "fewer_features_than_max_display": build_payload(
                 [row_v[:3]], [tiny_b[0]], [row_d[:3]], names6[:3], ["s0"]
             ),
         },

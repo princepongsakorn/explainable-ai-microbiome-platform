@@ -25,6 +25,6 @@ COPY requirements.txt ./
 RUN pip install -r ./requirements.txt
 
 # Copy local code to container image
-COPY kserve-shap-multi-modelserver.py ./
+COPY kserve-shap-multi-modelserver.py explain_payload.py ./
 
 CMD ["python", "kserve-shap-multi-modelserver.py"]

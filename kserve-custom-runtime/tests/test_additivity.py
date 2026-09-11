@@ -54,30 +54,30 @@ def explained():
     return payload, model.predict_proba(X)[:, 1]
 
 
-def test_additivity_holds_within_tolerance(explained):
+@pytest.fixture(scope="module")
+def additivity_error(explained):
     payload, proba = explained
     reconstructed = np.asarray(payload["base_values"]) + np.asarray(payload["values"]).sum(axis=1)
-    np.testing.assert_allclose(reconstructed, proba, rtol=0, atol=1e-3)
+    return np.abs(reconstructed - proba)
 
 
-def test_rounding_leaves_headroom_under_the_tolerance(explained):
+def test_additivity_holds_within_tolerance(additivity_error):
+    assert additivity_error.max() < 1e-3
+
+
+def test_rounding_leaves_headroom_under_the_tolerance(additivity_error):
     """Guard against someone lowering DEFAULT_SIGNIFICANT_DIGITS without thinking.
 
     Measured at 1.09e-04 for these 201 Features. Failing this means the rounding was
     made coarser, not that additivity broke.
     """
-    payload, proba = explained
-    reconstructed = np.asarray(payload["base_values"]) + np.asarray(payload["values"]).sum(axis=1)
-    worst = float(np.max(np.abs(reconstructed - proba)))
+    worst = float(additivity_error.max())
     assert worst < 5e-4, f"worst absolute additivity error {worst:.2e} has less than 2x headroom"
 
 
-def test_payload_matches_declared_shapes(explained):
-    payload, _ = explained
-    n = len(payload["values"])
-    p = len(payload["feature_names"])
-    assert len(payload["data"]) == n
-    assert len(payload["base_values"]) == n
-    assert len(payload["sample_ids"]) == n
-    assert all(len(row) == p for row in payload["values"])
-    assert all(len(row) == p for row in payload["data"])
+def test_payload_covers_every_sample_and_feature(explained):
+    """The shape guards live in build_payload; this checks the real model's output
+    actually filled them, which those guards cannot tell you."""
+    payload, proba = explained
+    assert len(payload["values"]) == len(proba)
+    assert len(payload["feature_names"]) == 201
