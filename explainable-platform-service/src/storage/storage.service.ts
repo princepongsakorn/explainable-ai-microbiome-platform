@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Storage, Bucket } from '@google-cloud/storage';
+import { LocalStorageDriver } from './local-storage.driver';
 
 /**
  * Storage service backed by Google Cloud Storage.
@@ -20,8 +21,10 @@ import { Storage, Bucket } from '@google-cloud/storage';
 @Injectable()
 export class StorageService {
   private readonly logger = new Logger(StorageService.name);
-  private readonly storage: Storage;
-  private readonly bucket: Bucket;
+  private readonly storage?: Storage;
+  private readonly bucket?: Bucket;
+  /** Set when no bucket is configured; see LocalStorageDriver. */
+  private readonly local?: LocalStorageDriver;
   private readonly bucketName: string;
   private readonly prefix: string;
   private readonly signedUrlTtlSec: number;
@@ -34,13 +37,20 @@ export class StorageService {
       10,
     );
 
-    if (!this.bucketName) {
-      this.logger.warn('GCS_BUCKET is not set — StorageService will fail on use.');
+    if (this.bucketName) {
+      // Storage() uses ADC: on GCE, picks up the compute service account automatically.
+      this.storage = new Storage();
+      this.bucket = this.storage.bucket(this.bucketName);
+    } else {
+      const root =
+        this.configService.get<string>('LOCAL_STORAGE_DIR') ?? '.local-storage';
+      this.local = new LocalStorageDriver(root);
+      this.logger.warn(
+        `GCS_BUCKET is not set — storing objects under ${root} instead. ` +
+          'Suitable for local development only; signed URLs are unavailable, so ' +
+          'the PNG plots will not render.',
+      );
     }
-
-    // Storage() uses ADC: on GCE, picks up the compute service account automatically.
-    this.storage = new Storage();
-    this.bucket = this.storage.bucket(this.bucketName);
   }
 
   /**
@@ -61,8 +71,9 @@ export class StorageService {
   ): Promise<string> {
     const buffer = Buffer.from(base64Data, 'base64');
     const key = `${this.prefix}/${path}/${fileName}`;
+    if (this.local) return this.local.save(key, buffer);
     try {
-      await this.bucket.file(key).save(buffer, {
+      await this.bucket!.file(key).save(buffer, {
         contentType: 'image/png',
         resumable: false,
         metadata: {
@@ -89,8 +100,9 @@ export class StorageService {
     fileName: string,
   ): Promise<string> {
     const key = `${this.prefix}/${path}/${fileName}`;
+    if (this.local) return this.local.save(key, gzipped);
     try {
-      await this.bucket.file(key).save(gzipped, {
+      await this.bucket!.file(key).save(gzipped, {
         contentType: 'application/json',
         resumable: false,
         metadata: {
@@ -110,12 +122,14 @@ export class StorageService {
 
   /** Stream stored bytes straight to the response. */
   createReadStream(key: string): NodeJS.ReadableStream {
-    return this.bucket.file(key).createReadStream();
+    if (this.local) return this.local.createReadStream(key);
+    return this.bucket!.file(key).createReadStream();
   }
 
   /** Read a stored object into memory — used to slice one Sample out of the matrix. */
   async download(key: string): Promise<Buffer> {
-    const [contents] = await this.bucket.file(key).download();
+    if (this.local) return this.local.download(key);
+    const [contents] = await this.bucket!.file(key).download();
     return contents;
   }
 
@@ -127,7 +141,12 @@ export class StorageService {
    */
   async getPresignedUrl(key: string): Promise<string> {
     if (!key) return '';
-    const [url] = await this.bucket.file(key).getSignedUrl({
+    if (this.local) {
+      // No equivalent locally. Returning '' makes the image render as "not
+      // available" rather than as a broken link.
+      return '';
+    }
+    const [url] = await this.bucket!.file(key).getSignedUrl({
       version: 'v4',
       action: 'read',
       expires: Date.now() + this.signedUrlTtlSec * 1000,
