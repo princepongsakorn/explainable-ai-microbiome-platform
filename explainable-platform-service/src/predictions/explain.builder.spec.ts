@@ -3,6 +3,7 @@ import {
   ExplainPayload,
   chunkIndices,
   concatPayloads,
+  sliceSample,
 } from './explain.builder';
 
 const chunk = (ids: string[], value: number): ExplainPayload => ({
@@ -92,5 +93,61 @@ describe('concatPayloads', () => {
     expect(out.base_values).toHaveLength(500);
     expect(out.data).toHaveLength(500);
     expect(out.sample_ids).toEqual(ids);
+  });
+});
+
+describe('sliceSample', () => {
+  const payload: ExplainPayload = {
+    contract_version: 1,
+    values: [
+      [1, -2],
+      [3, 4],
+      [5, -6],
+    ],
+    base_values: [0.1, 0.2, 0.3],
+    data: [
+      [10, 20],
+      [30, 40],
+      [50, 60],
+    ],
+    feature_names: ['a', 'b'],
+    sample_ids: ['s1', 's2', 's3'],
+    model_name: 'crc-test',
+    model_version: '4',
+  };
+
+  it('returns a one-Sample payload for the requested id', () => {
+    expect(sliceSample(payload, 's2')).toEqual({
+      contract_version: 1,
+      values: [[3, 4]],
+      base_values: [0.2],
+      data: [[30, 40]],
+      feature_names: ['a', 'b'],
+      sample_ids: ['s2'],
+      model_name: 'crc-test',
+      model_version: '4',
+    });
+  });
+
+  it('takes that Sample own base value, not the first one', () => {
+    expect(sliceSample(payload, 's3').base_values).toEqual([0.3]);
+  });
+
+  it('throws a named error when the Sample is not in the payload', () => {
+    expect(() => sliceSample(payload, 'nope')).toThrow(/nope/);
+  });
+
+  it('throws when the payload carries no sample_ids at all', () => {
+    const { sample_ids, ...anonymous } = payload;
+    expect(() => sliceSample(anonymous as ExplainPayload, 's1')).toThrow(
+      /sample_ids/,
+    );
+  });
+
+  it('preserves additivity: base + sum(values) is unchanged by slicing', () => {
+    const whole = payload.base_values[1] + payload.values[1].reduce((a, b) => a + b, 0);
+    const sliced = sliceSample(payload, 's2');
+    const part = sliced.base_values[0] + sliced.values[0].reduce((a, b) => a + b, 0);
+    expect(part).toBeCloseTo(whole, 10);
   });
 });

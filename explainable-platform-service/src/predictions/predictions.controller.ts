@@ -9,7 +9,10 @@ import {
   Body,
   UseGuards,
   Patch,
+  Headers,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { PredictionsService } from './predictions.service';
 import { Multer } from 'multer';
@@ -68,6 +71,48 @@ export class PredictionsController {
     @Query('limit') limit: number = 10,
   ) {
     return this.predictionsService.getPredictions(Number(page), Number(limit));
+  }
+
+  /**
+   * The whole Prediction's Explanation, gzipped JSON, with a conditional GET.
+   *
+   * No signed URL on this path: a signed URL expires inside a tab left open,
+   * an ETag does not.
+   */
+  @Get(':predictionId/explain')
+  async getExplanation(
+    @Param('predictionId') predictionId: string,
+    @Headers('if-none-match') ifNoneMatch: string | undefined,
+    @Res() res: Response,
+  ) {
+    const { key, etag } = await this.predictionsService.getExplanationRef(
+      predictionId,
+    );
+    const quoted = `"${etag}"`;
+
+    res.setHeader('ETag', quoted);
+    res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
+
+    // Answered from the database read above; storage is never touched.
+    if (ifNoneMatch === quoted) {
+      return res.status(304).end();
+    }
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Encoding', 'gzip');
+    this.predictionsService.streamExplanation(key).pipe(res);
+  }
+
+  /** One Sample, sliced out of the same artifact. Never a recomputation. */
+  @Get(':predictionId/records/:recordId/explain')
+  async getRecordExplanation(
+    @Param('predictionId') predictionId: string,
+    @Param('recordId') recordId: string,
+  ) {
+    return this.predictionsService.sliceExplanationForRecord(
+      predictionId,
+      recordId,
+    );
   }
 
   @Get(':predictionId/records')
