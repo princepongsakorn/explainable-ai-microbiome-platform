@@ -57,7 +57,9 @@ mode does. Implement the same `faithfulOtherRow` switch `collapseToDisplay` alre
 to the corrected behaviour (`maxDisplay` real Features plus a separate row labelled
 `${p - maxDisplay} other features`).
 
-**Colours.** Positive `#ff0051`, negative `#008bfb`. The zero rule from bar does not apply here.
+**Colours.** Positive `#ff0051`, negative `#008bfb`. Bar's vertical rule at x = 0 has no counterpart
+here — waterfall's reference lines are the two axis marks below. (For how a contribution of exactly
+zero is coloured, see the note under Golden values; it differs from bar.)
 
 **Arrow geometry.** Each bar is an arrow, not a rectangle: a rectangle plus a triangular tip.
 matplotlib uses `head_length = 0.08` **inches** and converts to data units, because the head must stay
@@ -93,11 +95,23 @@ actually drew, captured by patching `matplotlib.axes.Axes.arrow`:
 }
 ```
 
-`x` is the bar's left edge and `dx` its signed width, **both in value space, not pixels**. Test your
-layout function's value-space output against these; `head_length` there is matplotlib's inch-to-data
-conversion and is *not* what your SVG should reproduce — ignore that field.
+All of these are in **value space, not pixels**.
 
-`labels` is top-to-bottom and corresponds to `faithfulOtherRow: true`.
+Three traps, all of them real:
+
+* **`dx` is the arrow body, not the contribution.** `_waterfall.py` passes `dist - hl_scaled` as `dx`
+  and puts the remainder in `head_length`, so the Feature's φ is `dx + head_length` (with the head
+  signed the same way as `dx`). The capture now also records `contribution`, which is that sum —
+  use it. `head_length` is matplotlib's inch-to-data conversion and is *not* what your SVG head
+  should be.
+* **Arrows come positives-first, then negatives**, because the source draws them in two loops. Their
+  order is not the ranking. Map an arrow back to its rank through its `row`.
+* **`labels` is top-to-bottom** — the reverse of the raw tick order — and corresponds to
+  `faithfulOtherRow: true`. It keeps underscores; turning them into spaces is the renderer's job.
+
+One more asymmetry worth knowing: waterfall treats a contribution of exactly zero as **positive**
+(`_waterfall.py:115` tests `sval >= 0`), while bar treats it as **negative** (`_bar.py:268` tests
+`<= 0`). SHAP is not self-consistent here; match each plot to its own source.
 
 Round to four significant figures before comparing, exactly as `tests/golden.bar.test.ts` does, and
 for the same reason. **Never round inside the renderer** — `tests/golden.bar.test.ts` has a test

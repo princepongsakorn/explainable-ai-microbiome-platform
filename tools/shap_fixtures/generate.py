@@ -113,20 +113,31 @@ def capture_waterfall(values, base_value, data, feature_names, max_display: int)
     The runtime calls waterfall_legacy, not the modern waterfall, so that is what the
     golden file must reflect. The two share an algorithm; only the call signature differs.
 
-    Unlike bar, the y tick labels come out **bottom-to-top**: the row index is
-    `rng[i] = num_features - 1 - i`, so the largest |phi| is the last label, not the
-    first. Arrow order follows the ranking, largest |phi| first.
+    Three things here are not obvious and each one has bitten someone:
+
+    * the y tick labels come out **bottom-to-top** (`rng[i] = num_features - 1 - i`),
+      so the largest |phi| is the last label, not the first — the opposite of bar;
+    * arrows arrive **all the positive ones first, then all the negative ones**,
+      because _waterfall.py draws them in two loops; use `row` to map an arrow back
+      to its rank, not its position in this list;
+    * `dx` is only the arrow body. See the comment on the spy below.
     """
     captured: list[dict] = []
     original = matplotlib.axes.Axes.arrow
 
     def spy(self, x, y, dx, dy, **kwargs):
+        # `dx` is the arrow *body*: _waterfall.py passes `dist - hl_scaled` and puts
+        # the rest in head_length, so dx alone is NOT the Feature's contribution.
+        # Record the reconstructed total too, so nobody has to rediscover that.
+        head = float(kwargs.get("head_length", 0.0))
+        contribution = float(dx) + (head if float(dx) >= 0 else -head)
         captured.append(
             {
                 "x": sigfig(x, 6),
                 "row": int(round(float(y))),
                 "dx": sigfig(dx, 6),
-                "head_length": sigfig(kwargs.get("head_length", 0.0), 6),
+                "head_length": sigfig(head, 6),
+                "contribution": sigfig(contribution, 6),
                 "bar_width": sigfig(kwargs.get("width", 0.0), 6),
                 "color": matplotlib.colors.to_hex(kwargs.get("color")),
             }

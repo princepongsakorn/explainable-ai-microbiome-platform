@@ -4,3 +4,4 @@ export * from "./src/core/order";
 export * from "./src/core/format";
 export * from "./src/core/collapse";
 export * from "./src/core/barLayout";
+export * from "./src/core/waterfallLayout";

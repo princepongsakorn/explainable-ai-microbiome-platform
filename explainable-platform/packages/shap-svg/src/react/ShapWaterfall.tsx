@@ -1,0 +1,133 @@
+import { useId, useMemo, useState } from "react";
+import { Explanation } from "../core/types";
+import { parseExplanation } from "../core/parse";
+import { formatShapValue } from "../core/format";
+import { waterfallLayout, waterfallRows } from "../core/waterfallLayout";
+
+export type ShapWaterfallProps = {
+  explanation: Explanation;
+  sampleIndex?: number;
+  maxDisplay?: number;
+  faithfulOtherRow?: boolean;
+  classIndex?: number;
+  width?: number;
+  rowHeight?: number;
+  onFeatureClick?: (featureIndex: number | null) => void;
+};
+
+export function ShapWaterfall({
+  explanation,
+  sampleIndex = 0,
+  maxDisplay = 10,
+  faithfulOtherRow = false,
+  classIndex = 1,
+  width = 720,
+  rowHeight = 30,
+  onFeatureClick,
+}: ShapWaterfallProps) {
+  const uid = useId().replace(/:/g, "");
+  const [hovered, setHovered] = useState<number | null>(null);
+  const marginTop = 34;
+
+  const layout = useMemo(() => {
+    const parsed = parseExplanation(explanation, { classIndex });
+    const rows = waterfallRows(parsed, sampleIndex, maxDisplay, faithfulOtherRow);
+    return waterfallLayout(rows, {
+      width,
+      rowHeight,
+      marginLeft: 260,
+      marginRight: 110,
+      marginTop,
+    });
+  }, [explanation, sampleIndex, maxDisplay, faithfulOtherRow, classIndex, width, rowHeight]);
+
+  return (
+    <svg
+      width={width}
+      height={layout.height}
+      role="img"
+      aria-label={`Local SHAP waterfall for Sample ${sampleIndex}`}
+    >
+      {layout.separators.map((separator, index) => (
+        <line
+          key={`${uid}-separator-${index}`}
+          x1={separator.x1}
+          x2={separator.x2}
+          y1={separator.y}
+          y2={separator.y}
+          stroke="#cccccc"
+          strokeWidth={1}
+          strokeDasharray="1 5"
+        />
+      ))}
+
+      {layout.axisMarks.map((mark) => (
+        <g key={`${uid}-${mark.kind}`}>
+          <line
+            x1={mark.x}
+            x2={mark.x}
+            y1={marginTop}
+            y2={layout.plotBottom}
+            stroke="#bbbbbb"
+            strokeWidth={1}
+            strokeDasharray="4 4"
+          />
+          <text
+            x={mark.x}
+            y={mark.kind === "output" ? marginTop - 10 : layout.plotBottom + 20}
+            textAnchor="middle"
+            fontSize={12}
+            fill="#777777"
+          >
+            {mark.label}
+          </text>
+        </g>
+      ))}
+
+      {layout.arrows.map((arrow, index) => (
+        <g
+          key={`${uid}-row-${index}`}
+          onMouseEnter={() => setHovered(index)}
+          onMouseLeave={() => setHovered(null)}
+          onClick={() => onFeatureClick?.(arrow.featureIndex)}
+          style={{ cursor: onFeatureClick ? "pointer" : "default" }}
+        >
+          <rect
+            x={0}
+            y={arrow.centerY - rowHeight / 2}
+            width={width}
+            height={rowHeight}
+            fill={hovered === index ? "#00000008" : "transparent"}
+          />
+          <text
+            x={250}
+            y={arrow.centerY}
+            textAnchor="end"
+            dominantBaseline="middle"
+            fontSize={13}
+            fill="#333333"
+            fontStyle={arrow.isOtherRow ? "normal" : "italic"}
+          >
+            {arrow.label}
+          </text>
+          <polygon
+            points={arrow.points.map((point) => `${point.x},${point.y}`).join(" ")}
+            fill={arrow.color}
+            stroke="rgba(255,255,255,0.8)"
+            strokeWidth={1}
+          />
+          <text
+            x={arrow.endX + (arrow.width < 0 ? -6 : 6)}
+            y={arrow.centerY}
+            textAnchor={arrow.width < 0 ? "end" : "start"}
+            dominantBaseline="middle"
+            fontSize={12}
+            fill={arrow.color}
+          >
+            {formatShapValue(arrow.value)}
+          </text>
+        </g>
+      ))}
+    </svg>
+  );
+}
