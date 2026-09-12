@@ -23,6 +23,7 @@ import {
   IPaginationRequestParams,
 } from "@/components/model/pagination.interface";
 import { useRouter } from "next/router";
+import { LocalWaterfallChart } from "@/components/shap/ExplanationCharts";
 import { queryToString } from "@/lib/queryToString";
 import { isNull } from "lodash";
 import {
@@ -851,6 +852,20 @@ export function History() {
             </div>
             <div className="font-bold bg-gray-50 px-4 py-2 rounded-lg my-4">
               Waterfall plot
+            </div>
+            <div className="flex flex-col mb-3 mt-3">
+              <div className="font-medium">Contribution breakdown</div>
+              <div className="text-sm py-2 text-gray-500">
+                How this sample&apos;s features move the prediction from the
+                model&apos;s base value to its final output. Red pushes the
+                prediction up, blue pushes it down; the bars always add up to the
+                difference. Drawn in the browser from the same explanation the
+                other charts use.
+              </div>
+              <LocalWaterfallChart
+                predictionId={predictionId}
+                recordId={selectPrediction?.id}
+              />
             </div>
             <div className="flex flex-col mb-3 mt-3 ">
               <div className="text-sm pb-3 text-gray-500">
