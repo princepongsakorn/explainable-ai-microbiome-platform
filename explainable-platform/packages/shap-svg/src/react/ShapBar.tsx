@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Explanation } from "../core/types";
 import { parseExplanation } from "../core/parse";
 import { globalImportance, orderFeatures } from "../core/order";
@@ -25,9 +25,6 @@ export function ShapBar({
   rowHeight = 26,
   onFeatureClick,
 }: ShapBarProps) {
-  // Namespacing element ids the way shap/plots/_text.py:88 does, so several charts
-  // can share a page without colliding.
-  const uid = useId().replace(/:/g, "");
   const [hovered, setHovered] = useState<number | null>(null);
 
   const layout = useMemo(() => {
@@ -50,7 +47,7 @@ export function ShapBar({
               stroke="#000000" strokeWidth={1} />
       )}
       {layout.bars.map((bar, i) => (
-        <g key={`${uid}-row-${i}`}
+        <g key={`row-${i}`}
            onMouseEnter={() => setHovered(i)}
            onMouseLeave={() => setHovered(null)}
            onClick={() => onFeatureClick?.(bar.featureIndex)}
