@@ -175,6 +175,118 @@ def capture_waterfall(values, base_value, data, feature_names, max_display: int)
     }
 
 
+def capture_beeswarm(values, base_values, data, feature_names, max_display: int) -> dict:
+    """Record what `shap.plots.beeswarm` draws, per displayed row.
+
+    **The point order cannot be reproduced outside Python.** _beeswarm.py shuffles
+    (`np.random.shuffle`) and breaks ties with `np.random.randn(N) * 1e-6`, so which
+    point lands at +1 versus -1 within a bin is down to numpy's RNG. What *is*
+    deterministic — and what a TypeScript implementation must reproduce — is:
+
+    * the set of x values in each row,
+    * the **multiset of |y - row|** jitter magnitudes, which follows from the
+      100-bin binning and the 0,+1,-1,+2,-2 layering alone,
+    * `vmin`/`vmax`, the 5th/95th percentile clip of that row's feature values,
+    * the row order and labels.
+
+    So the golden file stores sorted values, and the test compares sets rather than
+    sequences. Seeding numpy only makes this file reproducible run to run; it does
+    not make the order meaningful to a consumer.
+    """
+    np.random.seed(SEED)
+
+    rows: list[dict] = []
+    original = matplotlib.axes.Axes.scatter
+
+    def spy(self, x, y, **kwargs):
+        xs = np.atleast_1d(np.asarray(x, dtype=float))
+        ys = np.atleast_1d(np.asarray(y, dtype=float))
+        if xs.size:
+            colour_values = kwargs.get("c")
+            rows.append(
+                {
+                    "x": xs,
+                    "y": ys,
+                    "c": None if colour_values is None else np.asarray(colour_values, float),
+                    "vmin": kwargs.get("vmin"),
+                    "vmax": kwargs.get("vmax"),
+                    "is_nan_layer": colour_values is None,
+                }
+            )
+        return original(self, x, y, **kwargs)
+
+    matplotlib.axes.Axes.scatter = spy
+    try:
+        explanation = shap.Explanation(
+            np.asarray(values, dtype=float),
+            base_values=np.asarray(base_values, dtype=float).ravel(),
+            data=np.asarray(data, dtype=float),
+            feature_names=[str(n) for n in feature_names],
+        )
+        plt.figure()
+        shap.plots.beeswarm(explanation, max_display=max_display, show=False)
+        ticks = [t.get_text() for t in plt.gca().get_yticklabels()]
+        labels = ticks[::-1]
+        plt.close("all")
+    finally:
+        matplotlib.axes.Axes.scatter = original
+
+    # Rows arrive bottom-to-top, matching the tick order before it is reversed.
+    coloured = [r for r in rows if not r["is_nan_layer"]][::-1]
+
+    return {
+        "max_display": max_display,
+        "dot_size": 16,
+        "nan_color": "#777777",
+        "labels": labels,
+        "rows": [
+            {
+                "label": label,
+                "row_index": len(coloured) - 1 - i,
+                "x_sorted": sorted(sigfig(v, 6) for v in row["x"]),
+                # |y - row| — the jitter magnitudes, which are reproducible; the
+                # assignment of sign to a particular point is not.
+                "jitter_sorted": sorted(
+                    sigfig(abs(float(y) - (len(coloured) - 1 - i)), 6) for y in row["y"]
+                ),
+                "vmin": sigfig(row["vmin"], 6),
+                "vmax": sigfig(row["vmax"], 6),
+                "colour_values_sorted": sorted(sigfig(v, 6) for v in row["c"]),
+            }
+            for i, (label, row) in enumerate(zip(labels, coloured))
+        ],
+    }
+
+
+def write_colormaps() -> None:
+    """Dump SHAP's colormaps as lookup tables.
+
+    matplotlib interpolates linearly in sRGB between precomputed stops, so a table
+    plus linear interpolation reproduces them exactly. Re-deriving the Lab/Lch maths
+    in TypeScript would be work for a worse result.
+    """
+    from shap.plots import colors as shap_colors
+
+    def lut(cmap, n=256):
+        return [
+            "#%02x%02x%02x"
+            % tuple(int(round(channel * 255)) for channel in cmap(i / (n - 1))[:3])
+            for i in range(n)
+        ]
+
+    write(
+        "colormaps.json",
+        {
+            "note": "256-entry sRGB lookup tables dumped from shap.plots.colors. "
+            "Interpolate linearly between entries; do not re-derive from Lch.",
+            "red_blue": lut(shap_colors.red_blue),
+            "red_white_blue": lut(shap_colors.red_white_blue),
+            "nan_grey": "#%02x%02x%02x"
+            % tuple(int(round(c * 255)) for c in shap_colors.gray_rgb),
+        },
+    )
+
+
 def write(name: str, obj) -> None:
     path = OUT / name
     path.write_text(json.dumps(obj, indent=1))
@@ -225,6 +337,16 @@ def main() -> None:
         REPO / "sample-data/yachidas_2019_test_labels.csv", index_col=0
     ).loc[large_X.index, "label"]
     large_v, large_b = explain(large_X, large_y, n_estimators=30)
+    write(
+        "tiny.beeswarm.golden.json",
+        capture_beeswarm(tiny_v, tiny_b, tiny_d, tiny_names, 10),
+    )
+    write(
+        "real.beeswarm.golden.json",
+        capture_beeswarm(real_v, real_b, real_X.values, real_X.columns, 10),
+    )
+    write_colormaps()
+
     write("large.json", build_payload(large_v, large_b, large_X.values, large_X.columns, large_X.index))
 
     # --- edge: the shapes that break naive renderers -------------------------
