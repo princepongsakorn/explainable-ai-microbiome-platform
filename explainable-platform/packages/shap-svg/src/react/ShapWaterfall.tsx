@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Explanation } from "../core/types";
 import { parseExplanation } from "../core/parse";
 import { formatShapValue } from "../core/format";
@@ -25,7 +25,6 @@ export function ShapWaterfall({
   rowHeight = 30,
   onFeatureClick,
 }: ShapWaterfallProps) {
-  const uid = useId().replace(/:/g, "");
   const [hovered, setHovered] = useState<number | null>(null);
   const marginTop = 34;
 
@@ -50,7 +49,7 @@ export function ShapWaterfall({
     >
       {layout.separators.map((separator, index) => (
         <line
-          key={`${uid}-separator-${index}`}
+          key={`separator-${index}`}
           x1={separator.x1}
           x2={separator.x2}
           y1={separator.y}
@@ -62,7 +61,7 @@ export function ShapWaterfall({
       ))}
 
       {layout.axisMarks.map((mark) => (
-        <g key={`${uid}-${mark.kind}`}>
+        <g key={mark.kind}>
           <line
             x1={mark.x}
             x2={mark.x}
@@ -86,7 +85,7 @@ export function ShapWaterfall({
 
       {layout.arrows.map((arrow, index) => (
         <g
-          key={`${uid}-row-${index}`}
+          key={`row-${index}`}
           onMouseEnter={() => setHovered(index)}
           onMouseLeave={() => setHovered(null)}
           onClick={() => onFeatureClick?.(arrow.featureIndex)}

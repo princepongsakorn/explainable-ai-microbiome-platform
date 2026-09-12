@@ -23,6 +23,7 @@ import {
 import { useRouter } from "next/router";
 import { queryToString } from "@/lib/queryToString";
 import { ShapPlotPlaceholder } from "@/components/ui/ImageEmpty/ImageEmpty";
+import GlobalImportanceChart from "@/components/shap/GlobalImportanceChart";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -266,6 +267,17 @@ export function History() {
           </div>
           <div className="font-bold bg-gray-50 px-4 py-2 rounded-lg my-4">
             Summary
+          </div>
+          <div className="flex flex-col mb-3 mt-3">
+            <div className="font-medium">Feature importance</div>
+            <div className="text-sm py-2 text-gray-500">
+              Mean absolute SHAP value per feature across every sample in this
+              prediction — how much each taxon moved the model, regardless of
+              direction. Drawn in the browser from the explanation values, so the
+              number of features shown can be changed without recomputing
+              anything.
+            </div>
+            <GlobalImportanceChart predictionId={selectPrediction?.id} />
           </div>
           <div className="flex flex-col mb-3 mt-3 ">
             <div>
