@@ -1,9 +1,13 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindManyOptions, In, Repository } from 'typeorm';
 import { Prediction } from '../entity/prediction.entity';
 import { PredictionRecord } from '../entity/prediction-record.entity';
-import { parseCsv } from '../utils/csv-parser.util';
+import { InvalidCsvError, parseCsv, toNumericRows } from '../utils/csv-parser.util';
 import { QueueService } from '../queue/queue.service';
 import { Multer } from 'multer';
 import { v4 as uuidv4 } from 'uuid';
@@ -15,7 +19,11 @@ import {
 } from 'src/interface/prediction-class.enum';
 import { EventsHub } from 'src/events/events.hub';
 import { gunzipSync } from 'node:zlib';
-import { ExplainPayload, sliceSample } from './explain.builder';
+import {
+  ExplainPayload,
+  MAX_SAMPLES_PER_PREDICTION,
+  sliceSample,
+} from './explain.builder';
 
 @Injectable()
 export class PredictionsService {
@@ -30,7 +38,33 @@ export class PredictionsService {
   ) {}
 
   async createPrediction(file: Multer.File, modelName: string) {
-    const { dfColumns, dfDataRows } = await parseCsv(file);
+    let dfColumns: string[];
+    let dfDataRows: (string | number)[][];
+    try {
+      const parsed = await parseCsv(file);
+      dfColumns = parsed.dfColumns;
+      // Reject before anything is persisted or enqueued. Together with the row cap
+      // below this is what lets the Explanation payload promise it holds no NaN
+      // (docs/shap-explain-spec.md §2.1).
+      dfDataRows = toNumericRows(parsed.dfColumns, parsed.dfDataRows);
+    } catch (error) {
+      if (error instanceof InvalidCsvError) {
+        throw new BadRequestException(error.message);
+      }
+      throw error;
+    }
+
+    if (dfDataRows.length > MAX_SAMPLES_PER_PREDICTION) {
+      throw new BadRequestException(
+        `This file has ${dfDataRows.length} samples; the limit is ` +
+          `${MAX_SAMPLES_PER_PREDICTION} per prediction. Split it and submit the ` +
+          `parts separately.`,
+      );
+    }
+
+    if (dfDataRows.length === 0) {
+      throw new BadRequestException('The file has a header but no data rows.');
+    }
 
     const lastPrediction = await this.predictionsRepository
       .createQueryBuilder('prediction')

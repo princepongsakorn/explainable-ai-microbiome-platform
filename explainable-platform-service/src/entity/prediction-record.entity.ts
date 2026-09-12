@@ -12,8 +12,10 @@ export class PredictionRecord {
   @ManyToOne(() => Prediction, (prediction) => prediction.id)
   prediction: Prediction;
 
+  // The first element is the Sample identifier from the uploaded file; the rest
+  // are measurements. Typed number[] previously, which it never was.
   @Column('jsonb')
-  dfData: number[];
+  dfData: (string | number)[];
 
   @Column({ type: 'decimal', precision: 10, scale: 4, nullable: true })
   proba?: number;
