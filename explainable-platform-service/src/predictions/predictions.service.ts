@@ -14,6 +14,8 @@ import {
   PredictionStatus,
 } from 'src/interface/prediction-class.enum';
 import { EventsHub } from 'src/events/events.hub';
+import { gunzipSync } from 'node:zlib';
+import { ExplainPayload, sliceSample } from './explain.builder';
 
 @Injectable()
 export class PredictionsService {
@@ -225,6 +227,62 @@ export class PredictionsService {
     });
     await this.queueService.addRegenWaterfallJob(predictionId, recordId);
     return { message: 'Waterfall re-generation queued.' };
+  }
+
+  // ------------------------------------------------------------------
+  // Explanation payload — docs/shap-explain-spec.md §2.3
+  // ------------------------------------------------------------------
+
+  /**
+   * The stored object's key and ETag.
+   *
+   * Deliberately separate from reading the object: a conditional GET is answered
+   * from this alone, so a repeat load costs one database read and never touches
+   * storage.
+   */
+  async getExplanationRef(predictionId: string) {
+    const prediction = await this.predictionsRepository.findOne({
+      where: { id: predictionId },
+      select: ['id', 'explainKey', 'explainEtag', 'explainError'],
+    });
+    if (!prediction) {
+      throw new NotFoundException(`Prediction ${predictionId} not found`);
+    }
+    if (!prediction.explainKey || !prediction.explainEtag) {
+      throw new NotFoundException(
+        prediction.explainError
+          ? `Explanation failed: ${prediction.explainError}`
+          : 'Explanation is not ready yet',
+      );
+    }
+    return { key: prediction.explainKey, etag: prediction.explainEtag };
+  }
+
+  /** The stored bytes, still gzipped, to be streamed through untouched. */
+  streamExplanation(key: string) {
+    return this.storageService.createReadStream(key);
+  }
+
+  /**
+   * One Sample's Explanation, taken from the stored matrix.
+   *
+   * `PredictionRecord.id` is the platform's identifier and `sample_ids` is the
+   * payload's; this is the only place the two vocabularies meet (CONTEXT.md).
+   * Nothing is recomputed — the SHAP values were produced once for the whole
+   * Prediction.
+   */
+  async sliceExplanationForRecord(predictionId: string, recordId: string) {
+    const { key } = await this.getExplanationRef(predictionId);
+    const compressed = await this.storageService.download(key);
+    const payload = JSON.parse(
+      gunzipSync(compressed).toString('utf8'),
+    ) as ExplainPayload;
+
+    try {
+      return sliceSample(payload, recordId);
+    } catch (error) {
+      throw new NotFoundException((error as Error).message);
+    }
   }
 
   async getPredictions(page: number = 1, limit: number = 10) {
