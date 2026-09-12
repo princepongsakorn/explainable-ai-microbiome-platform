@@ -23,7 +23,10 @@ import {
 import { useRouter } from "next/router";
 import { queryToString } from "@/lib/queryToString";
 import { ShapPlotPlaceholder } from "@/components/ui/ImageEmpty/ImageEmpty";
-import GlobalImportanceChart from "@/components/shap/GlobalImportanceChart";
+import {
+  GlobalBeeswarmChart,
+  GlobalImportanceChart,
+} from "@/components/shap/ExplanationCharts";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -278,6 +281,16 @@ export function History() {
               anything.
             </div>
             <GlobalImportanceChart predictionId={selectPrediction?.id} />
+          </div>
+          <div className="flex flex-col mb-3 mt-3 border-t-[1px] border-[#EAEAEA] pt-3">
+            <div className="font-medium">Beeswarm</div>
+            <div className="text-sm py-2 text-gray-500">
+              One dot per sample per feature. Horizontal position is that
+              sample&apos;s SHAP value; colour is its relative abundance, scaled
+              within the row so a single dominant taxon cannot wash out the
+              others. Interactive — hover a dot for its values.
+            </div>
+            <GlobalBeeswarmChart predictionId={selectPrediction?.id} />
           </div>
           <div className="flex flex-col mb-3 mt-3 ">
             <div>
