@@ -57,6 +57,11 @@ export class PredictionsController {
     return this.predictionsService.regenBeeswarm(predictionId);
   }
 
+  @Post(':predictionId/regen/explain')
+  async regenExplanation(@Param('predictionId') predictionId: string) {
+    return this.predictionsService.regenExplanation(predictionId);
+  }
+
   @Post(':predictionId/records/:recordId/regen/waterfall')
   async regenWaterfall(
     @Param('predictionId') predictionId: string,

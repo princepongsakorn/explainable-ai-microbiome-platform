@@ -38,6 +38,10 @@ export class QueueService {
     await this.predictionQueue.add('regenBeeswarm', { predictionId });
   }
 
+  async addRegenExplanationJob(predictionId: string) {
+    await this.predictionQueue.add('regenExplanation', { predictionId });
+  }
+
   async cancelPredictionJob(predictionId: string) {
     const jobs: Job[] = await this.predictionQueue.getJobs([
       'active',
