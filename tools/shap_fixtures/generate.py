@@ -107,6 +107,63 @@ def capture_bar(values, base_values, data, feature_names, max_display: int) -> d
     }
 
 
+def capture_waterfall(values, base_value, data, feature_names, max_display: int) -> dict:
+    """Record the arrows `shap.plots._waterfall.waterfall_legacy` hands to matplotlib.
+
+    The runtime calls waterfall_legacy, not the modern waterfall, so that is what the
+    golden file must reflect. The two share an algorithm; only the call signature differs.
+
+    Unlike bar, the y tick labels come out **bottom-to-top**: the row index is
+    `rng[i] = num_features - 1 - i`, so the largest |phi| is the last label, not the
+    first. Arrow order follows the ranking, largest |phi| first.
+    """
+    captured: list[dict] = []
+    original = matplotlib.axes.Axes.arrow
+
+    def spy(self, x, y, dx, dy, **kwargs):
+        captured.append(
+            {
+                "x": sigfig(x, 6),
+                "row": int(round(float(y))),
+                "dx": sigfig(dx, 6),
+                "head_length": sigfig(kwargs.get("head_length", 0.0), 6),
+                "bar_width": sigfig(kwargs.get("width", 0.0), 6),
+                "color": matplotlib.colors.to_hex(kwargs.get("color")),
+            }
+        )
+        return original(self, x, y, dx, dy, **kwargs)
+
+    matplotlib.axes.Axes.arrow = spy
+    try:
+        plt.figure()
+        shap.plots._waterfall.waterfall_legacy(
+            float(base_value),
+            np.asarray(values, dtype=float),
+            features=np.asarray(data, dtype=float),
+            feature_names=[str(n) for n in feature_names],
+            max_display=max_display,
+            show=False,
+        )
+        ticks = [t.get_text() for t in plt.gca().get_yticklabels()]
+        # Drawn twice, as in bar (_waterfall.py:296-299). Take the first half and
+        # reverse it so the golden file reads top-to-bottom like the chart does.
+        labels = [t.strip() for t in ticks[: len(ticks) // 2]][::-1]
+        plt.close("all")
+    finally:
+        matplotlib.axes.Axes.arrow = original
+
+    values_arr = np.asarray(values, dtype=float)
+    return {
+        "max_display": max_display,
+        "base_value": sigfig(base_value, 6),
+        "fx": sigfig(float(base_value) + float(values_arr.sum()), 6),
+        # Species names keep their underscores here; stripping them is the renderer's
+        # job (spec 3.5 V3) and bar's golden file already exercises that path.
+        "labels": labels,
+        "arrows": captured,
+    }
+
+
 def write(name: str, obj) -> None:
     path = OUT / name
     path.write_text(json.dumps(obj, indent=1))
@@ -124,6 +181,14 @@ def main() -> None:
     real_v, real_b = explain(real_X, real_df["CRC"])
     write("real.json", build_payload(real_v, real_b, real_X.values, real_X.columns, real_X.index))
     write("real.bar.golden.json", capture_bar(real_v, real_b, real_X.values, real_X.columns, 10))
+    write(
+        "real.waterfall.golden.json",
+        {
+            "sample_index": 0,
+            "sample_id": str(real_X.index[0]),
+            **capture_waterfall(real_v[0], real_b[0], real_X.values[0], real_X.columns, 10),
+        },
+    )
 
     # --- tiny: 20 Samples x the 50 most important Features -------------------
     top50 = np.argsort(-np.abs(real_v).mean(0))[:50]
@@ -133,6 +198,15 @@ def main() -> None:
     tiny_names = real_X.columns[top50]
     write("tiny.json", build_payload(tiny_v, tiny_b, tiny_d, tiny_names, real_X.index[:20]))
     write("tiny.bar.golden.json", capture_bar(tiny_v, tiny_b, tiny_d, tiny_names, 10))
+    # Waterfall is a Local explanation — one Sample, so the golden file names which.
+    write(
+        "tiny.waterfall.golden.json",
+        {
+            "sample_index": 0,
+            "sample_id": str(real_X.index[0]),
+            **capture_waterfall(tiny_v[0], tiny_b[0], tiny_d[0], tiny_names, 10),
+        },
+    )
 
     # --- large: 331 Samples x 865 Features, for performance only -------------
     large_X = pd.read_csv(REPO / "sample-data/yachidas_2019_test.csv", index_col=0)

@@ -1,0 +1,101 @@
+{
+ "sample_index": 0,
+ "sample_id": "10037",
+ "max_display": 10,
+ "base_value": 0.3885,
+ "fx": 0.233333,
+ "labels": [
+  "Peptostreptococcus_stomatis",
+  "Parvimonas_unclassified",
+  "Solobacterium_moorei",
+  "Coprobacillus_unclassified",
+  "Collinsella_aerofaciens",
+  "Holdemania_filiformis",
+  "Gemella_morbillorum",
+  "Fusobacterium_nucleatum",
+  "Atopobium_parvulum",
+  "192 other features"
+ ],
+ "arrows": [
+  {
+   "x": 0.234763,
+   "row": 8,
+   "dx": 0.0223513,
+   "head_length": 0.00300683,
+   "bar_width": 0.8,
+   "color": "#ff0051"
+  },
+  {
+   "x": 0.211085,
+   "row": 7,
+   "dx": 0.0206715,
+   "head_length": 0.00300683,
+   "bar_width": 0.8,
+   "color": "#ff0051"
+  },
+  {
+   "x": 0.190346,
+   "row": 6,
+   "dx": 0.0177317,
+   "head_length": 0.00300683,
+   "bar_width": 0.8,
+   "color": "#ff0051"
+  },
+  {
+   "x": 0.191102,
+   "row": 4,
+   "dx": 0.0151499,
+   "head_length": 0.00300683,
+   "bar_width": 0.8,
+   "color": "#ff0051"
+  },
+  {
+   "x": 0.260121,
+   "row": 9,
+   "dx": -0.0237809,
+   "head_length": 0.00300683,
+   "bar_width": 0.8,
+   "color": "#008bfb"
+  },
+  {
+   "x": 0.209259,
+   "row": 5,
+   "dx": -0.0159061,
+   "head_length": 0.00300683,
+   "bar_width": 0.8,
+   "color": "#008bfb"
+  },
+  {
+   "x": 0.20447,
+   "row": 3,
+   "dx": -0.0103608,
+   "head_length": 0.00300683,
+   "bar_width": 0.8,
+   "color": "#008bfb"
+  },
+  {
+   "x": 0.216732,
+   "row": 2,
+   "dx": -0.00925548,
+   "head_length": 0.00300683,
+   "bar_width": 0.8,
+   "color": "#008bfb"
+  },
+  {
+   "x": 0.228491,
+   "row": 1,
+   "dx": -0.00875217,
+   "head_length": 0.00300683,
+   "bar_width": 0.8,
+   "color": "#008bfb"
+  },
+  {
+   "x": 0.3885,
+   "row": 0,
+   "dx": -0.157002,
+   "head_length": 0.00300683,
+   "bar_width": 0.8,
+   "color": "#008bfb"
+  }
+ ]
+}
