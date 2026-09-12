@@ -5,3 +5,5 @@ export * from "./src/core/format";
 export * from "./src/core/collapse";
 export * from "./src/core/barLayout";
 export * from "./src/core/waterfallLayout";
+export * from "./src/core/colormap";
+export * from "./src/core/beeswarmLayout";
