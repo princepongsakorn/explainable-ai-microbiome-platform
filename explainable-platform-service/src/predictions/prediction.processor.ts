@@ -560,6 +560,28 @@ export class PredictionProcessor {
     );
   }
 
+  /**
+   * Recompute the Explanation for a Prediction that does not have one.
+   *
+   * Predictions created before this pipeline existed have no artifact, and the
+   * SHAP values do not depend on anything that has changed since — so they can be
+   * backfilled rather than re-uploaded.
+   */
+  @Process('regenExplanation')
+  async handleRegenExplanation(job: Job<{ predictionId: string }>) {
+    const { predictionId } = job.data;
+    const prediction = await this.predictionsRepository.findOne({
+      where: { id: predictionId },
+    });
+    if (!prediction) {
+      console.error(
+        `[PredictionProcessor] regenExplanation: prediction ${predictionId} not found.`,
+      );
+      return;
+    }
+    await this.buildExplanation(prediction);
+  }
+
   @Process('regenHeatmap')
   async handleRegenHeatmap(job: Job<{ predictionId: string }>) {
     const prediction = await this.predictionsRepository.findOne({

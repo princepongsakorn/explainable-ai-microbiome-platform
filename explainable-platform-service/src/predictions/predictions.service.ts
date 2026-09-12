@@ -319,6 +319,29 @@ export class PredictionsService {
     }
   }
 
+  /**
+   * Queue a rebuild of the Explanation artifact.
+   *
+   * Clearing the fields first makes the in-progress state server-truth, the same
+   * way the plot regeneration methods above do it.
+   */
+  async regenExplanation(predictionId: string) {
+    const prediction = await this.predictionsRepository.findOne({
+      where: { id: predictionId },
+    });
+    if (!prediction) {
+      throw new NotFoundException(`Prediction ${predictionId} not found`);
+    }
+
+    prediction.explainKey = null;
+    prediction.explainEtag = null;
+    prediction.explainError = null;
+    await this.predictionsRepository.save(prediction);
+
+    await this.queueService.addRegenExplanationJob(predictionId);
+    return { message: `Explanation rebuild queued for ${predictionId}.` };
+  }
+
   async getPredictions(page: number = 1, limit: number = 10) {
     const [items, totalItems] = await this.predictionsRepository.findAndCount({
       select: [
