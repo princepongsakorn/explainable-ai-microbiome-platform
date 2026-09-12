@@ -17,6 +17,13 @@ import {
   PredictionStatus,
 } from 'src/interface/prediction-class.enum';
 import { EventsHub } from 'src/events/events.hub';
+import { createHash } from 'node:crypto';
+import { gzipSync } from 'node:zlib';
+import {
+  ExplainPayload,
+  chunkIndices,
+  concatPayloads,
+} from './explain.builder';
 
 /**
  * A real matplotlib SHAP plot of ~200 features is tens of KB. A blank/failed
@@ -24,6 +31,10 @@ import { EventsHub } from 'src/events/events.hub';
  * many base64 characters is treated as "image generation failed".
  */
 const MIN_PNG_BASE64_LEN = 8000;
+
+/** Attempts per explain chunk before the whole Explanation is abandoned. */
+const EXPLAIN_CHUNK_ATTEMPTS = 3;
+const EXPLAIN_RETRY_BASE_MS = 1000;
 
 type ExplainEndpoint = 'waterfall' | 'heatmap' | 'beeswarm';
 
@@ -157,7 +168,129 @@ export class PredictionProcessor {
     console.log(
       `[PredictionProcessor] processing prediction ID: ${predictionId}`,
     );
+
+    // The Explanation payload and the PNGs are independent: a failure in one must
+    // not cost the other. The PNGs stay until every chart has shipped, because
+    // they are the visual reference the new charts are checked against.
+    await this.buildExplanation(prediction);
     await this.generatePredictionPlots(prediction);
+  }
+
+  // ------------------------------------------------------------------
+  // Explanation payload — docs/shap-explain-spec.md §2.2
+  // ------------------------------------------------------------------
+
+  /**
+   * Compute the Explanation for a whole Prediction and store it as one gzipped
+   * JSON object.
+   *
+   * The Python endpoint is called with CHUNK_SIZE Samples at a time so no single
+   * HTTP call is long enough to be a problem, and a failure retries one slice
+   * rather than the whole matrix. Concatenating is sound because a Sample's SHAP
+   * values do not depend on which other Samples shared its request.
+   */
+  private async buildExplanation(prediction: Prediction) {
+    // Ordered explicitly: sample_ids are positional, so an unordered fetch would
+    // silently shuffle which row belongs to which record.
+    const records = await this.recordsRepository.find({
+      where: { prediction: { id: prediction.id } },
+      order: { record_number: 'ASC' },
+    });
+
+    if (records.length === 0) {
+      console.warn(
+        `[PredictionProcessor] prediction ${prediction.id} has no records; skipping explanation`,
+      );
+      return;
+    }
+
+    try {
+      const ranges = chunkIndices(records.length);
+      const chunks: ExplainPayload[] = [];
+
+      for (const [start, end] of ranges) {
+        chunks.push(
+          await this.explainChunk(prediction, records.slice(start, end)),
+        );
+        this.eventsHub.publishPrediction(
+          prediction.id,
+          'prediction:explanation-progress',
+          { done: end, total: records.length },
+        );
+      }
+
+      const payload = concatPayloads(chunks);
+      const raw = Buffer.from(JSON.stringify(payload), 'utf8');
+      const etag = createHash('sha256').update(raw).digest('hex');
+
+      prediction.explainKey = await this.storageService.uploadJsonGzip(
+        gzipSync(raw),
+        prediction.id,
+        'explain.json.gz',
+      );
+      prediction.explainEtag = etag;
+      prediction.explainContractVersion = payload.contract_version;
+      prediction.explainModelVersion = payload.model_version ?? null;
+      prediction.explainError = null;
+
+      console.log(
+        `[PredictionProcessor] explanation for ${prediction.id}: ` +
+          `${payload.values.length} samples x ${payload.feature_names.length} features, ` +
+          `${(raw.length / 1024).toFixed(0)} KiB raw`,
+      );
+    } catch (error) {
+      prediction.explainKey = null;
+      prediction.explainEtag = null;
+      prediction.explainError = (error as Error).message;
+      console.error(
+        `[PredictionProcessor] explanation for ${prediction.id} failed`,
+        error,
+      );
+    }
+
+    await this.predictionsRepository.save(prediction);
+    this.eventsHub.publishPrediction(prediction.id, 'prediction:explanation', {
+      ready: Boolean(prediction.explainKey),
+      etag: prediction.explainEtag ?? null,
+      error: prediction.explainError ?? null,
+    });
+  }
+
+  /** One chunk of Samples, retried independently with exponential backoff. */
+  private async explainChunk(
+    prediction: Prediction,
+    records: PredictionRecord[],
+  ): Promise<ExplainPayload> {
+    const url = `${this.inferenceServiceURL}/v1/explain/values/${prediction.modelName}`;
+    const body: IDataframeSplitRequest = {
+      dataframe_split: {
+        columns: prediction.dfColumns,
+        data: records.map((record) => record.dfData),
+        index: records.map((record) => record.id),
+      },
+    };
+
+    let lastError: unknown;
+    for (let attempt = 0; attempt < EXPLAIN_CHUNK_ATTEMPTS; attempt++) {
+      try {
+        const response = await lastValueFrom(this.httpService.post(url, body));
+        return response.data as ExplainPayload;
+      } catch (error) {
+        lastError = error;
+        const isLast = attempt === EXPLAIN_CHUNK_ATTEMPTS - 1;
+        console.warn(
+          `[PredictionProcessor] explain chunk of ${records.length} failed ` +
+            `(attempt ${attempt + 1}/${EXPLAIN_CHUNK_ATTEMPTS})` +
+            (isLast ? '' : ', retrying'),
+        );
+        if (!isLast) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, EXPLAIN_RETRY_BASE_MS * 2 ** attempt),
+          );
+        }
+      }
+    }
+    throw lastError;
   }
 
   /**
