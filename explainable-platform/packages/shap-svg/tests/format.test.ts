@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatShapValue, formatFeatureLabel } from "../src/core/format";
+import { formatShapValue, formatFeatureLabel, formatLevel } from "../src/core/format";
 
 describe("formatShapValue", () => {
   it("keeps three significant figures for ordinary magnitudes", () => {
@@ -70,5 +70,31 @@ describe("formatShapValue — percent", () => {
 
   it("renders an exact zero without a sign or a unit", () => {
     expect(formatShapValue(0, "percent")).toBe("0");
+  });
+});
+
+describe("formatLevel", () => {
+  it("does not sign a level, because it is a position and not a movement", () => {
+    // shap/plots/_waterfall.py:327,339 formats E[f(X)] and f(x) with "%0.03f",
+    // and only the bar contributions with "%+0.02f". A leading "+" on a model
+    // output reads as "went up by", which is the opposite of what it means.
+    expect(formatLevel(0.5238)).toBe("0.524");
+    expect(formatLevel(0.5238, 2)).toBe("0.52");
+    expect(formatLevel(0.5238, 4)).toBe("0.5238");
+  });
+
+  it("reads a probability as a percentage in percent mode", () => {
+    expect(formatLevel(0.5238, "percent")).toBe("52.38%");
+    expect(formatLevel(0.0003, "percent")).toBe("0.03%");
+  });
+
+  it("keeps a minus sign, since an output is not always a probability", () => {
+    expect(formatLevel(-0.25, "percent")).toBe("−25.00%");
+    expect(formatLevel(-0.25)).toBe("−0.25");
+  });
+
+  it("renders an exact zero plainly — a model output really can be zero", () => {
+    expect(formatLevel(0)).toBe("0");
+    expect(formatLevel(0, "percent")).toBe("0");
   });
 });

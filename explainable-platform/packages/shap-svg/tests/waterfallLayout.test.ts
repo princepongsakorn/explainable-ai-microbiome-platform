@@ -164,7 +164,8 @@ describe("waterfallLayout", () => {
     const layout = waterfallLayout(valueRows, opts);
     expect(layout.axisMarks).toEqual([
       { kind: "base", value: 0, x: 50, label: "E[f(X)] = 0" },
-      { kind: "output", value: 100, x: 250, label: "f(x) = +100" },
+      // No sign: f(x) is where the prediction landed, not how far it moved.
+      { kind: "output", value: 100, x: 250, label: "f(x) = 100" },
     ]);
     expect(layout.separators).toEqual([
       { y: 20, x1: 50, x2: 250 },
@@ -277,5 +278,43 @@ describe("waterfallLayout — value label placement", () => {
     const coarse = waterfallLayout(rowsFor(0.2, 0), { ...opts, decimals: 2 }).arrows[0];
     const fine = waterfallLayout(rowsFor(0.2, 0), { ...opts, decimals: 4 }).arrows[0];
     expect(fine.valueLabel.estimatedWidth).toBeGreaterThan(coarse.valueLabel.estimatedWidth);
+  });
+});
+
+describe("waterfallLayout — axis marks", () => {
+  const rows: WaterfallRows = {
+    rows: [{
+      label: "x", featureIndex: 0, isOtherRow: false,
+      value: 0.0524, left: 0.5238, width: 0.0524, row: 0, color: "#ff0051",
+    }],
+    baseValue: 0.5238,
+    modelOutput: 0.5762,
+    collapsedCount: 0,
+  };
+  const opts = {
+    width: 900, rowHeight: 20, marginLeft: 200, marginRight: 40, marginTop: 10,
+  };
+
+  it("does not sign E[f(X)] or f(x) — they are levels, not contributions", () => {
+    const labels = waterfallLayout(rows, opts).axisMarks.map((m) => m.label);
+    expect(labels).toEqual(["E[f(X)] = 0.524", "f(x) = 0.576"]);
+  });
+
+  it("follows the value control into percent, alongside the bars", () => {
+    const marks = waterfallLayout(rows, { ...opts, decimals: "percent" });
+    expect(marks.axisMarks.map((m) => m.label)).toEqual([
+      "E[f(X)] = 52.38%",
+      "f(x) = 57.62%",
+    ]);
+    // The bar label is a contribution, so it keeps its sign.
+    expect(marks.arrows[0].valueLabel.text).toBe("+5.24%");
+  });
+
+  it("follows the decimal settings too, so the chart is not half-rounded", () => {
+    const at4 = waterfallLayout(rows, { ...opts, decimals: 4 });
+    expect(at4.axisMarks.map((m) => m.label)).toEqual([
+      "E[f(X)] = 0.5238",
+      "f(x) = 0.5762",
+    ]);
   });
 });

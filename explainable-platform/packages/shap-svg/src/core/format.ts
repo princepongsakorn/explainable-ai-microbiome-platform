@@ -24,14 +24,32 @@ const PERCENT_DECIMALS = 2;
  */
 export function formatShapValue(v: number, decimals?: ValuePrecision): string {
   if (v === 0) return "0";
+  return (v < 0 ? MINUS : "+") + magnitudeOf(v, decimals);
+}
+
+/**
+ * A value on the model's output scale: `E[f(X)]` and `f(x)`.
+ *
+ * Unsigned, unlike a contribution. SHAP draws the same distinction —
+ * `_waterfall.py:327,339` format these with `"%0.03f"` and only the bar
+ * contributions with `"%+0.02f"` — and it matters: a leading "+" on a model
+ * output reads as "went up by", when the number is where the prediction landed,
+ * not how far it moved. A minus is still kept, because nothing guarantees a
+ * model output is a probability.
+ */
+export function formatLevel(v: number, decimals?: ValuePrecision): string {
+  if (v === 0) return "0";
+  return (v < 0 ? MINUS : "") + magnitudeOf(v, decimals);
+}
+
+/** The digits both formatters share; the caller owns the sign. */
+function magnitudeOf(v: number, decimals?: ValuePrecision): string {
   const magnitude = Math.abs(v);
-  const sign = v < 0 ? MINUS : "+";
 
   if (decimals === undefined) {
-    const body = magnitude < EXPONENT_THRESHOLD
+    return magnitude < EXPONENT_THRESHOLD
       ? magnitude.toExponential(0)
       : String(Number(magnitude.toPrecision(3)));
-    return sign + body;
   }
 
   const places = decimals === "percent" ? PERCENT_DECIMALS : decimals;
@@ -41,8 +59,8 @@ export function formatShapValue(v: number, decimals?: ValuePrecision): string {
   // Half of the last retained place: anything under it rounds to all zeros.
   // The unit is dropped along with the fixed notation, because "1e-7%" reads
   // as a percentage of a percentage.
-  if (scaled < 0.5 * 10 ** -places) return sign + magnitude.toExponential(0);
-  return sign + scaled.toFixed(places) + unit;
+  if (scaled < 0.5 * 10 ** -places) return magnitude.toExponential(0);
+  return scaled.toFixed(places) + unit;
 }
 
 /** Spec 3.5 V3. The italic styling is applied by the renderer, not here. */
