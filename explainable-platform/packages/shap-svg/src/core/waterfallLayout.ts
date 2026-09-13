@@ -1,5 +1,5 @@
 import { NEGATIVE_COLOR, POSITIVE_COLOR } from "./barLayout";
-import { formatFeatureLabel, formatShapValue, ValuePrecision } from "./format";
+import { formatFeatureLabel, formatLevel, formatShapValue, ValuePrecision } from "./format";
 import { orderFeatures } from "./order";
 import { ParsedExplanation } from "./types";
 
@@ -266,13 +266,13 @@ export function waterfallLayout(
         kind: "base",
         value: valueRows.baseValue,
         x: toX(valueRows.baseValue),
-        label: `E[f(X)] = ${formatShapValue(valueRows.baseValue)}`,
+        label: `E[f(X)] = ${formatLevel(valueRows.baseValue, opts.decimals)}`,
       },
       {
         kind: "output",
         value: valueRows.modelOutput,
         x: toX(valueRows.modelOutput),
-        label: `f(x) = ${formatShapValue(valueRows.modelOutput)}`,
+        label: `f(x) = ${formatLevel(valueRows.modelOutput, opts.decimals)}`,
       },
     ],
     separators: valueRows.rows.map((_, index) => ({
