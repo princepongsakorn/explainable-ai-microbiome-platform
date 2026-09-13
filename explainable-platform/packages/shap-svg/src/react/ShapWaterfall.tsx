@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Explanation } from "../core/types";
 import { parseExplanation } from "../core/parse";
-import { formatShapValue } from "../core/format";
+import { ValuePrecision } from "../core/format";
 import { waterfallLayout, waterfallRows } from "../core/waterfallLayout";
 
 export type ShapWaterfallProps = {
@@ -12,6 +12,8 @@ export type ShapWaterfallProps = {
   classIndex?: number;
   width?: number;
   rowHeight?: number;
+  /** Decimal places for the bar labels. Display only — it changes no geometry but the text width. */
+  decimals?: ValuePrecision;
   onFeatureClick?: (featureIndex: number | null) => void;
 };
 
@@ -23,6 +25,7 @@ export function ShapWaterfall({
   classIndex = 1,
   width = 720,
   rowHeight = 30,
+  decimals = 2,
   onFeatureClick,
 }: ShapWaterfallProps) {
   const [hovered, setHovered] = useState<number | null>(null);
@@ -37,8 +40,12 @@ export function ShapWaterfall({
       marginLeft: 260,
       marginRight: 110,
       marginTop,
+      decimals,
     });
-  }, [explanation, sampleIndex, maxDisplay, faithfulOtherRow, classIndex, width, rowHeight]);
+  }, [
+    explanation, sampleIndex, maxDisplay, faithfulOtherRow,
+    classIndex, width, rowHeight, decimals,
+  ]);
 
   return (
     <svg
@@ -121,9 +128,9 @@ export function ShapWaterfall({
             textAnchor={arrow.valueLabel.anchor}
             dominantBaseline="middle"
             fontSize={12}
-            fill={arrow.color}
+            fill={arrow.valueLabel.inside ? "#ffffff" : arrow.color}
           >
-            {formatShapValue(arrow.value)}
+            {arrow.valueLabel.text}
           </text>
         </g>
       ))}
