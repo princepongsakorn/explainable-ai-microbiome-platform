@@ -193,3 +193,57 @@ describe("ShapWaterfall", () => {
     expect(element.type).toBe(ShapWaterfall);
   });
 });
+
+describe("waterfallLayout — value label placement", () => {
+  const opts = {
+    width: 400, rowHeight: 20, marginLeft: 200, marginRight: 40, marginTop: 10,
+  };
+
+  /** One row whose bar ends at `endValue`, over the domain the rows imply. */
+  const rowsFor = (value: number, left: number): WaterfallRows => ({
+    rows: [{
+      label: "x", featureIndex: 0, isOtherRow: false,
+      value, left, width: value, row: 0,
+      color: value < 0 ? "#008bfb" : "#ff0051",
+    }],
+    baseValue: 0,
+    modelOutput: 0,
+    collapsedCount: 0,
+  });
+
+  it("puts a positive bar's label just past its tip, reading rightward", () => {
+    const arrow = waterfallLayout(rowsFor(10, 0), opts).arrows[0];
+    expect(arrow.valueLabel.anchor).toBe("start");
+    expect(arrow.valueLabel.x).toBeGreaterThan(arrow.endX);
+  });
+
+  it("never lets a label reach into the feature-name gutter", () => {
+    // A small negative bar sitting hard against the left edge: placing its label
+    // outside the tip would put the text on top of the feature name.
+    const arrow = waterfallLayout(rowsFor(-1, 1), opts).arrows[0];
+    const textWidth = arrow.valueLabel.estimatedWidth;
+    const leftEdge =
+      arrow.valueLabel.anchor === "end"
+        ? arrow.valueLabel.x - textWidth
+        : arrow.valueLabel.x;
+
+    expect(leftEdge).toBeGreaterThanOrEqual(opts.marginLeft);
+  });
+
+  it("flips a cramped negative label to the inner side of its bar", () => {
+    const arrow = waterfallLayout(rowsFor(-1, 1), opts).arrows[0];
+    expect(arrow.valueLabel.anchor).toBe("start");
+    expect(arrow.valueLabel.x).toBeGreaterThanOrEqual(arrow.endX);
+  });
+
+  it("keeps a roomy negative label outside the tip, reading leftward", () => {
+    // Same chart, but the bar ends far from the gutter.
+    const roomy = waterfallLayout(rowsFor(-1, 10), {
+      ...opts,
+      width: 900,
+      marginLeft: 200,
+    }).arrows[0];
+    expect(roomy.valueLabel.anchor).toBe("end");
+    expect(roomy.valueLabel.x).toBeLessThan(roomy.endX);
+  });
+});

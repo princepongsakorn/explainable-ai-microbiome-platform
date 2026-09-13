@@ -41,6 +41,14 @@ export type WaterfallLayoutOptions = {
 
 export type Point = { x: number; y: number };
 
+/** Where a bar's numeric label goes, and roughly how wide it is. */
+export type WaterfallValueLabel = {
+  x: number;
+  anchor: "start" | "end";
+  /** Estimated from the glyph count — enough to decide whether it fits. */
+  estimatedWidth: number;
+};
+
 export type WaterfallArrowGeometry = WaterfallRow & {
   points: Point[];
   startX: number;
@@ -49,6 +57,7 @@ export type WaterfallArrowGeometry = WaterfallRow & {
   centerY: number;
   height: number;
   headLength: number;
+  valueLabel: WaterfallValueLabel;
 };
 
 export type WaterfallAxisMark = {
@@ -75,6 +84,41 @@ export type WaterfallLayout = {
 };
 
 const colorFor = (value: number) => value < 0 ? NEGATIVE_COLOR : POSITIVE_COLOR;
+
+/** Gap between a bar's tip and its number. */
+const VALUE_LABEL_GAP = 6;
+const VALUE_LABEL_FONT_SIZE = 12;
+/** Mean glyph width as a fraction of font size, for this digit-heavy text. */
+const GLYPH_WIDTH_RATIO = 0.6;
+
+/**
+ * Place a bar's numeric label.
+ *
+ * Preferred position is just past the tip, on the side the bar points to. For a
+ * negative bar that is leftward — and a short negative bar sits close to the
+ * feature names, so the label lands on top of them. When that would happen the
+ * label flips to the inner side of the bar, where the plot area always has room.
+ * matplotlib has the same conflict and resolves it with a wide left margin;
+ * flipping is the better answer when the margin is a fixed gutter.
+ */
+function placeValueLabel(
+  value: number,
+  endX: number,
+  gutterX: number,
+): WaterfallValueLabel {
+  const estimatedWidth =
+    formatShapValue(value).length * VALUE_LABEL_FONT_SIZE * GLYPH_WIDTH_RATIO;
+
+  if (value >= 0) {
+    return { x: endX + VALUE_LABEL_GAP, anchor: "start", estimatedWidth };
+  }
+
+  const outsideLeftEdge = endX - VALUE_LABEL_GAP - estimatedWidth;
+  if (outsideLeftEdge >= gutterX) {
+    return { x: endX - VALUE_LABEL_GAP, anchor: "end", estimatedWidth };
+  }
+  return { x: endX + VALUE_LABEL_GAP, anchor: "start", estimatedWidth };
+}
 
 /**
  * The value-space part of shap/plots/_waterfall.py::waterfall_legacy.
@@ -183,6 +227,7 @@ export function waterfallLayout(
       centerY,
       height: barHeight,
       headLength,
+      valueLabel: placeValueLabel(row.value, endX, marginLeft),
     };
   });
 
