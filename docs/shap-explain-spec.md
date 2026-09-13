@@ -154,7 +154,7 @@ this mapping and nowhere else.
 ### 3.1 Shape of the package
 
 ```
-packages/shap-svg/
+shap-svg/      # github.com/princepongsakorn/shap-svg, published to npm as shap-svg
   src/
     core/      # framework-free: validation, ordering, layout, colour. No React import anywhere.
     react/     # thin components over core
@@ -163,7 +163,8 @@ packages/shap-svg/
 ```
 
 The `core` directory MUST NOT import React, and MUST NOT import anything from the host application.
-That rule is what makes the eventual extraction to npm a `git mv`.
+That rule is what made extracting it a `git subtree split`: the package now lives in its own
+repository, https://github.com/princepongsakorn/shap-svg, and the platform installs it from npm.
 
 ### 3.2 Public surface for milestone 1
 
@@ -191,8 +192,10 @@ function collapseToDisplay(
 ): DisplayRows;
 function barLayout(rows: DisplayRows, width: number): BarLayout;
 
-// react
-<ShapBar explanation={…} maxDisplay={10} faithfulOtherRow={false} onFeatureClick={…} />
+// react — the charts are exposed as Plots, named after shap.plots in Python (since 0.2.0;
+// 0.1.0 exported them as ShapBar, ShapBeeswarm, ShapHeatmap and ShapWaterfall)
+import { Plots } from "shap-svg/react";
+<Plots.bar explanation={…} maxDisplay={10} faithfulOtherRow={false} onFeatureClick={…} />
 ```
 
 ### 3.3 Bar chart — required behaviour
@@ -259,8 +262,10 @@ exactly.
 
 ## 4. Fixtures and golden values
 
-Fixtures live in `packages/shap-svg/fixtures/`. They are generated offline from data already
-committed to this repo plus the locally installed shap — no MLflow, no network.
+Fixtures live in the `fixtures/` directory of the shap-svg repository. They are generated offline by
+`tools/shap_fixtures/generate.py --shap-svg <checkout>` from data committed to this repo plus the
+locally installed shap — no MLflow, no network. SHAP's colour tables go to `src/core/colormaps.json`
+in the same checkout, because the charts read them at runtime.
 
 | Fixture | Shape | Purpose |
 | --- | --- | --- |
