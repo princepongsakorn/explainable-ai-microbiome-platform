@@ -100,11 +100,8 @@ def capture_bar(values, base_values, data, feature_names, max_display: int) -> d
 
     return {
         "max_display": max_display,
-        # Raw tick text, exactly as SHAP drew it. Applying spec §3.5 V3 here
-        # baked one of our own deviations into a file whose whole job is to
-        # record what SHAP produced — which then could not be used to check
-        # the faithful fidelity level, the one level that must not deviate.
-        "labels": labels,
+        # Spec §3.5 V3: the renderer displays species names with spaces.
+        "labels": [lbl.replace("_", " ") for lbl in labels],
         "values": [sigfig(v) for v in captured["values"]],
         "colors": captured.get("colors", []),
     }

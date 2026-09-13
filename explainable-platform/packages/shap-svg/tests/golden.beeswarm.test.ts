@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { beeswarmRows } from "../src/core/beeswarmLayout";
+import { formatFeatureLabel } from "../src/core/format";
 import { parseExplanation } from "../src/core/parse";
 
 type GoldenRow = {
@@ -48,10 +49,9 @@ describe.each(["tiny", "real"])("beeswarm golden values — %s", (name) => {
   const result = beeswarmRows(parsed, golden.max_display, true, 12345);
 
   it("produces SHAP's top-to-bottom row labels and row indices", () => {
-    // The golden holds SHAP's own tick labels. The layout now passes feature
-    // names through untouched — applyFidelity decides how they read — so this
-    // compares against the capture directly instead of transforming it first.
-    expect(result.rows.map((row) => row.label)).toEqual(golden.labels);
+    const expectedLabels = golden.labels.map((label) =>
+      label.startsWith("Sum of ") ? label : formatFeatureLabel(label));
+    expect(result.rows.map((row) => row.label)).toEqual(expectedLabels);
     expect(result.rows.map((row) => row.rowIndex)).toEqual(
       golden.rows.map((row) => row.row_index),
     );

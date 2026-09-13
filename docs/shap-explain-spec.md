@@ -211,40 +211,18 @@ Features and one combined row labelled `Sum of {p - max_display + 1} other featu
 The row is always recomputed from the full matrix when `maxDisplay` changes. It is a re-partition,
 so the sum over all displayed rows always equals the sum over all Features — that identity is a test.
 
-### 3.5 Fidelity levels
+### 3.5 Agreed deviations from SHAP
 
-How closely a chart reproduces SHAP is a **prop**, not a decision taken once. Three levels answer
-three different readers, and none of them is a quality ranking:
-
-| | `fidelity` | For |
+| # | Deviation | Reason |
 | --- | --- | --- |
-| (a) | `faithful` | A figure that has to sit beside a published SHAP figure and be comparable to it. Every constant in §3.3 is a requirement, **including the ones that are bugs** |
-| (b) | `adapted` | **Default.** The same numbers and the same ordering, presented so they can be read |
-| (c) | `microbiome` | SHAP as the source of the numbers, the view built for this data |
+| V1 | Numeric labels use significant figures or percent, never `%0.03f` | `format_value(0.0003, "%0.03f")` renders `0`, and `-0.0002` renders `−0`. Most relative abundances are below 1e-3, so SHAP's format is unusable here |
+| V2 | Other features row defaults to the corrected behaviour | `max_display=15` showing 14 Features reads as a bug to users |
+| V3 | Species names render italic with `_` replaced by a space | Biology typesetting convention; the existing matplotlib path already does this |
+| V4 | Colour legends carry numeric ticks | SHAP labels only "High"/"Low" |
+| V5 | The heatmap `f(x)` line gets a real axis and tooltip | SHAP normalises it and draws it with no scale |
 
-`src/core/fidelity.ts` holds the whole difference between them as one table. Nothing outside that
-table may vary by level — that is the rule that keeps the levels honest, and every entry is wired.
-
-| Property | `faithful` | `adapted` | `microbiome` | Why it differs |
-| --- | --- | --- | --- | --- |
-| `faithfulOtherRow` | `true` | `false` | `false` | SHAP absorbs the Feature ranked `maxDisplay` into the Other row, so `maxDisplay=15` draws 14 real Features (V2) |
-| `units` | `shap` | `significant` | `percentagePoints` | `format_value(v, "%+0.02f")` strips trailing zeros, so anything below 0.005 renders `+0` or `−0`, losing magnitude and direction. Most relative abundances are below that (V1) |
-| `taxonomicNames` | `false` | `true` | `true` | Binomials are typeset italic with a space, not `Genus_species` (V3) |
-| `numericLegend` | `false` | `true` | `true` | SHAP labels the colour scale only High/Low, which cannot be read off (V4) |
-| `zeroHandling` | `shapPerChart` | `neutral` | `neutral` | `_bar.py` splits on `<= 0` and `_waterfall.py` on `>= 0`, so **the same zero is blue in one chart and red in the other**. Above `faithful` it is grey: it moved the prediction in neither direction |
-| `groupByGenus` | `false` | `false` | `true` | Feature names are `Genus_species`. A genus the model genuinely uses is spread over a dozen columns, each small enough to read as noise |
-| `abundanceScale` | `raw` | `raw` | `percentile` | Abundance is compositional and right-skewed; clipping to the 5th–95th percentile presses nearly every Sample into one end of the colour map |
-| `showPrevalence` | `false` | `false` | `true` | These matrices are mostly zeros, and that is information — a taxon in 3% of Samples at high abundance differs clinically from one in 90% at low abundance |
-
-**What never varies.** The payload, the SHAP values, `globalImportance`, `orderFeatures`, and the
-Other-row re-partition identity. `applyFidelity` is the only function that reshapes an Explanation,
-it only ever re-partitions the Feature axis, and a test asserts that grouping preserves
-`base + Σφ = f(x)` — so a grouped waterfall still reaches the same `f(x)`.
-
-**The one assumption `microbiome` makes.** `percentagePoints` reads φ as probability points, which is
-false for SHAP in general — an explainer over log-odds or a raw margin would make "pp" a lie. It is
-true here because this platform's contract has `predict` return `DataFrame[Y_proba, Y_class]`. That
-assumption is the reason the level is opt-in rather than the default.
+V1 and V3 apply to milestone 1. V2 is milestone 1 as the `faithfulOtherRow` flag. V4 and V5 arrive
+with beeswarm and heatmap.
 
 ### 3.6 Colour constants
 

@@ -1,7 +1,7 @@
 import { ReactNode, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowsPointingOutIcon, XMarkIcon } from "@heroicons/react/24/outline";
-import type { Explanation, Fidelity, ValuePrecision } from "@/packages/shap-svg";
+import type { Explanation, ValuePrecision } from "@/packages/shap-svg";
 import {
   ShapBar,
   ShapBeeswarm,
@@ -13,34 +13,17 @@ import { useExplanation, sampleIndexOf } from "@/lib/useExplanation";
 const MIN_DISPLAY = 5;
 const MAX_DISPLAY = 50;
 const DEFAULT_DISPLAY = 15;
-const PRECISIONS: ValuePrecision[] = [2, 3, 4];
-const DEFAULT_PRECISION: ValuePrecision = 2;
-
-/**
- * The three fidelity levels, named for a reader rather than for the code.
- *
- * They are not a quality ranking — "SHAP-faithful" is the right choice for a
- * figure that has to sit beside a published SHAP figure, and the wrong one for
- * someone reading their own prediction.
- */
-const FIDELITIES: { value: Fidelity; label: string; hint: string }[] = [
+const PRECISIONS: { value: ValuePrecision; label: string; hint: string }[] = [
+  { value: 2, label: "2", hint: "Two decimal places" },
+  { value: 3, label: "3", hint: "Three decimal places" },
+  { value: 4, label: "4", hint: "Four decimal places" },
   {
-    value: "faithful",
-    label: "SHAP-faithful",
-    hint: "Reproduces SHAP exactly, including its own inconsistencies",
-  },
-  {
-    value: "adapted",
-    label: "Readable",
-    hint: "Same numbers and ordering, presentation fixed",
-  },
-  {
-    value: "microbiome",
-    label: "Microbiome",
-    hint: "Grouped by genus, in probability points, ranked by abundance",
+    value: "percent",
+    label: "%",
+    hint: "As a percentage — reaches values too small to show as decimals",
   },
 ];
-const DEFAULT_FIDELITY_LEVEL: Fidelity = "adapted";
+const DEFAULT_PRECISION: ValuePrecision = 2;
 
 const INLINE_WIDTH = 720;
 /** Room for the overlay's own padding, so the chart does not sit under its edge. */
@@ -55,7 +38,6 @@ type ChartView = {
   explanation: Explanation;
   maxDisplay: number;
   decimals: ValuePrecision;
-  fidelity: Fidelity;
   width: number;
   rowHeight: number;
 };
@@ -122,7 +104,6 @@ function ChartFrame({
   const { explanation, error, loading, progress } = useExplanation(predictionId);
   const [maxDisplay, setMaxDisplay] = useState(DEFAULT_DISPLAY);
   const [decimals, setDecimals] = useState<ValuePrecision>(DEFAULT_PRECISION);
-  const [fidelity, setFidelity] = useState<Fidelity>(DEFAULT_FIDELITY_LEVEL);
   const [expanded, setExpanded] = useState(false);
   // A portal needs a document, which the server render does not have.
   const [mounted, setMounted] = useState(false);
@@ -166,40 +147,23 @@ function ChartFrame({
       <span className="tabular-nums w-16 text-right">
         {shown} / {featureCount}
       </span>
-      <span className="flex items-center gap-1 pl-3 border-l border-gray-200">
-        {FIDELITIES.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            title={option.hint}
-            aria-pressed={option.value === fidelity}
-            onClick={() => setFidelity(option.value)}
-            className={`px-2 py-0.5 rounded whitespace-nowrap ${
-              option.value === fidelity
-                ? "bg-gray-800 text-white"
-                : "bg-gray-100 hover:bg-gray-200"
-            }`}
-          >
-            {option.label}
-          </button>
-        ))}
-      </span>
       {showPrecision && (
         <span className="flex items-center gap-1 pl-3 border-l border-gray-200">
-          <span>Decimals</span>
+          <span>Values</span>
           {PRECISIONS.map((option) => (
             <button
-              key={option}
+              key={option.value}
               type="button"
-              aria-pressed={option === decimals}
-              onClick={() => setDecimals(option)}
+              title={option.hint}
+              aria-pressed={option.value === decimals}
+              onClick={() => setDecimals(option.value)}
               className={`px-2 py-0.5 rounded tabular-nums ${
-                option === decimals
+                option.value === decimals
                   ? "bg-gray-800 text-white"
                   : "bg-gray-100 hover:bg-gray-200"
               }`}
             >
-              {option}
+              {option.label}
             </button>
           ))}
         </span>
@@ -228,7 +192,6 @@ function ChartFrame({
           explanation,
           maxDisplay: shown,
           decimals,
-          fidelity,
           width: INLINE_WIDTH,
           rowHeight,
         })}
@@ -268,7 +231,6 @@ function ChartFrame({
                   explanation,
                   maxDisplay: shown,
                   decimals,
-                  fidelity,
                   width: Math.max(
                     MIN_EXPANDED_WIDTH,
                     viewportWidth - EXPANDED_CHROME
@@ -293,10 +255,9 @@ export function GlobalImportanceChart({ predictionId }: { predictionId?: string 
       emptyLabel="No explanation available."
       rowHeight={26}
     >
-      {({ explanation, maxDisplay, fidelity, width, rowHeight }) => (
+      {({ explanation, maxDisplay, width, rowHeight }) => (
         <ShapBar
           explanation={explanation}
-          fidelity={fidelity}
           maxDisplay={maxDisplay}
           width={width}
           rowHeight={rowHeight}
@@ -315,10 +276,9 @@ export function GlobalBeeswarmChart({ predictionId }: { predictionId?: string })
       emptyLabel="No explanation available."
       rowHeight={28}
     >
-      {({ explanation, maxDisplay, fidelity, width, rowHeight }) => (
+      {({ explanation, maxDisplay, width, rowHeight }) => (
         <ShapBeeswarm
           explanation={explanation}
-          fidelity={fidelity}
           maxDisplay={maxDisplay}
           width={width}
           rowHeight={rowHeight}
@@ -350,10 +310,9 @@ export function GlobalHeatmapChart({
       emptyLabel="No explanation available."
       rowHeight={26}
     >
-      {({ explanation, maxDisplay, fidelity, width, rowHeight }) => (
+      {({ explanation, maxDisplay, width, rowHeight }) => (
         <ShapHeatmap
           explanation={explanation}
-          fidelity={fidelity}
           maxDisplay={maxDisplay}
           width={width}
           rowHeight={rowHeight}
@@ -385,7 +344,7 @@ export function LocalWaterfallChart({
       rowHeight={30}
       showPrecision
     >
-      {({ explanation, maxDisplay, decimals, fidelity, width, rowHeight }) => {
+      {({ explanation, maxDisplay, decimals, width, rowHeight }) => {
         const sampleIndex = sampleIndexOf(explanation, recordId);
         if (sampleIndex < 0) {
           return (
@@ -400,7 +359,6 @@ export function LocalWaterfallChart({
             sampleIndex={sampleIndex}
             maxDisplay={maxDisplay}
             decimals={decimals}
-            fidelity={fidelity}
             width={width}
             rowHeight={rowHeight}
           />

@@ -1,19 +1,13 @@
 import { useMemo, useState } from "react";
-import { formatValue } from "../core/format";
+import { formatShapValue } from "../core/format";
 import { heatmapLayout, heatmapRows } from "../core/heatmapLayout";
 import { parseExplanation } from "../core/parse";
-import { DEFAULT_FIDELITY, Fidelity, presentationFor } from "../core/fidelity";
-import { applyFidelity } from "../core/applyFidelity";
-import { prevalence } from "../core/taxonomy";
-
 import { Explanation } from "../core/types";
 
 export type ShapHeatmapProps = {
   explanation: Explanation;
   maxDisplay?: number;
   faithfulOtherRow?: boolean;
-  /** How closely to reproduce SHAP. See core/fidelity.ts. */
-  fidelity?: Fidelity;
   classIndex?: number;
   width?: number;
   rowHeight?: number;
@@ -24,8 +18,7 @@ export type ShapHeatmapProps = {
 export function ShapHeatmap({
   explanation,
   maxDisplay = 10,
-  faithfulOtherRow,
-  fidelity = DEFAULT_FIDELITY,
+  faithfulOtherRow = false,
   classIndex = 1,
   width = 720,
   rowHeight = 26,
@@ -35,18 +28,9 @@ export function ShapHeatmap({
   const [hoveredColumn, setHoveredColumn] = useState<number | null>(null);
   const marginTop = 72;
 
-  // A table lookup, not work: it needs no memo, and keeping it out of one
-  // means the render can read it without the memo having to hand it back.
-  const { units, taxonomicNames } = presentationFor(fidelity);
-
   const layout = useMemo(() => {
-    const resolved = presentationFor(fidelity);
-    const parsed = applyFidelity(
-      parseExplanation(explanation, { classIndex }),
-      resolved,
-    );
-    const otherRow = faithfulOtherRow ?? resolved.faithfulOtherRow;
-    const rows = heatmapRows(parsed, maxDisplay, otherRow);
+    const parsed = parseExplanation(explanation, { classIndex });
+    const rows = heatmapRows(parsed, maxDisplay, faithfulOtherRow);
     return heatmapLayout(rows, {
       width,
       rowHeight,
@@ -54,7 +38,7 @@ export function ShapHeatmap({
       marginRight: 100,
       marginTop,
     });
-  }, [explanation, maxDisplay, faithfulOtherRow, fidelity, classIndex, width, rowHeight]);
+  }, [explanation, maxDisplay, faithfulOtherRow, classIndex, width, rowHeight]);
 
   const activeColumn = hoveredColumn === null ? undefined : layout.columns[hoveredColumn];
   const tooltipX = activeColumn
@@ -115,7 +99,7 @@ export function ShapHeatmap({
             dominantBaseline="middle"
             fontSize={13}
             fill="#333333"
-            fontStyle={!row.isOtherRow && taxonomicNames ? "italic" : "normal"}
+            fontStyle={row.isOtherRow ? "normal" : "italic"}
           >
             {row.label}
           </text>
@@ -160,8 +144,8 @@ export function ShapHeatmap({
           height={layout.plotBottom - 8}
           fill="transparent"
           aria-label={column.sampleId
-            ? `Sample ${column.sampleId}, total SHAP value ${formatValue(column.total, units)}`
-            : `Sample ${column.sampleIndex + 1}, total SHAP value ${formatValue(column.total, units)}`}
+            ? `Sample ${column.sampleId}, total SHAP value ${formatShapValue(column.total)}`
+            : `Sample ${column.sampleIndex + 1}, total SHAP value ${formatShapValue(column.total)}`}
           onMouseEnter={() => setHoveredColumn(columnIndex)}
           onMouseLeave={() => setHoveredColumn(null)}
           onClick={() => {
@@ -178,7 +162,7 @@ export function ShapHeatmap({
             {activeColumn.sampleId ?? `Sample ${activeColumn.sampleIndex + 1}`}
           </text>
           <text x={7} y={31} fontSize={11} fill="#222222">
-            {`Σφ: ${formatValue(activeColumn.total, units)}`}
+            {`Σφ: ${formatShapValue(activeColumn.total)}`}
           </text>
         </g>
       )}

@@ -1,39 +1,39 @@
 {
-  "max_display": 10,
-  "labels": [
-    "Peptostreptococcus_stomatis",
-    "Parvimonas_unclassified",
-    "Fusobacterium_nucleatum",
-    "Gemella_morbillorum",
-    "Solobacterium_moorei",
-    "Parvimonas_micra",
-    "Atopobium_parvulum",
-    "Dorea_longicatena",
-    "Ruminococcus_torques",
-    "Sum of 192 other features"
-  ],
-  "values": [
-    0.05047,
-    0.04403,
-    0.0253,
-    0.02389,
-    0.01749,
-    0.01497,
-    0.01465,
-    0.009273,
-    0.008974,
-    0.3762
-  ],
-  "colors": [
-    "#ff0051",
-    "#ff0051",
-    "#ff0051",
-    "#ff0051",
-    "#ff0051",
-    "#ff0051",
-    "#ff0051",
-    "#ff0051",
-    "#ff0051",
-    "#ff0051"
-  ]
+ "max_display": 10,
+ "labels": [
+  "Peptostreptococcus stomatis",
+  "Parvimonas unclassified",
+  "Fusobacterium nucleatum",
+  "Gemella morbillorum",
+  "Solobacterium moorei",
+  "Parvimonas micra",
+  "Atopobium parvulum",
+  "Dorea longicatena",
+  "Ruminococcus torques",
+  "Sum of 192 other features"
+ ],
+ "values": [
+  0.05047,
+  0.04403,
+  0.0253,
+  0.02389,
+  0.01749,
+  0.01497,
+  0.01465,
+  0.009273,
+  0.008974,
+  0.3762
+ ],
+ "colors": [
+  "#ff0051",
+  "#ff0051",
+  "#ff0051",
+  "#ff0051",
+  "#ff0051",
+  "#ff0051",
+  "#ff0051",
+  "#ff0051",
+  "#ff0051",
+  "#ff0051"
+ ]
 }

@@ -1,6 +1,5 @@
 import { collapseToDisplay } from "./collapse";
 import { sampleColormap } from "./colormap";
-import { AbundanceScale } from "./fidelity";
 import { globalImportance, orderFeatures } from "./order";
 import { ParsedExplanation } from "./types";
 
@@ -80,37 +79,6 @@ function percentile(values: number[], percent: number): number {
   return finite[lower] + (finite[upper] - finite[lower]) * fraction;
 }
 
-/**
- * Each Sample's rank among the Samples, as a fraction of the way up.
- *
- * Relative abundance is compositional and heavily right-skewed: one taxon at
- * 30% and the rest at fractions of a percent is the normal shape, not an
- * outlier. Clipping to the 5th-95th percentile, as SHAP does, then presses
- * almost every Sample into the same end of the colour map, so the colour stops
- * distinguishing the Samples it is there to distinguish. Ranking spends the
- * whole colour range on the order, which is what a reader can act on.
- *
- * Ties share the mean of the ranks they span, so equal abundances — including
- * the large block of zeros these matrices always carry — get one colour rather
- * than an arbitrary ordering among themselves.
- */
-function percentileRanks(featureValues: number[]): number[] {
-  const order = featureValues
-    .map((value, index) => ({ value, index }))
-    .sort((a, b) => a.value - b.value);
-
-  const ranks = new Array<number>(featureValues.length).fill(0);
-  const last = Math.max(1, featureValues.length - 1);
-  for (let i = 0; i < order.length; ) {
-    let j = i;
-    while (j + 1 < order.length && order[j + 1].value === order[i].value) j++;
-    const shared = (i + j) / 2 / last;
-    for (let k = i; k <= j; k++) ranks[order[k].index] = shared;
-    i = j + 1;
-  }
-  return ranks;
-}
-
 function colorDomain(featureValues: number[]): [number, number] {
   let vmin = percentile(featureValues, 5);
   let vmax = percentile(featureValues, 95);
@@ -183,7 +151,6 @@ export function beeswarmRows(
   maxDisplay: number,
   faithfulOtherRow: boolean,
   seed = 0,
-  abundanceScale: AbundanceScale = "raw",
 ): BeeswarmRows {
   if (!Number.isInteger(maxDisplay) || maxDisplay <= 0) {
     throw new RangeError(`maxDisplay must be a positive integer, received ${maxDisplay}`);
@@ -224,7 +191,6 @@ export function beeswarmRows(
     const ys = spreadPoints(xs, rowIndex, seed + Math.imul(displayIndex + 1, 0x9e3779b1));
     const [vmin, vmax] = colorDomain(featureValues);
     const colorSpan = vmax - vmin;
-    const ranks = abundanceScale === "percentile" ? percentileRanks(featureValues) : undefined;
 
     return {
       label: displayRow.label,
@@ -246,11 +212,7 @@ export function beeswarmRows(
           };
         }
         const colorValue = Math.max(vmin, Math.min(vmax, featureValue));
-        const normalized = ranks
-          ? ranks[sampleIndex]
-          : colorSpan === 0
-            ? 0
-            : (colorValue - vmin) / colorSpan;
+        const normalized = colorSpan === 0 ? 0 : (colorValue - vmin) / colorSpan;
         return {
           sampleIndex,
           x,

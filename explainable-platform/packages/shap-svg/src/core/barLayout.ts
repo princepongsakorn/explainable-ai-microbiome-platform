@@ -1,24 +1,7 @@
 import { DisplayRows } from "./types";
 
-import { ZeroHandling } from "./fidelity";
-
 export const POSITIVE_COLOR = "#ff0051";
 export const NEGATIVE_COLOR = "#008bfb";
-/** SHAP's own grey, reused for "this Feature contributed nothing". */
-export const NEUTRAL_COLOR = "#848484";
-
-/**
- * Bar colour for a contribution.
- *
- * SHAP's rule is `value > 0 ? red : blue` (`_bar.py:267-271`), which paints an
- * exactly-zero contribution blue — the same zero the waterfall paints red. Only
- * the faithful level keeps that; above it a zero is grey, because it did not
- * push the prediction either way and neither colour says so.
- */
-export function colorFor(value: number, zeroHandling: ZeroHandling = "shapPerChart") {
-  if (value === 0 && zeroHandling === "neutral") return NEUTRAL_COLOR;
-  return value > 0 ? POSITIVE_COLOR : NEGATIVE_COLOR;
-}
 
 /** shap/plots/_bar.py:259 — total_width 0.7 of the row pitch. */
 const BAR_THICKNESS_RATIO = 0.7;
@@ -31,8 +14,6 @@ export type BarLayoutOptions = {
   marginLeft: number;
   marginRight: number;
   marginTop: number;
-  /** How an exactly-zero contribution is coloured. Set by the fidelity level. */
-  zeroHandling?: ZeroHandling;
 };
 
 export type BarGeometry = {
@@ -87,7 +68,7 @@ export function barLayout(rows: DisplayRows, opts: BarLayoutOptions): BarLayout 
       y: rowTop + inset,
       width: Math.abs(end - xZero),
       height: barHeight,
-      color: colorFor(row.value, opts.zeroHandling),
+      color: positive ? POSITIVE_COLOR : NEGATIVE_COLOR,
       centerY: rowTop + rowHeight / 2,
     };
   });
