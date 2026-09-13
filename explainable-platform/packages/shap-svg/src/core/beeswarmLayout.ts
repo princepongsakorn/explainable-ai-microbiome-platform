@@ -1,12 +1,32 @@
 import { collapseToDisplay } from "./collapse";
 import { sampleColormap } from "./colormap";
+import {
+  AXIS_TITLE_DY,
+  AxisSpine,
+  AxisTick,
+  AxisTitle,
+  niceTicks,
+  tickLabel,
+  tickSpace,
+} from "./ticks";
 import { globalImportance, orderFeatures } from "./order";
 import { ParsedExplanation } from "./types";
 
 export const BEESWARM_MISSING_COLOR = "#777777";
 export const BEESWARM_ROW_HEIGHT = 0.4;
 const NBINS = 100;
-const AXIS_HEIGHT = 30;
+/**
+ * Room below the rows for ticks, their labels and the axis title — and below
+ * those, a band for the hover colour legend, which would otherwise sit on the
+ * title's right end.
+ */
+const AXIS_HEIGHT = 74;
+/** _beeswarm.py:499 tick_params("x", labelsize=11). */
+const TICK_LABEL_PT = 11;
+/** _beeswarm.py:501 set_xlabel(..., fontsize=13). */
+const TITLE_PT = 13;
+/** matplotlib's default axes.xmargin; _beeswarm.py never sets xlim itself. */
+const X_MARGIN = 0.05;
 
 export type BeeswarmPoint = {
   sampleIndex: number;
@@ -66,6 +86,10 @@ export type BeeswarmLayout = {
   xZero: number;
   plotWidth: number;
   plotBottom: number;
+  xTicks: AxisTick[];
+  /** The bottom spine, which _beeswarm.py:493-495 leaves visible. */
+  xSpine: AxisSpine | null;
+  xTitle: AxisTitle;
   height: number;
 };
 
@@ -228,6 +252,28 @@ export function beeswarmRows(
   return { rows, collapsedCount: display.collapsedCount };
 }
 
+function beeswarmXAxis(
+  min: number,
+  max: number,
+  toX: (value: number) => number,
+  marginLeft: number,
+  plotWidth: number,
+  plotBottom: number,
+): Pick<BeeswarmLayout, "xTicks" | "xSpine" | "xTitle"> {
+  const { ticks, step } = niceTicks(min, max, tickSpace(plotWidth, TICK_LABEL_PT));
+  return {
+    xTicks: ticks.map((value) => ({ value, x: toX(value), label: tickLabel(value, step) })),
+    xSpine: { x1: marginLeft, x2: marginLeft + plotWidth, y: plotBottom },
+    xTitle: {
+      // _labels.py:5, labels["VALUE"].
+      text: "SHAP value (impact on model output)",
+      x: marginLeft + plotWidth / 2,
+      y: plotBottom + AXIS_TITLE_DY,
+      fontSize: TITLE_PT,
+    },
+  };
+}
+
 /** Projects beeswarm value-space rows into SVG coordinates. */
 export function beeswarmLayout(
   valueRows: BeeswarmRows,
@@ -236,8 +282,14 @@ export function beeswarmLayout(
   const { width, rowHeight, marginLeft, marginRight, marginTop, dotRadius } = opts;
   const plotWidth = width - marginLeft - marginRight;
   const values = valueRows.rows.flatMap((row) => row.points.map((point) => point.x));
-  const min = Math.min(0, ...values);
-  const max = Math.max(0, ...values);
+  const dataMin = Math.min(0, ...values);
+  const dataMax = Math.max(0, ...values);
+  // SHAP never sets the beeswarm's xlim, so matplotlib's default 5% margin
+  // applies on both sides. That is what lets the axis reach a round tick just
+  // past the outermost dot, as SHAP's own figures do.
+  const margin = (dataMax - dataMin) * X_MARGIN;
+  const min = dataMin - margin;
+  const max = dataMax + margin;
   const span = max - min || 1;
   const toX = (value: number) => marginLeft + (value - min) / span * plotWidth;
   const highestRowIndex = Math.max(0, valueRows.rows.length - 1);
@@ -263,6 +315,7 @@ export function beeswarmLayout(
     rows,
     xDomain: [min, max],
     xZero: toX(0),
+    ...beeswarmXAxis(min, max, toX, marginLeft, plotWidth, plotBottom),
     plotWidth,
     plotBottom,
     height: plotBottom + AXIS_HEIGHT,

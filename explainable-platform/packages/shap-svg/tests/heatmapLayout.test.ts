@@ -147,7 +147,8 @@ describe("heatmapLayout", () => {
       expect.closeTo(50 * 7 / 11, 12),
       50,
     ]);
-    expect(layout.height).toBe(126);
+    // 52: the axis area now holds ticks, their labels and the Instances title.
+    expect(layout.height).toBe(152);
   });
 });
 

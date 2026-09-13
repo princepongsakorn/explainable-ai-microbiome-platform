@@ -1,6 +1,15 @@
 import { collapseToDisplay } from "./collapse";
 import { sampleColormap } from "./colormap";
 import { formatShapValue } from "./format";
+import {
+  AXIS_TITLE_DY,
+  AxisSpine,
+  AxisTick,
+  AxisTitle,
+  niceTicks,
+  tickLabel,
+  tickSpace,
+} from "./ticks";
 import { globalImportance, orderFeatures } from "./order";
 import { ParsedExplanation } from "./types";
 
@@ -10,7 +19,10 @@ const SEPARATOR_GAP = 4;
 const SIDE_BAR_GAP = 10;
 const SIDE_BAR_RIGHT_INSET = 40;
 const SIDE_BAR_HEIGHT_RATIO = 0.6;
-const AXIS_HEIGHT = 26;
+/** Room below the grid for ticks, their labels and the Instances title. */
+const AXIS_HEIGHT = 52;
+/** _heatmap.py leaves x tick labels at matplotlib's default "medium", 10 pt. */
+const TICK_LABEL_PT = 10;
 
 export type HeatmapCell = {
   /** Original index in the Explanation, before Sample ordering. */
@@ -130,6 +142,11 @@ export type HeatmapLayout = {
   spines: { left: HeatmapSpine; right: HeatmapSpine };
   /** yaxis.set_ticks_position("left") with tick_params(direction="out"), :134,:138. */
   yTicks: HeatmapYTick[];
+  /** Ticks along the Sample axis, at the centre of each ticked column. */
+  xTicks: AxisTick[];
+  /** Always null: _heatmap.py:137 hides the bottom spine. */
+  xSpine: AxisSpine | null;
+  xTitle: AxisTitle;
   plotWidth: number;
   cellWidth: number;
   height: number;
@@ -230,6 +247,40 @@ export function heatmapRows(
   };
 }
 
+/**
+ * The Sample axis. xlim(-0.5, n - 0.5) at _heatmap.py:151 puts integer i at the
+ * centre of column i, so a tick's position is its column's centre. Integer steps
+ * only: the axis counts Samples, and for a handful of them there is no Sample 0.5.
+ */
+function heatmapXAxis(
+  sampleCount: number,
+  marginLeft: number,
+  cellWidth: number,
+  plotWidth: number,
+  plotBottom: number,
+): Pick<HeatmapLayout, "xTicks" | "xSpine" | "xTitle"> {
+  const { ticks, step } = niceTicks(
+    -0.5,
+    sampleCount - 0.5,
+    tickSpace(plotWidth, TICK_LABEL_PT),
+    { integer: true },
+  );
+  return {
+    xTicks: ticks.map((value) => ({
+      value,
+      x: marginLeft + (value + 0.5) * cellWidth,
+      label: tickLabel(value, step),
+    })),
+    xSpine: null,
+    xTitle: {
+      text: "Instances",
+      x: marginLeft + plotWidth / 2,
+      y: plotBottom + AXIS_TITLE_DY,
+      fontSize: TICK_LABEL_PT,
+    },
+  };
+}
+
 /** Projects heatmap value-space rows into SVG geometry. */
 export function heatmapLayout(
   valueRows: HeatmapRows,
@@ -313,6 +364,7 @@ export function heatmapLayout(
       x1: marginLeft - Y_TICK_LENGTH,
       x2: marginLeft,
     })),
+    ...heatmapXAxis(valueRows.columns.length, marginLeft, cellWidth, plotWidth, plotBottom),
     plotWidth,
     cellWidth,
     height: plotBottom + AXIS_HEIGHT,

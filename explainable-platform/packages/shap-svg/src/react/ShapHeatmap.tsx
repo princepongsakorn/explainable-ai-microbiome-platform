@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { formatShapValue } from "../core/format";
+import { XAxis } from "./XAxis";
 import { heatmapLayout, heatmapRows } from "../core/heatmapLayout";
 import { parseExplanation } from "../core/parse";
 import { Explanation } from "../core/types";
@@ -84,6 +85,14 @@ export function ShapHeatmap({
         stroke="#888888"
         strokeWidth={1}
         strokeDasharray="4 4"
+      />
+
+      <XAxis
+        ticks={layout.xTicks}
+        spine={layout.xSpine}
+        title={layout.xTitle}
+        plotBottom={layout.plotBottom}
+        tickFontSize={10}
       />
 
       <g aria-hidden="true">
