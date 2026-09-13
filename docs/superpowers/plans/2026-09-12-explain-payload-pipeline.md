@@ -809,12 +809,15 @@ and unpickles the stored value. Measured ~2.3 ms/MB warm, so a 200-400 MB torch+
 **0.5-1.0 s of blocking work per request** before any real work starts, and hands each caller a fresh
 object so no warm explainer state survives.
 
-- [ ] **Step 1:** Wrap the joblib-cached loader in a process-local `functools.lru_cache(maxsize=4)`
+- [x] **Step 1:** Wrap the joblib-cached loader in a process-local `functools.lru_cache(maxsize=4)`
   keyed on `model_uri`. Keep the joblib layer as the cold-start path — it is what avoids re-downloading
   artifacts when a pod restarts.
-- [ ] **Step 2:** Confirm with two consecutive identical requests that the second does no disk read
-  (log a line in the loader and check it appears once).
-- [ ] **Step 3:** Commit.
+- [x] **Step 2:** Confirm with two consecutive identical requests that the second does no disk read
+  (log a line in the loader and check it appears once). *Verified as a unit test with a counting stub
+  (`tests/test_model_cache.py`), not against the live service — the running container holds the MLflow
+  credentials in its environment and was not restarted. The `Unpickling ...` log line is in place for
+  the live check whenever the service next restarts.*
+- [x] **Step 3:** Commit.
 
 ---
 
@@ -826,11 +829,11 @@ object so no warm explainer state survives.
 request — a blocking 10-200 ms round trip to the tracking server, which also makes the whole service
 fail whenever MLflow is briefly unreachable.
 
-- [ ] **Step 1:** Add a TTL cache (30-60 s) over `model_name -> (version, run_id)`. Fold it into the
+- [x] **Step 1:** Add a TTL cache (30-60 s) over `model_name -> (version, run_id)`. Fold it into the
   same cache as Task 10 if that is simpler.
-- [ ] **Step 2:** Decide and document what happens when the lookup fails but a cached entry exists —
+- [x] **Step 2:** Decide and document what happens when the lookup fails but a cached entry exists —
   serving the cached version is almost certainly right, and is the point of the change.
-- [ ] **Step 3:** Commit.
+- [x] **Step 3:** Commit.
 
 ---
 
@@ -841,14 +844,22 @@ fail whenever MLflow is briefly unreachable.
 
 All five repeat `_load_model_or_error` -> `get_json` -> `_parse_dataframe_split` -> `transformer`, and
 three carry a byte-identical `?aggregate_by=genus` comment that duplicates `get_shap_value`'s docstring.
-**They have already drifted**: only `explain_values` maps `PayloadError` to 400; the others fall to a
-generic 500 for the same bad input.
+~~**They have already drifted**: only `explain_values` maps `PayloadError` to 400; the others fall to a
+generic 500 for the same bad input.~~ **Wrong, corrected while implementing.** `PayloadError` is raised
+by `build_payload`, which only `explain_values` calls, so the other four cannot raise it. The real
+drift was smaller: all five reported a malformed JSON body as 500. That is what Step 3 fixed.
 
-- [ ] **Step 1:** Extract `_prepare(model_name) -> (loaded, impl, X, None) | (None, None, None, (resp, status))`.
-- [ ] **Step 2:** Rewrite the five handlers to use it; delete the three duplicated comments.
-- [ ] **Step 3:** Decide deliberately whether a malformed JSON body should now surface as Flask's 400
+A genuine finding left unfixed, because it is a behaviour change to the live predict path rather than a
+refactor: `transformer()` coerces with `errors="coerce"`, so non-numeric input becomes `NaN` silently.
+`explain_values` catches it downstream in `build_payload` and returns 400; the three plot endpoints and
+`predict` carry the NaN into matplotlib or the model. Rejecting non-finite input in `_prepare` would
+make all five consistent — decide it on purpose, not as a side effect.
+
+- [x] **Step 1:** Extract `_prepare(model_name) -> (loaded, impl, X, None) | (None, None, None, (resp, status))`.
+- [x] **Step 2:** Rewrite the five handlers to use it; delete the three duplicated comments.
+- [x] **Step 3:** Decide deliberately whether a malformed JSON body should now surface as Flask's 400
   rather than the current 500 — it is a behaviour change either way, so make it on purpose.
-- [ ] **Step 4:** Verify all four explain endpoints and predict still respond identically for a good
+- [x] **Step 4:** Verify all four explain endpoints and predict still respond identically for a good
   request, and consistently for a bad one. Commit.
 
 ---
