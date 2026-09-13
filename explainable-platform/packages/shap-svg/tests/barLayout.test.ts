@@ -45,13 +45,14 @@ describe("barLayout", () => {
     expect(zero.bars[0].color).toBe("#008bfb");
   });
 
-  it("reports whether a zero rule is needed", () => {
-    expect(barLayout(rows, opts).showZeroRule).toBe(true);
+  it("always places the zero line at zero, whether or not a value is negative", () => {
+    expect(barLayout(rows, opts).zeroLine.x).toBe(barLayout(rows, opts).xZero);
     const positiveOnly = barLayout(
       { rows: [{ label: "a", featureIndex: 0, value: 3, isOtherRow: false }], collapsedCount: 0 },
       opts,
     );
-    expect(positiveOnly.showZeroRule).toBe(false);
+    // Still drawn: with no negatives the left spine takes the axvline's place.
+    expect(positiveOnly.zeroLine.x).toBe(positiveOnly.xZero);
   });
 
   it("sizes the svg to fit every row", () => {

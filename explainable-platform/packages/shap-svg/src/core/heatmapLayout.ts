@@ -101,6 +101,14 @@ export type HeatmapAxisMark = {
   label: string;
 };
 
+export type HeatmapSpine = { x: number; y1: number; y2: number };
+
+/** An outward tick on the left edge, one per Feature row. */
+export type HeatmapYTick = { y: number; x1: number; x2: number };
+
+/** matplotlib's default major tick, 3.5 pt, at the 100 dpi SHAP renders at. */
+const Y_TICK_LENGTH = 5;
+
 export type HeatmapLayout = {
   rows: HeatmapRowGeometry[];
   columns: HeatmapColumnGeometry[];
@@ -112,6 +120,16 @@ export type HeatmapLayout = {
   gridRight: number;
   gridTop: number;
   plotBottom: number;
+  /**
+   * _heatmap.py:135 shows the left and right spines (and hides top and bottom),
+   * and :136 bounds them with set_bounds(n - row_height, -row_height). With
+   * row_height = 0.5 (:116) that is exactly the outer edge of the first and last
+   * row — so they frame the grid and stop short of the f(x) chart above it. The
+   * side bars are drawn with clip_on=False (:173), outside the right spine.
+   */
+  spines: { left: HeatmapSpine; right: HeatmapSpine };
+  /** yaxis.set_ticks_position("left") with tick_params(direction="out"), :134,:138. */
+  yTicks: HeatmapYTick[];
   plotWidth: number;
   cellWidth: number;
   height: number;
@@ -286,6 +304,15 @@ export function heatmapLayout(
     gridRight,
     gridTop: marginTop,
     plotBottom,
+    spines: {
+      left: { x: marginLeft, y1: marginTop, y2: plotBottom },
+      right: { x: gridRight, y1: marginTop, y2: plotBottom },
+    },
+    yTicks: rows.map((row) => ({
+      y: row.centerY,
+      x1: marginLeft - Y_TICK_LENGTH,
+      x2: marginLeft,
+    })),
     plotWidth,
     cellWidth,
     height: plotBottom + AXIS_HEIGHT,

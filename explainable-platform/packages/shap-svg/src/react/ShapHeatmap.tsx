@@ -86,6 +86,31 @@ export function ShapHeatmap({
         strokeDasharray="4 4"
       />
 
+      <g aria-hidden="true">
+        {[layout.spines.left, layout.spines.right].map((spine, index) => (
+          <line
+            key={`spine-${index}`}
+            x1={spine.x}
+            x2={spine.x}
+            y1={spine.y1}
+            y2={spine.y2}
+            stroke="#333333"
+            strokeWidth={1}
+          />
+        ))}
+        {layout.yTicks.map((tick, index) => (
+          <line
+            key={`ytick-${index}`}
+            x1={tick.x1}
+            x2={tick.x2}
+            y1={tick.y}
+            y2={tick.y}
+            stroke="#333333"
+            strokeWidth={1}
+          />
+        ))}
+      </g>
+
       {layout.rows.map((row, rowIndex) => (
         <g
           key={`row-${rowIndex}`}

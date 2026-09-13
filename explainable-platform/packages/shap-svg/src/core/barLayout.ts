@@ -35,8 +35,18 @@ export type BarLayout = {
   xDomain: [number, number];
   xZero: number;
   plotWidth: number;
+  /** Bottom edge of the last row, where the axis area begins. */
+  plotBottom: number;
+  /**
+   * The solid vertical at zero. Always present, because SHAP's two code paths
+   * converge on it: _bar.py:252-254 draws axvline(0) when a value is negative,
+   * and _bar.py:329-330 hides the left spine only in that same case. With no
+   * negatives the spine stays and barh pins the axes' left edge to 0 — so
+   * either way there is one line at zero. Mean |SHAP| is never negative, so the
+   * summary chart always takes the spine path.
+   */
+  zeroLine: { x: number; y1: number; y2: number };
   height: number;
-  showZeroRule: boolean;
 };
 
 export function barLayout(rows: DisplayRows, opts: BarLayoutOptions): BarLayout {
@@ -78,8 +88,8 @@ export function barLayout(rows: DisplayRows, opts: BarLayoutOptions): BarLayout 
     xDomain: [min, max],
     xZero,
     plotWidth,
+    plotBottom: marginTop + rows.rows.length * rowHeight,
+    zeroLine: { x: xZero, y1: marginTop, y2: marginTop + rows.rows.length * rowHeight },
     height: marginTop + rows.rows.length * rowHeight + AXIS_HEIGHT,
-    // shap/plots/_bar.py:252-254 — the rule only appears when something is negative.
-    showZeroRule: values.some((v) => v < 0),
   };
 }
