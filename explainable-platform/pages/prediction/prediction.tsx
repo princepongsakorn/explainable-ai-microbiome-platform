@@ -7,8 +7,6 @@ import { IPredictions } from "@/components/model/model.interface";
 import Drawer from "react-modern-drawer";
 import {
   getPredictions,
-  postRegenBeeswarm,
-  postRegenHeatmap,
 } from "../api/predict";
 import { useSse } from "@/lib/useSse";
 import dayjs from "dayjs";
@@ -22,7 +20,6 @@ import {
 } from "@/components/model/pagination.interface";
 import { useRouter } from "next/router";
 import { queryToString } from "@/lib/queryToString";
-import { ShapPlotPlaceholder } from "@/components/ui/ImageEmpty/ImageEmpty";
 import {
   GlobalBeeswarmChart,
   GlobalHeatmapChart,
@@ -58,36 +55,6 @@ export function History() {
     );
   };
 
-  // Re-generate prediction-level plots. The plot is optimistically cleared so
-  // the in-progress spinner — derived from "no image + no error" — shows at
-  // once. The backend also clears it server-side, so the state is correct
-  // after a refresh and is scoped to this prediction (no shared flag). The
-  // final result arrives over SSE as 'prediction:explain'.
-  const onRegenHeatmap = async () => {
-    const id = selectPrediction?.id;
-    if (!id) return;
-    patchPrediction(id, { heatmap: undefined, heatmapError: undefined });
-    try {
-      await postRegenHeatmap(id);
-    } catch {
-      const data = await getPredictionsRecordList();
-      const fresh = data.items.find((it) => it.id === id);
-      if (fresh) patchPrediction(id, fresh);
-    }
-  };
-
-  const onRegenBeeswarm = async () => {
-    const id = selectPrediction?.id;
-    if (!id) return;
-    patchPrediction(id, { beeswarm: undefined, beeswarmError: undefined });
-    try {
-      await postRegenBeeswarm(id);
-    } catch {
-      const data = await getPredictionsRecordList();
-      const fresh = data.items.find((it) => it.id === id);
-      if (fresh) patchPrediction(id, fresh);
-    }
-  };
 
   const getPredictionsRecordList = async () => {
     const params: IPaginationRequestParams = {
@@ -302,48 +269,6 @@ export function History() {
               together. Hover a column to see which sample it is.
             </div>
             <GlobalHeatmapChart predictionId={selectPrediction?.id} />
-          </div>
-          <div className="flex flex-col mb-3 mt-3 ">
-            <div>
-              <div className="font-medium">Beeswarm plot</div>
-            </div>
-            <div className="text-sm py-2 text-gray-500">
-              This SHAP beeswarm plot visualizes the impact of each feature on
-              the model’s predictions. Each dot represents an individual SHAP
-              value, with color indicating the original feature value. The
-              distribution of points shows both the magnitude and direction of
-              each feature’s effect, highlighting the most influential drivers
-              in the dataset.
-            </div>
-            <ShapPlotPlaceholder
-              src={selectPrediction?.beeswarm}
-              plotName="Beeswarm plot"
-              showShapLabel
-              errorReason={selectPrediction?.beeswarmError}
-              onRegenerate={onRegenBeeswarm}
-              regenerating={
-                !selectPrediction?.beeswarm && !selectPrediction?.beeswarmError
-              }
-            />
-          </div>
-          <div className="flex flex-col mb-3 mt-3 border-t-[1px] border-[#EAEAEA] pt-3">
-            <div className="font-medium">Heatmap plot</div>
-            <div className="text-sm py-2 text-gray-500">
-              This SHAP heatmap clusters data points based on their explanation
-              profiles, not raw feature values. The color intensity shows each
-              feature’s contribution to the model’s predictions, revealing
-              distinct subpopulations within the dataset.
-            </div>
-            <ShapPlotPlaceholder
-              src={selectPrediction?.heatmap}
-              plotName="Heatmap plot"
-              showShapLabel
-              errorReason={selectPrediction?.heatmapError}
-              onRegenerate={onRegenHeatmap}
-              regenerating={
-                !selectPrediction?.heatmap && !selectPrediction?.heatmapError
-              }
-            />
           </div>
         </div>
       </Drawer>

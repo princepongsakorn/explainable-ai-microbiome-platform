@@ -17,7 +17,6 @@ import {
 } from "@/components/model/pagination.interface";
 import { useRouter } from "next/router";
 import { queryToString } from "@/lib/queryToString";
-import { ShapPlotPlaceholder } from "@/components/ui/ImageEmpty/ImageEmpty";
 import { Dropdown } from "@/components/ui/Dropdown/Dropdown";
 import {
   getExperimentsList,
