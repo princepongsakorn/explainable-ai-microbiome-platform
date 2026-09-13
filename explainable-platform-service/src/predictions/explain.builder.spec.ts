@@ -3,6 +3,7 @@ import {
   ExplainPayload,
   chunkIndices,
   concatPayloads,
+  backfillSampleLabels,
   sampleLabelsFor,
   sliceSample,
 } from './explain.builder';
@@ -223,6 +224,55 @@ describe('sample labels through concat and slice', () => {
     const one = sliceSample(payload, 'b');
     expect(one.sample_labels).toEqual(['SAMD2']);
     expect(one.sample_label_column).toBe('subject_id');
+  });
+});
+
+describe('backfillSampleLabels', () => {
+  // chunk() gives sample_ids in order and feature_names ['a', 'b'].
+  const payload = () => chunk(['uuid-1', 'uuid-2'], 1);
+  const columns = ['sample_id', 'a', 'b'];
+  // Deliberately out of order: the join must not depend on it.
+  const records = [
+    { id: 'uuid-2', record_number: 8, dfData: ['SAMD2', 0, 0] },
+    { id: 'uuid-1', record_number: 7, dfData: ['SAMD1', 0, 0] },
+  ];
+
+  it('joins records to Samples by UUID, not by the order they arrive in', () => {
+    const result = backfillSampleLabels(payload(), records, columns);
+    expect(result.status).toBe('updated');
+    if (result.status !== 'updated') return;
+    expect(result.payload.sample_labels).toEqual(['SAMD1', 'SAMD2']);
+    expect(result.payload.sample_label_column).toBe('sample_id');
+  });
+
+  it('changes nothing but the two label fields', () => {
+    const before = payload();
+    const result = backfillSampleLabels(before, records, columns);
+    if (result.status !== 'updated') throw new Error('expected an update');
+    const { sample_labels, sample_label_column, ...rest } = result.payload;
+    expect(rest).toEqual(before);
+  });
+
+  it('skips a payload that already has labels, so running it twice is harmless', () => {
+    const labelled = { ...payload(), sample_labels: ['x', 'y'] };
+    expect(backfillSampleLabels(labelled, records, columns)).toEqual({
+      status: 'skipped',
+      reason: 'already has sample_labels',
+    });
+  });
+
+  it('skips a payload without sample_ids, which cannot be joined to records', () => {
+    const { sample_ids, ...noIds } = payload();
+    const result = backfillSampleLabels(noIds, records, columns);
+    expect(result.status).toBe('skipped');
+  });
+
+  it('skips when a Sample has no record, rather than labelling it by guesswork', () => {
+    const result = backfillSampleLabels(payload(), [records[0]], columns);
+    expect(result).toEqual({
+      status: 'skipped',
+      reason: '1 of 2 sample_ids have no matching record',
+    });
   });
 });
 
