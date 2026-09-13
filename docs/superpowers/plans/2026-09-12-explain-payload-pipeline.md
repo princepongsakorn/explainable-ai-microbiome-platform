@@ -864,21 +864,35 @@ make all five consistent — decide it on purpose, not as a side effect.
 
 ---
 
-### Task 13: Faster JSON serialization (optional, adds a dependency)
+### Task 13: Faster JSON serialization — **measured, not worth doing**
 
-**Files:** Modify `kserve-custom-runtime/requirements.txt`, `kserve-shap-multi-modelserver.py`
+**Do not do this.** The premise below was wrong and the measurement is recorded here so nobody picks
+it up again.
 
-Measured on a 7 MB payload: `jsonify` 181 ms, stdlib `json.dumps` 203 ms (**slower** — Flask already
-uses the C encoder), `orjson.dumps` **38 ms**. After Task 10-12, serialization is the dominant remaining
-cost of the endpoint.
+Claimed: "after Tasks 10-12, serialization is the dominant remaining cost of the endpoint",
+`jsonify` 181 ms vs `orjson.dumps` 38 ms.
 
-- [ ] **Step 1:** Pin `orjson` and return `Response(orjson.dumps(payload), mimetype="application/json")`
-  from `/v1/explain/values` only — leave the small JSON endpoints on `jsonify`.
-- [ ] **Step 2:** Confirm the response bytes parse identically to the `jsonify` output.
-- [ ] **Step 3:** Commit.
+Measured after Tasks 10-12, against the live runtime and `crc-rynazal-notebook`:
 
-Skip this task if adding a dependency to the runtime image is not wanted; Tasks 10-12 are worth far
-more than it is.
+| | |
+|---|---|
+| `/v1/explain/values`, 50 Samples x 865 Features (one real chunk) | **6,625 ms** |
+| JSON serialization within it | **17 ms** |
+| Most `orjson` could save | **~13 ms, or 0.2%** |
+
+The original 181 ms was also too high: `json.dumps` on the full 331-Sample payload measures 108 ms.
+Flask's provider sets `sort_keys=True`, which is often the reason such benchmarks disagree — here it
+costs 0.4 ms, because the payload has seven top-level keys and all the work is in the nested float
+lists.
+
+The error was measuring serialization on its own and never dividing by the request it sits inside.
+Once Task 10 removed the 1.3 s model load, the dominant cost was not serialization — it is SHAP
+itself, at 99.7% of the request. Adding a dependency to the runtime image to win 0.2% is not a trade
+worth making.
+
+If the endpoint ever does need to be faster, the target is that 6.6 s of SHAP compute — a different
+size of job, and one that risks changing the values themselves, so it needs a decision about the
+paper before it needs an implementation.
 
 ---
 
