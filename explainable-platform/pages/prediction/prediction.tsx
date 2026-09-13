@@ -25,6 +25,7 @@ import { queryToString } from "@/lib/queryToString";
 import { ShapPlotPlaceholder } from "@/components/ui/ImageEmpty/ImageEmpty";
 import {
   GlobalBeeswarmChart,
+  GlobalHeatmapChart,
   GlobalImportanceChart,
 } from "@/components/shap/ExplanationCharts";
 
@@ -291,6 +292,16 @@ export function History() {
               others. Interactive — hover a dot for its values.
             </div>
             <GlobalBeeswarmChart predictionId={selectPrediction?.id} />
+          </div>
+          <div className="flex flex-col mb-3 mt-3 border-t-[1px] border-[#EAEAEA] pt-3">
+            <div className="font-medium">Heatmap</div>
+            <div className="text-sm py-2 text-gray-500">
+              Every sample as a column, every feature as a row, coloured by SHAP
+              value — white at zero, red above, blue below. Samples are ordered
+              by total attribution, so groups with similar explanations sit
+              together. Hover a column to see which sample it is.
+            </div>
+            <GlobalHeatmapChart predictionId={selectPrediction?.id} />
           </div>
           <div className="flex flex-col mb-3 mt-3 ">
             <div>
