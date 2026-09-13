@@ -7,14 +7,21 @@ against someone's reading of SHAP.
 
 Run with the worktree venv, which has shap 0.49.1:
 
-    .worktrees/curatedcrc-retraining/.venv/bin/python tools/shap_fixtures/generate.py
+    .worktrees/curatedcrc-retraining/.venv/bin/python tools/shap_fixtures/generate.py \
+        --shap-svg /path/to/shap-svg
+
+shap-svg lives in its own repository (github.com/princepongsakorn/shap-svg). The fixtures
+and golden values are written to its fixtures/ directory, and SHAP's colour tables to
+src/core/colormaps.json, which the charts read at runtime.
 
 See docs/shap-explain-spec.md §1 for the payload contract and §4 for what each fixture is for.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
+import os
 import pathlib
 import sys
 
@@ -31,7 +38,10 @@ import shap  # noqa: E402
 from sklearn.ensemble import RandomForestClassifier  # noqa: E402
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
-OUT = REPO / "explainable-platform/packages/shap-svg/fixtures"
+# Set in main() from --shap-svg: shap-svg is its own repository now, so the output
+# directory belongs to a checkout of it rather than to this repo.
+OUT = pathlib.Path()
+COLORMAP_DIR = pathlib.Path()
 SEED = 0
 
 # The fixtures are the acceptance criterion for shap-svg, so they must be produced by
@@ -342,16 +352,35 @@ def write_colormaps() -> None:
             "nan_grey": "#%02x%02x%02x"
             % tuple(int(round(c * 255)) for c in shap_colors.gray_rgb),
         },
+        # Runtime data, not a fixture: src/core/colormap.ts imports it.
+        directory=COLORMAP_DIR,
     )
 
 
-def write(name: str, obj) -> None:
-    path = OUT / name
+def write(name: str, obj, directory: pathlib.Path | None = None) -> None:
+    path = (directory or OUT) / name
     path.write_text(json.dumps(obj, indent=1))
     print(f"wrote {name}  ({path.stat().st_size:,} bytes)")
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    global OUT, COLORMAP_DIR
+    parser = argparse.ArgumentParser(description="Generate shap-svg fixtures and golden values.")
+    parser.add_argument(
+        "--shap-svg",
+        type=pathlib.Path,
+        # An empty variable means unset, not "the current directory".
+        default=os.environ.get("SHAP_SVG_REPO") or None,
+        help="path to a checkout of github.com/princepongsakorn/shap-svg (or set SHAP_SVG_REPO)",
+    )
+    args = parser.parse_args(argv)
+    if args.shap_svg is None:
+        parser.error("--shap-svg is required: the fixtures are written into that repository")
+    repo = args.shap_svg.resolve()
+    if not (repo / "package.json").is_file() or not (repo / "src/core").is_dir():
+        parser.error(f"{repo} does not look like a shap-svg checkout")
+    OUT = repo / "fixtures"
+    COLORMAP_DIR = repo / "src/core"
     OUT.mkdir(parents=True, exist_ok=True)
 
     # --- real: the committed shapmat sample, 180 Samples x 201 Features -------
