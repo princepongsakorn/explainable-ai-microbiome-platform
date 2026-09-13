@@ -26,3 +26,25 @@ describe("formatFeatureLabel", () => {
     expect(formatFeatureLabel("Fusobacterium_nucleatum")).toBe("Fusobacterium nucleatum");
   });
 });
+
+describe("formatShapValue — display precision", () => {
+  it("renders the requested number of decimal places", () => {
+    expect(formatShapValue(0.021539, 2)).toBe("+0.02");
+    expect(formatShapValue(0.021539, 3)).toBe("+0.022");
+    expect(formatShapValue(0.021539, 4)).toBe("+0.0215");
+  });
+
+  it("pads to the requested precision so a column of labels lines up", () => {
+    expect(formatShapValue(-0.5, 3)).toBe("−0.500");
+  });
+
+  it("falls back to an exponent rather than rendering a signed zero", () => {
+    // At two decimals this would be "+0.00", which hides both magnitude and sign.
+    expect(formatShapValue(0.003, 2)).toBe("+3e-3");
+    expect(formatShapValue(0.003, 3)).toBe("+0.003");
+  });
+
+  it("leaves the default formatting untouched when no precision is given", () => {
+    expect(formatShapValue(0.0125)).toBe("+0.0125");
+  });
+});

@@ -5,6 +5,7 @@ import {
   waterfallLayout,
   waterfallRows,
   WaterfallRows,
+  WaterfallValueLabel,
 } from "../src/core/waterfallLayout";
 import { ShapWaterfall } from "../src/react/ShapWaterfall";
 
@@ -196,10 +197,14 @@ describe("ShapWaterfall", () => {
 
 describe("waterfallLayout — value label placement", () => {
   const opts = {
-    width: 400, rowHeight: 20, marginLeft: 200, marginRight: 40, marginTop: 10,
+    width: 900, rowHeight: 20, marginLeft: 200, marginRight: 40, marginTop: 10,
   };
 
-  /** One row whose bar ends at `endValue`, over the domain the rows imply. */
+  /**
+   * One row whose bar runs `value` from `left`, over a domain pinned to [0, 10]
+   * so the bar's pixel width is a chosen fraction of the plot rather than the
+   * whole of it.
+   */
   const rowsFor = (value: number, left: number): WaterfallRows => ({
     rows: [{
       label: "x", featureIndex: 0, isOtherRow: false,
@@ -207,43 +212,54 @@ describe("waterfallLayout — value label placement", () => {
       color: value < 0 ? "#008bfb" : "#ff0051",
     }],
     baseValue: 0,
-    modelOutput: 0,
+    modelOutput: 10,
     collapsedCount: 0,
   });
 
-  it("puts a positive bar's label just past its tip, reading rightward", () => {
-    const arrow = waterfallLayout(rowsFor(10, 0), opts).arrows[0];
+  /** Leftmost pixel the rendered text will occupy, whatever its anchor. */
+  const leftEdgeOf = (label: WaterfallValueLabel) => {
+    if (label.anchor === "end") return label.x - label.estimatedWidth;
+    if (label.anchor === "middle") return label.x - label.estimatedWidth / 2;
+    return label.x;
+  };
+
+  it("puts the label inside a bar wide enough to hold it", () => {
+    const arrow = waterfallLayout(rowsFor(8, 0), opts).arrows[0];
+    expect(arrow.valueLabel.inside).toBe(true);
+    expect(arrow.valueLabel.anchor).toBe("middle");
+    expect(arrow.valueLabel.x).toBeCloseTo((arrow.startX + arrow.endX) / 2);
+  });
+
+  it("moves the label outside a bar too narrow to hold it", () => {
+    const arrow = waterfallLayout(rowsFor(0.2, 0), opts).arrows[0];
+    expect(arrow.valueLabel.inside).toBe(false);
     expect(arrow.valueLabel.anchor).toBe("start");
     expect(arrow.valueLabel.x).toBeGreaterThan(arrow.endX);
   });
 
-  it("never lets a label reach into the feature-name gutter", () => {
-    // A small negative bar sitting hard against the left edge: placing its label
-    // outside the tip would put the text on top of the feature name.
-    const arrow = waterfallLayout(rowsFor(-1, 1), opts).arrows[0];
-    const textWidth = arrow.valueLabel.estimatedWidth;
-    const leftEdge =
-      arrow.valueLabel.anchor === "end"
-        ? arrow.valueLabel.x - textWidth
-        : arrow.valueLabel.x;
-
-    expect(leftEdge).toBeGreaterThanOrEqual(opts.marginLeft);
+  it("reads leftward from a narrow negative bar that has room to its left", () => {
+    const arrow = waterfallLayout(rowsFor(-0.2, 10), opts).arrows[0];
+    expect(arrow.valueLabel.inside).toBe(false);
+    expect(arrow.valueLabel.anchor).toBe("end");
+    expect(arrow.valueLabel.x).toBeLessThan(arrow.endX);
   });
 
   it("flips a cramped negative label to the inner side of its bar", () => {
-    const arrow = waterfallLayout(rowsFor(-1, 1), opts).arrows[0];
+    const arrow = waterfallLayout(rowsFor(-0.2, 0.2), opts).arrows[0];
     expect(arrow.valueLabel.anchor).toBe("start");
     expect(arrow.valueLabel.x).toBeGreaterThanOrEqual(arrow.endX);
   });
 
-  it("keeps a roomy negative label outside the tip, reading leftward", () => {
-    // Same chart, but the bar ends far from the gutter.
-    const roomy = waterfallLayout(rowsFor(-1, 10), {
-      ...opts,
-      width: 900,
-      marginLeft: 200,
-    }).arrows[0];
-    expect(roomy.valueLabel.anchor).toBe("end");
-    expect(roomy.valueLabel.x).toBeLessThan(roomy.endX);
+  it("never lets a label reach into the feature-name gutter", () => {
+    for (const [value, left] of [[8, 0], [0.2, 0], [-0.2, 10], [-0.2, 0.2], [-8, 8]]) {
+      const arrow = waterfallLayout(rowsFor(value, left), opts).arrows[0];
+      expect(leftEdgeOf(arrow.valueLabel)).toBeGreaterThanOrEqual(opts.marginLeft);
+    }
+  });
+
+  it("widens its estimate as the display precision grows", () => {
+    const coarse = waterfallLayout(rowsFor(0.2, 0), { ...opts, decimals: 2 }).arrows[0];
+    const fine = waterfallLayout(rowsFor(0.2, 0), { ...opts, decimals: 4 }).arrows[0];
+    expect(fine.valueLabel.estimatedWidth).toBeGreaterThan(coarse.valueLabel.estimatedWidth);
   });
 });

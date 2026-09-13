@@ -1,5 +1,5 @@
 import { NEGATIVE_COLOR, POSITIVE_COLOR } from "./barLayout";
-import { formatFeatureLabel, formatShapValue } from "./format";
+import { formatFeatureLabel, formatShapValue, ValuePrecision } from "./format";
 import { orderFeatures } from "./order";
 import { ParsedExplanation } from "./types";
 
@@ -37,6 +37,8 @@ export type WaterfallLayoutOptions = {
   marginLeft: number;
   marginRight: number;
   marginTop: number;
+  /** Decimal places for the bar labels. Display only; omit for 3 significant figures. */
+  decimals?: ValuePrecision;
 };
 
 export type Point = { x: number; y: number };
@@ -44,9 +46,12 @@ export type Point = { x: number; y: number };
 /** Where a bar's numeric label goes, and roughly how wide it is. */
 export type WaterfallValueLabel = {
   x: number;
-  anchor: "start" | "end";
+  anchor: "start" | "middle" | "end";
   /** Estimated from the glyph count — enough to decide whether it fits. */
   estimatedWidth: number;
+  /** Drawn over the bar, so the renderer must paint it in a contrasting colour. */
+  inside: boolean;
+  text: string;
 };
 
 export type WaterfallArrowGeometry = WaterfallRow & {
@@ -90,34 +95,50 @@ const VALUE_LABEL_GAP = 6;
 const VALUE_LABEL_FONT_SIZE = 12;
 /** Mean glyph width as a fraction of font size, for this digit-heavy text. */
 const GLYPH_WIDTH_RATIO = 0.6;
+/** Clearance the text keeps from the bar's own edges when it sits inside. */
+const INSIDE_PADDING = 4;
 
 /**
- * Place a bar's numeric label.
+ * Place a bar's numeric label, following shap/plots/_waterfall.py lines 230-245.
  *
- * Preferred position is just past the tip, on the side the bar points to. For a
- * negative bar that is leftward — and a short negative bar sits close to the
- * feature names, so the label lands on top of them. When that would happen the
- * label flips to the inner side of the bar, where the plot area always has room.
- * matplotlib has the same conflict and resolves it with a wide left margin;
+ * SHAP draws the number inside the arrow, measures it, and moves it out only
+ * when the text is wider than the arrow. Inside is the better default: it reads
+ * as part of the bar and it cannot collide with anything.
+ *
+ * When the text does not fit, it goes just past the tip on the side the bar
+ * points to. For a negative bar that is leftward, and a short negative bar sits
+ * close to the feature names, so the label would land on top of them. There it
+ * flips to the inner side instead, where the plot area always has room.
+ * matplotlib hits the same conflict and resolves it with a wide left margin;
  * flipping is the better answer when the margin is a fixed gutter.
+ *
+ * Widths are estimated from the glyph count rather than measured. Measuring
+ * would mean a DOM round-trip per row and a layout that cannot be computed or
+ * tested outside a browser; over digits, which vary little in width, the
+ * estimate is close enough to decide "does this fit".
  */
 function placeValueLabel(
   value: number,
+  startX: number,
   endX: number,
   gutterX: number,
+  decimals: ValuePrecision | undefined,
 ): WaterfallValueLabel {
-  const estimatedWidth =
-    formatShapValue(value).length * VALUE_LABEL_FONT_SIZE * GLYPH_WIDTH_RATIO;
+  const text = formatShapValue(value, decimals);
+  const estimatedWidth = text.length * VALUE_LABEL_FONT_SIZE * GLYPH_WIDTH_RATIO;
+  const base = { estimatedWidth, text };
 
-  if (value >= 0) {
-    return { x: endX + VALUE_LABEL_GAP, anchor: "start", estimatedWidth };
+  if (estimatedWidth + 2 * INSIDE_PADDING <= Math.abs(endX - startX)) {
+    return { ...base, x: (startX + endX) / 2, anchor: "middle", inside: true };
   }
+
+  const outward = { ...base, x: endX + VALUE_LABEL_GAP, anchor: "start" as const, inside: false };
+  if (value >= 0) return outward;
 
   const outsideLeftEdge = endX - VALUE_LABEL_GAP - estimatedWidth;
-  if (outsideLeftEdge >= gutterX) {
-    return { x: endX - VALUE_LABEL_GAP, anchor: "end", estimatedWidth };
-  }
-  return { x: endX + VALUE_LABEL_GAP, anchor: "start", estimatedWidth };
+  return outsideLeftEdge >= gutterX
+    ? { ...base, x: endX - VALUE_LABEL_GAP, anchor: "end", inside: false }
+    : outward;
 }
 
 /**
@@ -227,7 +248,7 @@ export function waterfallLayout(
       centerY,
       height: barHeight,
       headLength,
-      valueLabel: placeValueLabel(row.value, endX, marginLeft),
+      valueLabel: placeValueLabel(row.value, startX, endX, marginLeft, opts.decimals),
     };
   });
 

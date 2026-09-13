@@ -1,5 +1,5 @@
 import { ReactNode, useState } from "react";
-import type { Explanation } from "@/packages/shap-svg";
+import type { Explanation, ValuePrecision } from "@/packages/shap-svg";
 import {
   ShapBar,
   ShapBeeswarm,
@@ -11,6 +11,8 @@ import { useExplanation, sampleIndexOf } from "@/lib/useExplanation";
 const MIN_DISPLAY = 5;
 const MAX_DISPLAY = 50;
 const DEFAULT_DISPLAY = 15;
+const PRECISIONS: ValuePrecision[] = [2, 3, 4];
+const DEFAULT_PRECISION: ValuePrecision = 2;
 
 /**
  * Shared shell: fetch state, the feature-count slider, and horizontal scrolling.
@@ -23,13 +25,21 @@ function ChartFrame({
   predictionId,
   children,
   emptyLabel,
+  showPrecision = false,
 }: {
   predictionId?: string;
   emptyLabel: string;
-  children: (explanation: Explanation, maxDisplay: number) => ReactNode;
+  /** Offer the decimal-places control. Only the waterfall labels each bar. */
+  showPrecision?: boolean;
+  children: (
+    explanation: Explanation,
+    maxDisplay: number,
+    decimals: ValuePrecision
+  ) => ReactNode;
 }) {
   const { explanation, error, loading } = useExplanation(predictionId);
   const [maxDisplay, setMaxDisplay] = useState(DEFAULT_DISPLAY);
+  const [decimals, setDecimals] = useState<ValuePrecision>(DEFAULT_PRECISION);
 
   if (loading) {
     return <div className="text-sm text-gray-400 py-4">Loading explanation…</div>;
@@ -58,8 +68,28 @@ function ChartFrame({
         <span className="tabular-nums w-16 text-right">
           {shown} / {featureCount}
         </span>
+        {showPrecision && (
+          <span className="flex items-center gap-1 pl-3 border-l border-gray-200">
+            <span>Decimals</span>
+            {PRECISIONS.map((option) => (
+              <button
+                key={option}
+                type="button"
+                aria-pressed={option === decimals}
+                onClick={() => setDecimals(option)}
+                className={`px-2 py-0.5 rounded tabular-nums ${
+                  option === decimals
+                    ? "bg-gray-800 text-white"
+                    : "bg-gray-100 hover:bg-gray-200"
+                }`}
+              >
+                {option}
+              </button>
+            ))}
+          </span>
+        )}
       </div>
-      <div className="overflow-x-auto">{children(explanation, shown)}</div>
+      <div className="overflow-x-auto">{children(explanation, shown, decimals)}</div>
     </div>
   );
 }
@@ -131,8 +161,9 @@ export function LocalWaterfallChart({
     <ChartFrame
       predictionId={predictionId}
       emptyLabel="No explanation available for this prediction."
+      showPrecision
     >
-      {(explanation, maxDisplay) => {
+      {(explanation, maxDisplay, decimals) => {
         const sampleIndex = sampleIndexOf(explanation, recordId);
         if (sampleIndex < 0) {
           return (
@@ -146,6 +177,7 @@ export function LocalWaterfallChart({
             explanation={explanation}
             sampleIndex={sampleIndex}
             maxDisplay={maxDisplay}
+            decimals={decimals}
           />
         );
       }}
