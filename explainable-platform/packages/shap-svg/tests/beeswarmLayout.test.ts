@@ -196,12 +196,17 @@ describe("beeswarmLayout", () => {
       dotRadius: 3,
     });
 
-    expect(layout.xDomain).toEqual([-2, 2]);
+    // matplotlib's default 5% margin on each side of the [-2, 2] data range.
+    expect(layout.xDomain[0]).toBeCloseTo(-2.2, 12);
+    expect(layout.xDomain[1]).toBeCloseTo(2.2, 12);
     expect(layout.xZero).toBe(225);
     expect(layout.plotWidth).toBe(250);
-    expect(layout.height).toBe(120);
+    // 74: ticks, labels and title, plus a band below them for the hover legend.
+    expect(layout.height).toBe(164);
     expect(layout.rows.map((row) => row.centerY)).toEqual([30, 70]);
-    expect(layout.rows[0].points[0]).toMatchObject({ x: 350, radius: 3, sampleIndex: 0 });
+    expect(layout.rows[0].points[0]).toMatchObject({ radius: 3, sampleIndex: 0 });
+    // A value of 2 on the padded [-2.2, 2.2] axis, rather than at the plot's edge.
+    expect(layout.rows[0].points[0].x).toBeCloseTo(100 + (4.2 / 4.4) * 250, 9);
     expect(layout.rows[0].points[0].featureValue).toBe(0);
   });
 });

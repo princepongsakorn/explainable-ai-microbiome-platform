@@ -16,9 +16,13 @@ const opts = { width: 400, rowHeight: 50, marginLeft: 100, marginRight: 40, marg
 describe("barLayout", () => {
   it("puts zero inside the domain and scales to the plot width", () => {
     const l = barLayout(rows, opts);
-    expect(l.xDomain).toEqual([-2, 4]);
+    // Data [-2, 4], padded as shap.plots.bar pads it with a negative present —
+    // measured: xlim (-2.63, 4.63). matplotlib's 5% on each side, then
+    // _bar.py:334-336's 5% buffer of that on each side.
+    expect(l.xDomain[0]).toBeCloseTo(-2.63, 12);
+    expect(l.xDomain[1]).toBeCloseTo(4.63, 12);
     expect(l.plotWidth).toBe(260);
-    expect(l.xZero).toBeCloseTo(100 + (2 / 6) * 260, 6);
+    expect(l.xZero).toBeCloseTo(100 + (2.63 / 7.26) * 260, 6);
   });
 
   it("gives each row a bar 0.7 of the row height, vertically centred", () => {
@@ -56,6 +60,7 @@ describe("barLayout", () => {
   });
 
   it("sizes the svg to fit every row", () => {
-    expect(barLayout(rows, opts).height).toBe(10 + 3 * 50 + 30);
+    // 52: the axis area now holds ticks, their labels and the title.
+    expect(barLayout(rows, opts).height).toBe(10 + 3 * 50 + 52);
   });
 });

@@ -1,5 +1,6 @@
 import { NEGATIVE_COLOR, POSITIVE_COLOR } from "./barLayout";
 import { formatFeatureLabel, formatLevel, formatShapValue, ValuePrecision } from "./format";
+import { niceTicks, tickLabel, tickSpace } from "./ticks";
 import { orderFeatures } from "./order";
 import { ParsedExplanation } from "./types";
 
@@ -11,8 +12,8 @@ const AXIS_HEIGHT = 52;
 const TICK_LENGTH = 5;
 export const WATERFALL_TICK_LABEL_DY = 18;
 export const WATERFALL_BASE_LABEL_DY = 36;
-/** matplotlib's MaxNLocator defaults to at most 9 intervals but aims lower. */
-const TARGET_TICKS = 6;
+/** _waterfall.py:316 ax.tick_params(labelsize=13). */
+const TICK_LABEL_PT = 13;
 
 export type WaterfallRow = {
   label: string;
@@ -121,59 +122,6 @@ export type WaterfallLayout = {
   plotBottom: number;
   height: number;
 };
-
-/**
- * Round tick values across a domain, the way matplotlib's MaxNLocator picks them.
- *
- * It walks a ladder of 1, 2, 2.5, 5 and 10 times a power of ten and takes the
- * first step that fits within the target count. The feasibility note warned
- * this would be "close, not identical" to matplotlib; over the domains this
- * chart actually draws it lands on the same numbers, and the reference figure
- * for `crc-rynazal-notebook` is one such case.
- *
- * Ticks are computed as `first + i * step` rather than by accumulating, so a
- * step of 0.05 does not drift into 0.7000000000000001 by the sixth tick.
- */
-function niceTicks(min: number, max: number): { ticks: number[]; step: number } {
-  const span = max - min;
-  if (!(span > 0)) return { ticks: [], step: 0 };
-
-  const rough = span / TARGET_TICKS;
-  const magnitude = 10 ** Math.floor(Math.log10(rough));
-  const normalized = rough / magnitude;
-  const multiple =
-    normalized <= 1 ? 1
-    : normalized <= 2 ? 2
-    : normalized <= 2.5 ? 2.5
-    : normalized <= 5 ? 5
-    : 10;
-  const step = multiple * magnitude;
-
-  const first = Math.ceil(min / step) * step;
-  const count = Math.floor((max - first) / step + 1e-9) + 1;
-  const ticks: number[] = [];
-  for (let i = 0; i < count; i++) ticks.push(first + i * step);
-  return { ticks, step };
-}
-
-/**
- * Decimals a tick needs, taken from the step rather than from the value control.
- *
- * A tick is a round number by construction, so "55%" carries everything
- * "55.00%" does and costs a third of the width — which matters when six of them
- * share one axis. The control still decides percent versus decimal.
- */
-function tickLabelFor(value: number, step: number, percent: boolean): string {
-  const scaled = percent ? value * 100 : value;
-  const scaledStep = percent ? step * 100 : step;
-  let decimals = 0;
-  while (decimals < 6) {
-    const factor = 10 ** decimals;
-    if (Math.abs(scaledStep * factor - Math.round(scaledStep * factor)) < 1e-9) break;
-    decimals++;
-  }
-  return scaled.toFixed(decimals) + (percent ? "%" : "");
-}
 
 const colorFor = (value: number) => value < 0 ? NEGATIVE_COLOR : POSITIVE_COLOR;
 
@@ -346,7 +294,7 @@ export function waterfallLayout(
   });
 
   const plotBottom = marginTop + valueRows.rows.length * rowHeight;
-  const { ticks, step } = niceTicks(min, max);
+  const { ticks, step } = niceTicks(min, max, tickSpace(plotWidth, TICK_LABEL_PT));
 
   // SHAP draws a connector per *individually* plotted Feature, so the Other row
   // never gets one below it. Without an Other row the condition becomes
@@ -370,7 +318,7 @@ export function waterfallLayout(
     xTicks: ticks.map((value) => ({
       value,
       x: toX(value),
-      label: tickLabelFor(value, step, opts.decimals === "percent"),
+      label: tickLabel(value, step, opts.decimals === "percent"),
     })),
     axisMarks: [
       {

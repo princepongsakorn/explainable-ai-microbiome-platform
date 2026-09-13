@@ -2,6 +2,7 @@ import { MouseEvent as ReactMouseEvent, useMemo, useState } from "react";
 import { beeswarmLayout, beeswarmRows } from "../core/beeswarmLayout";
 import { sampleColormap } from "../core/colormap";
 import { formatShapValue } from "../core/format";
+import { XAxis } from "./XAxis";
 import { parseExplanation } from "../core/parse";
 import { Explanation } from "../core/types";
 
@@ -119,6 +120,14 @@ export function ShapBeeswarm({
           ))}
         </g>
       ))}
+
+      <XAxis
+        ticks={layout.xTicks}
+        spine={layout.xSpine}
+        title={layout.xTitle}
+        plotBottom={layout.plotBottom}
+        tickFontSize={11}
+      />
 
       {activeRow && (
         <g aria-label="Feature value colour scale">

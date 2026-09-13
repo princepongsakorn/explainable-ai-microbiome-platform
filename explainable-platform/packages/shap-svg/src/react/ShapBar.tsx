@@ -5,6 +5,7 @@ import { globalImportance, orderFeatures } from "../core/order";
 import { collapseToDisplay } from "../core/collapse";
 import { barLayout } from "../core/barLayout";
 import { formatShapValue } from "../core/format";
+import { XAxis } from "./XAxis";
 
 export type ShapBarProps = {
   explanation: Explanation;
@@ -45,6 +46,8 @@ export function ShapBar({
       <line x1={layout.zeroLine.x} x2={layout.zeroLine.x}
             y1={layout.zeroLine.y1} y2={layout.zeroLine.y2}
             stroke="#333333" strokeWidth={1} />
+      <XAxis ticks={layout.xTicks} spine={layout.xSpine} title={layout.xTitle}
+             plotBottom={layout.plotBottom} tickFontSize={11} />
       {layout.bars.map((bar, i) => (
         <g key={`row-${i}`}
            onMouseEnter={() => setHovered(i)}
