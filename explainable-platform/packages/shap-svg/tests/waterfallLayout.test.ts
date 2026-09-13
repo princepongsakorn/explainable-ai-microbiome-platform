@@ -163,9 +163,10 @@ describe("waterfallLayout", () => {
   it("places labelled Base value and Model output rules plus one separator per row", () => {
     const layout = waterfallLayout(valueRows, opts);
     expect(layout.axisMarks).toEqual([
-      { kind: "base", value: 0, x: 50, label: "E[f(X)] = 0" },
+      // The base rule is one row tall; the output rule is the full height.
+      { kind: "base", value: 0, x: 50, y1: 30, y2: 50, label: "E[f(X)] = 0" },
       // No sign: f(x) is where the prediction landed, not how far it moved.
-      { kind: "output", value: 100, x: 250, label: "f(x) = 100" },
+      { kind: "output", value: 100, x: 250, y1: 10, y2: 50, label: "f(x) = 100" },
     ]);
     expect(layout.separators).toEqual([
       { y: 20, x1: 50, x2: 250 },
@@ -387,5 +388,75 @@ describe("waterfallLayout — plot bounds", () => {
     expect(layout.plotRight).toBe(360);
     expect(layout.separators[0].x1).toBe(layout.plotLeft);
     expect(layout.separators[0].x2).toBe(layout.plotRight);
+  });
+});
+
+describe("waterfallLayout — dashed connectors and rule heights", () => {
+  const opts = {
+    width: 900, rowHeight: 20, marginLeft: 200, marginRight: 40, marginTop: 10,
+  };
+  /** `count` rows walking back from 1, plus an Other row when asked. */
+  const build = (count: number, withOther: boolean): WaterfallRows => {
+    const rows = [];
+    let location = 1;
+    for (let i = 0; i < count; i++) {
+      location -= 0.1;
+      rows.push({
+        label: `f${i}`, featureIndex: i, isOtherRow: false,
+        value: 0.1, left: location, width: 0.1,
+        row: count - 1 - i + (withOther ? 1 : 0), color: "#ff0051",
+      });
+    }
+    if (withOther) {
+      rows.push({
+        label: "9 other features", featureIndex: null, isOtherRow: true,
+        value: location - 0.2, left: 0.2, width: location - 0.2, row: 0,
+        color: "#008bfb",
+      });
+    }
+    return { rows, baseValue: 0.2, modelOutput: 1, collapsedCount: withOther ? 9 : 0 };
+  };
+
+  it("draws one connector per individually drawn Feature", () => {
+    // shap/plots/_waterfall.py:111-137 — the connector is drawn inside the loop
+    // over num_individual, so the Other row does not get one below it.
+    const layout = waterfallLayout(build(4, true), opts);
+    expect(layout.connectors).toHaveLength(4);
+  });
+
+  it("puts each connector where the two bars meet", () => {
+    const layout = waterfallLayout(build(4, true), opts);
+    layout.connectors.forEach((connector, index) => {
+      // matplotlib plots at `loc` after `loc -= sval`, which is the bar's start.
+      expect(connector.x).toBeCloseTo(layout.arrows[index].startX, 9);
+    });
+  });
+
+  it("spans 1.8 row heights, from one bar's top edge to the next bar's bottom", () => {
+    const layout = waterfallLayout(build(4, true), opts);
+    for (const connector of layout.connectors) {
+      expect(connector.y2 - connector.y1).toBeCloseTo(1.8 * opts.rowHeight, 9);
+    }
+  });
+
+  it("reproduces SHAP's guard when every Feature is drawn individually", () => {
+    // With no Other row the condition falls back to `i + 4 < num_individual`,
+    // which drops the last four connectors. One would be enough to keep the
+    // line off the axis; the 4 is unexplained in SHAP and reproduced as found.
+    expect(waterfallLayout(build(6, false), opts).connectors).toHaveLength(2);
+    expect(waterfallLayout(build(3, false), opts).connectors).toHaveLength(0);
+  });
+
+  it("runs the E[f(X)] rule across the bottom row only, as SHAP does", () => {
+    // axvline(base_values, 0, 1 / num_features) vs axvline(fx, 0, 1) at
+    // _waterfall.py:306,308. Drawn full height, the base rule reads as a y axis.
+    const layout = waterfallLayout(build(4, true), opts);
+    const base = layout.axisMarks.find((m) => m.kind === "base")!;
+    const output = layout.axisMarks.find((m) => m.kind === "output")!;
+
+    expect(base.y2).toBe(layout.plotBottom);
+    expect(base.y1).toBe(layout.plotBottom - opts.rowHeight);
+    expect(output.y1).toBe(opts.marginTop);
+    expect(output.y2).toBe(layout.plotBottom);
   });
 });

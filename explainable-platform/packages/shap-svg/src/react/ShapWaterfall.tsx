@@ -104,13 +104,26 @@ export function ShapWaterfall({
         ))}
       </g>
 
+      {layout.connectors.map((connector, index) => (
+        <line
+          key={`connector-${index}`}
+          x1={connector.x}
+          x2={connector.x}
+          y1={connector.y1}
+          y2={connector.y2}
+          stroke="#bbbbbb"
+          strokeWidth={1}
+          strokeDasharray="4 4"
+        />
+      ))}
+
       {layout.axisMarks.map((mark) => (
         <g key={mark.kind}>
           <line
             x1={mark.x}
             x2={mark.x}
-            y1={marginTop}
-            y2={layout.plotBottom}
+            y1={mark.y1}
+            y2={mark.y2}
             stroke="#bbbbbb"
             strokeWidth={1}
             strokeDasharray="4 4"
