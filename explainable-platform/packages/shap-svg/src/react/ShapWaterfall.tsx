@@ -2,7 +2,12 @@ import { useMemo, useState } from "react";
 import { Explanation } from "../core/types";
 import { parseExplanation } from "../core/parse";
 import { ValuePrecision } from "../core/format";
-import { waterfallLayout, waterfallRows } from "../core/waterfallLayout";
+import {
+  WATERFALL_BASE_LABEL_DY,
+  WATERFALL_TICK_LABEL_DY,
+  waterfallLayout,
+  waterfallRows,
+} from "../core/waterfallLayout";
 
 export type ShapWaterfallProps = {
   explanation: Explanation;
@@ -67,6 +72,38 @@ export function ShapWaterfall({
         />
       ))}
 
+      <g aria-hidden="true">
+        <line
+          x1={layout.plotLeft}
+          x2={layout.plotRight}
+          y1={layout.plotBottom}
+          y2={layout.plotBottom}
+          stroke="#333333"
+          strokeWidth={1}
+        />
+        {layout.xTicks.map((tick) => (
+          <g key={`tick-${tick.value}`}>
+            <line
+              x1={tick.x}
+              x2={tick.x}
+              y1={layout.plotBottom}
+              y2={layout.plotBottom + 5}
+              stroke="#333333"
+              strokeWidth={1}
+            />
+            <text
+              x={tick.x}
+              y={layout.plotBottom + WATERFALL_TICK_LABEL_DY}
+              textAnchor="middle"
+              fontSize={11}
+              fill="#333333"
+            >
+              {tick.label}
+            </text>
+          </g>
+        ))}
+      </g>
+
       {layout.axisMarks.map((mark) => (
         <g key={mark.kind}>
           <line
@@ -80,7 +117,11 @@ export function ShapWaterfall({
           />
           <text
             x={mark.x}
-            y={mark.kind === "output" ? marginTop - 10 : layout.plotBottom + 20}
+            y={
+              mark.kind === "output"
+                ? marginTop - 10
+                : layout.plotBottom + WATERFALL_BASE_LABEL_DY
+            }
             textAnchor="middle"
             fontSize={12}
             fill="#777777"
