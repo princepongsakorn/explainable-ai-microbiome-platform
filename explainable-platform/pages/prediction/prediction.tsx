@@ -187,7 +187,7 @@ export function History() {
         open={isOpen}
         onClose={() => setIsOpen(false)}
         direction="right"
-        className="shadow-2xs max-w-2xl overflow-y-auto"
+        className="shadow-2xs max-w-4xl overflow-y-auto"
         duration={150}
         size={"60vw"}
       >
