@@ -11,7 +11,6 @@ import {
   patchPredictionRecordsComment,
   postCancelPredict,
   postRePredict,
-  postRegenWaterfall,
 } from "../api/predict";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
@@ -33,7 +32,6 @@ import {
 } from "@heroicons/react/24/outline";
 import { Popover, Modal, Textarea, Button } from "flowbite-react";
 import Drawer from "react-modern-drawer";
-import { ShapPlotPlaceholder } from "@/components/ui/ImageEmpty/ImageEmpty";
 import { MainButton } from "@/components/ui/Button/Button";
 import { useSse } from "@/lib/useSse";
 
@@ -423,23 +421,6 @@ export function History() {
     await getPredictionsList();
   };
 
-  // Re-generate just the waterfall plot for the open record. The plot is
-  // optimistically cleared so the in-progress spinner — derived from "no
-  // image + no error" — shows at once; the backend also clears it
-  // server-side, so the state survives a refresh and is scoped to this
-  // record. The result arrives over SSE as a 'record:update'.
-  const onRegenWaterfall = async () => {
-    const id = selectPrediction?.id;
-    if (!id) return;
-    patchRecord(id, { waterfall: undefined, waterfallError: undefined });
-    try {
-      await postRegenWaterfall(predictionId, id);
-    } catch {
-      const data = await getPredictionsList();
-      const fresh = data?.items.find((it) => it.id === id);
-      if (fresh) patchRecord(id, fresh);
-    }
-  };
 
   const onSaveComment = async () => {
     if (selectPrediction?.id) {
@@ -865,29 +846,6 @@ export function History() {
               <LocalWaterfallChart
                 predictionId={predictionId}
                 recordId={selectPrediction?.id}
-              />
-            </div>
-            <div className="flex flex-col mb-3 mt-3 ">
-              <div className="text-sm pb-3 text-gray-500">
-                This SHAP waterfall plot illustrates how each factor (listed on
-                the left) influences the predicted outcome. Blue bars indicate a
-                decrease in the likelihood of disease, while red bars indicate
-                an increase. By summing these contributions, you can see which
-                factors drive the final prediction, offering a clear
-                interpretation of the model’s decision.
-              </div>
-              <ShapPlotPlaceholder
-                src={selectPrediction?.waterfall}
-                plotName="Waterfall plot"
-                showShapLabel
-                errorReason={selectPrediction?.waterfallError}
-                onRegenerate={onRegenWaterfall}
-                regenerating={
-                  !selectPrediction?.waterfall &&
-                  !selectPrediction?.waterfallError &&
-                  selectPrediction?.status !== PredictionStatus.ERROR &&
-                  selectPrediction?.status !== PredictionStatus.CANCELED
-                }
               />
             </div>
             <div className="font-bold bg-gray-50 px-4 py-2 rounded-lg my-4">
