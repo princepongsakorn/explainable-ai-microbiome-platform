@@ -1,6 +1,5 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { formatFeatureLabel } from "../src/core/format";
 import { heatmapRows } from "../src/core/heatmapLayout";
 import { parseExplanation } from "../src/core/parse";
 
@@ -40,9 +39,7 @@ describe("heatmap golden values — tiny", () => {
   });
 
   it("matches SHAP's top-to-bottom Feature labels", () => {
-    const labels = golden.labels.map((label) =>
-      label.startsWith("Sum of ") ? label : formatFeatureLabel(label));
-    expect(result.rows.map((row) => row.label)).toEqual(labels);
+    expect(result.rows.map((row) => row.label)).toEqual(golden.labels);
   });
 
   it("matches every captured matrix cell in Feature-by-Sample order", () => {

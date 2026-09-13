@@ -25,19 +25,19 @@ describe("waterfallRows", () => {
     expect(result.modelOutput).toBe(14);
     expect(result.rows).toEqual([
       {
-        label: "Feature a", featureIndex: 0, isOtherRow: false,
+        label: "Feature_a", featureIndex: 0, isOtherRow: false,
         value: 4, left: 10, width: 4, row: 3, color: "#ff0051",
       },
       {
-        label: "Feature b", featureIndex: 1, isOtherRow: false,
+        label: "Feature_b", featureIndex: 1, isOtherRow: false,
         value: -3, left: 13, width: -3, row: 2, color: "#008bfb",
       },
       {
-        label: "Feature c", featureIndex: 2, isOtherRow: false,
+        label: "Feature_c", featureIndex: 2, isOtherRow: false,
         value: 2, left: 11, width: 2, row: 1, color: "#ff0051",
       },
       {
-        label: "Feature d", featureIndex: 3, isOtherRow: false,
+        label: "Feature_d", featureIndex: 3, isOtherRow: false,
         value: 1, left: 10, width: 1, row: 0, color: "#ff0051",
       },
     ]);
@@ -48,7 +48,7 @@ describe("waterfallRows", () => {
 
     expect(result.rows).toEqual([
       {
-        label: "Feature a", featureIndex: 0, isOtherRow: false,
+        label: "Feature_a", featureIndex: 0, isOtherRow: false,
         value: 4, left: 10, width: 4, row: 1, color: "#ff0051",
       },
       {
@@ -63,7 +63,7 @@ describe("waterfallRows", () => {
     const result = waterfallRows(explanation, 0, 2, false);
 
     expect(result.rows.map((row) => row.label)).toEqual([
-      "Feature a", "Feature b", "2 other features",
+      "Feature_a", "Feature_b", "2 other features",
     ]);
     expect(result.rows.map((row) => row.row)).toEqual([2, 1, 0]);
     expect(result.rows[2]).toMatchObject({ left: 10, width: 3, value: 3 });

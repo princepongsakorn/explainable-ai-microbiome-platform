@@ -1,5 +1,4 @@
 import { DisplayRow, DisplayRows } from "./types";
-import { formatFeatureLabel } from "./format";
 
 /**
  * Spec 3.4. `faithfulOtherRow` reproduces shap/plots/_bar.py:228-241, where the last displayed row
@@ -18,7 +17,7 @@ export function collapseToDisplay(
   if (maxDisplay >= p) {
     return {
       rows: order.map((index) => ({
-        label: formatFeatureLabel(featureNames[index]),
+        label: featureNames[index],
         featureIndex: index,
         value: importance[index],
         isOtherRow: false,
@@ -29,7 +28,7 @@ export function collapseToDisplay(
 
   const realCount = faithfulOtherRow ? maxDisplay - 1 : maxDisplay;
   const rows: DisplayRow[] = order.slice(0, realCount).map((index) => ({
-    label: formatFeatureLabel(featureNames[index]),
+    label: featureNames[index],
     featureIndex: index,
     value: importance[index],
     isOtherRow: false,

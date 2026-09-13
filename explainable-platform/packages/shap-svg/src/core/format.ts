@@ -1,3 +1,5 @@
+import { ValueUnits } from "./fidelity";
+
 const MINUS = "−";
 /** Below this magnitude, fixed notation would round away to zero at our precision. */
 const EXPONENT_THRESHOLD = 1e-3;
@@ -38,4 +40,46 @@ export function formatShapValue(v: number, decimals?: ValuePrecision): string {
 /** Spec 3.5 V3. The italic styling is applied by the renderer, not here. */
 export function formatFeatureLabel(name: string): string {
   return name.replace(/_/g, " ");
+}
+
+/**
+ * SHAP's own label format: `format_value(v, "%+0.02f")`.
+ *
+ * Two decimals, then `re.sub(r"\.?0+$", "", s)` strips the trailing zeros, so
+ * `0.10` reads `+0.1` and `2.0` reads `+2`. It also means anything below 0.005
+ * collapses to `+0` or `−0`, losing both magnitude and direction — which is
+ * exactly why V1 deviates from it everywhere except faithful mode, where
+ * reproducing it is the requirement.
+ */
+function formatShapNative(v: number): string {
+  const fixed = (v < 0 ? -v : v).toFixed(2);
+  const stripped = fixed.replace(/\.?0+$/, "");
+  // toFixed(2) of a negative that rounds to zero still yields "0.00"; the sign
+  // is taken from the value, not from the formatted string, so −0 survives.
+  return (v < 0 ? MINUS : "+") + (stripped === "" ? "0" : stripped);
+}
+
+/** Probability points. 0.021 -> "+2.1 pp". */
+function formatPercentagePoints(v: number, decimals: ValuePrecision | 1 = 1): string {
+  const points = Math.abs(v) * 100;
+  return `${v < 0 ? MINUS : "+"}${points.toFixed(decimals)} pp`;
+}
+
+/**
+ * Write a SHAP value in the units the chart's fidelity level calls for.
+ *
+ * `percentagePoints` assumes the Model output is a probability. That is not
+ * true of SHAP in general — an explainer over log-odds or a raw margin would
+ * make "pp" a lie — but it is guaranteed by this platform's contract, whose
+ * predict returns `DataFrame[Y_proba, Y_class]`. It is the one assumption the
+ * microbiome level makes about the Model, and it is why that level is opt-in.
+ */
+export function formatValue(
+  v: number,
+  units: ValueUnits,
+  decimals?: ValuePrecision,
+): string {
+  if (units === "shap") return formatShapNative(v);
+  if (units === "percentagePoints") return formatPercentagePoints(v, decimals ?? 1);
+  return formatShapValue(v, decimals);
 }
