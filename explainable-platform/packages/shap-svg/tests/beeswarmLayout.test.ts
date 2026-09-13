@@ -35,7 +35,7 @@ describe("beeswarmRows", () => {
     const result = beeswarmRows(explanation, 2, true, 7);
 
     expect(result.rows.map((row) => row.label)).toEqual([
-      "top feature",
+      "top_feature",
       "Sum of 3 other features",
     ]);
     expect(result.rows.map((row) => row.rowIndex)).toEqual([1, 0]);
@@ -129,7 +129,7 @@ describe("beeswarmRows", () => {
   it("preserves every Sample's SHAP sum in corrected Other features mode", () => {
     const result = beeswarmRows(explanation, 2, false, 7);
     expect(result.rows.map((row) => row.label)).toEqual([
-      "top feature", "second feature", "2 other features",
+      "top_feature", "second_feature", "2 other features",
     ]);
 
     for (let sampleIndex = 0; sampleIndex < explanation.nSamples; sampleIndex++) {
@@ -226,5 +226,29 @@ describe("ShapBeeswarm", () => {
       onFeatureClick: () => undefined,
     });
     expect(element.type).toBe(ShapBeeswarm);
+  });
+});
+
+describe("beeswarmRows — abundance scale", () => {
+  const skewed = parseExplanation({
+    contract_version: 1,
+    // One taxon, four Samples. Abundance is heavily skewed, as it always is.
+    values: [[0.1], [0.2], [0.3], [0.4]],
+    base_values: 0,
+    data: [[0.01], [0.02], [0.03], [100]],
+    feature_names: ["Bacteroides_ovatus"],
+  });
+
+  it("clips to the 5th-95th percentile by default, as SHAP does", () => {
+    const raw = beeswarmRows(skewed, 1, false, 7).rows[0];
+    const colours = new Set(raw.points.map((p) => p.color));
+    // One Sample is 3000x the others, so on a raw scale the low three are
+    // pressed into the same colour and the chart says nothing about them.
+    expect(colours.size).toBeLessThan(4);
+  });
+
+  it("ranks Samples instead when asked, so a skewed taxon still separates", () => {
+    const ranked = beeswarmRows(skewed, 1, false, 7, "percentile").rows[0];
+    expect(new Set(ranked.points.map((p) => p.color)).size).toBe(4);
   });
 });

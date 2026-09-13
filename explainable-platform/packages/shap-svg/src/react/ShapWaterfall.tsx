@@ -1,6 +1,10 @@
 import { useMemo, useState } from "react";
 import { Explanation } from "../core/types";
 import { parseExplanation } from "../core/parse";
+import { DEFAULT_FIDELITY, Fidelity, presentationFor } from "../core/fidelity";
+import { applyFidelity } from "../core/applyFidelity";
+import { prevalence } from "../core/taxonomy";
+
 import { ValuePrecision } from "../core/format";
 import { waterfallLayout, waterfallRows } from "../core/waterfallLayout";
 
@@ -9,6 +13,8 @@ export type ShapWaterfallProps = {
   sampleIndex?: number;
   maxDisplay?: number;
   faithfulOtherRow?: boolean;
+  /** How closely to reproduce SHAP. See core/fidelity.ts. */
+  fidelity?: Fidelity;
   classIndex?: number;
   width?: number;
   rowHeight?: number;
@@ -21,7 +27,8 @@ export function ShapWaterfall({
   explanation,
   sampleIndex = 0,
   maxDisplay = 10,
-  faithfulOtherRow = false,
+  faithfulOtherRow,
+  fidelity = DEFAULT_FIDELITY,
   classIndex = 1,
   width = 720,
   rowHeight = 30,
@@ -31,19 +38,33 @@ export function ShapWaterfall({
   const [hovered, setHovered] = useState<number | null>(null);
   const marginTop = 34;
 
-  const layout = useMemo(() => {
-    const parsed = parseExplanation(explanation, { classIndex });
-    const rows = waterfallRows(parsed, sampleIndex, maxDisplay, faithfulOtherRow);
-    return waterfallLayout(rows, {
-      width,
-      rowHeight,
-      marginLeft: 260,
-      marginRight: 110,
-      marginTop,
-      decimals,
-    });
+  const { layout, presentation, prevalences } = useMemo(() => {
+    const resolved = presentationFor(fidelity);
+    const parsed = applyFidelity(
+      parseExplanation(explanation, { classIndex }),
+      resolved,
+    );
+    const otherRow = faithfulOtherRow ?? resolved.faithfulOtherRow;
+    const rows = waterfallRows(
+      parsed, sampleIndex, maxDisplay, otherRow, resolved.zeroHandling,
+    );
+    return {
+      presentation: resolved,
+      // Prevalence is a property of the cohort, not of this Sample, so it is
+      // computed over the whole matrix and only when a level asks for it.
+      prevalences: resolved.showPrevalence ? prevalence(parsed.data) : undefined,
+      layout: waterfallLayout(rows, {
+        width,
+        rowHeight,
+        marginLeft: 260,
+        marginRight: 110,
+        marginTop,
+        decimals,
+        units: resolved.units,
+      }),
+    };
   }, [
-    explanation, sampleIndex, maxDisplay, faithfulOtherRow,
+    explanation, sampleIndex, maxDisplay, faithfulOtherRow, fidelity,
     classIndex, width, rowHeight, decimals,
   ]);
 
@@ -98,6 +119,13 @@ export function ShapWaterfall({
           onClick={() => onFeatureClick?.(arrow.featureIndex)}
           style={{ cursor: onFeatureClick ? "pointer" : "default" }}
         >
+          {prevalences && arrow.featureIndex !== null && (
+            <title>
+              {`${arrow.label} — present in ${Math.round(
+                prevalences[arrow.featureIndex] * 100,
+              )}% of samples`}
+            </title>
+          )}
           <rect
             x={0}
             y={arrow.centerY - rowHeight / 2}
@@ -112,7 +140,9 @@ export function ShapWaterfall({
             dominantBaseline="middle"
             fontSize={13}
             fill="#333333"
-            fontStyle={arrow.isOtherRow ? "normal" : "italic"}
+            fontStyle={
+              !arrow.isOtherRow && presentation.taxonomicNames ? "italic" : "normal"
+            }
           >
             {arrow.label}
           </text>

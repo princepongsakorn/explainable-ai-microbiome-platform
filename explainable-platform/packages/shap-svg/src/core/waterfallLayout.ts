@@ -1,5 +1,6 @@
-import { NEGATIVE_COLOR, POSITIVE_COLOR } from "./barLayout";
-import { formatFeatureLabel, formatShapValue, ValuePrecision } from "./format";
+import { NEGATIVE_COLOR, NEUTRAL_COLOR, POSITIVE_COLOR } from "./barLayout";
+import { formatShapValue, formatValue, ValuePrecision } from "./format";
+import { ValueUnits, ZeroHandling } from "./fidelity";
 import { orderFeatures } from "./order";
 import { ParsedExplanation } from "./types";
 
@@ -39,6 +40,8 @@ export type WaterfallLayoutOptions = {
   marginTop: number;
   /** Decimal places for the bar labels. Display only; omit for 3 significant figures. */
   decimals?: ValuePrecision;
+  /** How the labels are written. Set by the chart's fidelity level. */
+  units?: ValueUnits;
 };
 
 export type Point = { x: number; y: number };
@@ -88,7 +91,15 @@ export type WaterfallLayout = {
   height: number;
 };
 
-const colorFor = (value: number) => value < 0 ? NEGATIVE_COLOR : POSITIVE_COLOR;
+/**
+ * shap/plots/_waterfall.py splits on `sval >= 0`, so a zero contribution is red
+ * here and blue in the bar chart. Faithful mode keeps both; above it a zero is
+ * grey in both, because it moved the prediction in neither direction.
+ */
+const colorFor = (value: number, zeroHandling: ZeroHandling = "shapPerChart") => {
+  if (value === 0 && zeroHandling === "neutral") return NEUTRAL_COLOR;
+  return value < 0 ? NEGATIVE_COLOR : POSITIVE_COLOR;
+};
 
 /** Gap between a bar's tip and its number. */
 const VALUE_LABEL_GAP = 6;
@@ -123,8 +134,9 @@ function placeValueLabel(
   endX: number,
   gutterX: number,
   decimals: ValuePrecision | undefined,
+  units: ValueUnits,
 ): WaterfallValueLabel {
-  const text = formatShapValue(value, decimals);
+  const text = formatValue(value, units, decimals);
   const estimatedWidth = text.length * VALUE_LABEL_FONT_SIZE * GLYPH_WIDTH_RATIO;
   const base = { estimatedWidth, text };
 
@@ -156,6 +168,7 @@ export function waterfallRows(
   sampleIndex: number,
   maxDisplay: number,
   faithfulOtherRow: boolean,
+  zeroHandling: ZeroHandling = "shapPerChart",
 ): WaterfallRows {
   if (!Number.isInteger(sampleIndex) || sampleIndex < 0 || sampleIndex >= explanation.nSamples) {
     throw new RangeError(
@@ -182,14 +195,14 @@ export function waterfallRows(
     const value = values[featureIndex];
     location -= value;
     rows.push({
-      label: formatFeatureLabel(explanation.featureNames[featureIndex]),
+      label: explanation.featureNames[featureIndex],
       featureIndex,
       isOtherRow: false,
       value,
       left: location,
       width: value,
       row: rowCount - 1 - rank,
-      color: colorFor(value),
+      color: colorFor(value, zeroHandling),
     });
   }
 
@@ -204,7 +217,7 @@ export function waterfallRows(
       left: baseValue,
       width: value,
       row: 0,
-      color: colorFor(value),
+      color: colorFor(value, zeroHandling),
     });
   }
 
@@ -254,7 +267,9 @@ export function waterfallLayout(
       centerY,
       height: barHeight,
       headLength,
-      valueLabel: placeValueLabel(row.value, startX, endX, marginLeft, opts.decimals),
+      valueLabel: placeValueLabel(
+        row.value, startX, endX, marginLeft, opts.decimals, opts.units ?? "significant",
+      ),
     };
   });
 

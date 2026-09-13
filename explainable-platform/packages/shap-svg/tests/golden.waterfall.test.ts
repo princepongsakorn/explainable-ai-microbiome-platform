@@ -1,6 +1,5 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { formatFeatureLabel } from "../src/core/format";
 import { parseExplanation } from "../src/core/parse";
 import { waterfallRows } from "../src/core/waterfallLayout";
 
@@ -45,9 +44,7 @@ describe.each(["tiny", "real"])("waterfall golden values — %s", (name) => {
   });
 
   it("produces the same top-to-bottom labels, with SPEC V3 formatting", () => {
-    const expected = golden.labels.map((label) =>
-      label.endsWith("other features") ? label : formatFeatureLabel(label));
-    expect(result.rows.map((row) => row.label)).toEqual(expected);
+    expect(result.rows.map((row) => row.label)).toEqual(golden.labels);
   });
 
   it("matches SHAP's value-space starts, contributions, rows, and colours", () => {

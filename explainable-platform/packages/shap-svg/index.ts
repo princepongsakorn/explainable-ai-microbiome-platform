@@ -1,4 +1,7 @@
 export * from "./src/core/types";
+export * from "./src/core/fidelity";
+export * from "./src/core/applyFidelity";
+export * from "./src/core/taxonomy";
 export * from "./src/core/parse";
 export * from "./src/core/order";
 export * from "./src/core/format";

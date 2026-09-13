@@ -45,7 +45,7 @@ describe("heatmapRows", () => {
     const result = heatmapRows(explanation, 2, true);
 
     expect(result.rows.map((row) => row.label)).toEqual([
-      "top feature", "Sum of 3 other features",
+      "top_feature", "Sum of 3 other features",
     ]);
     expect(result.rows[0]).toMatchObject({
       featureIndex: 0,
@@ -66,7 +66,7 @@ describe("heatmapRows", () => {
     const result = heatmapRows(explanation, 2, false);
 
     expect(result.rows.map((row) => row.label)).toEqual([
-      "top feature", "second feature", "2 other features",
+      "top_feature", "second_feature", "2 other features",
     ]);
     for (let columnIndex = 0; columnIndex < result.columns.length; columnIndex++) {
       const displayed = result.rows.reduce(
