@@ -23,6 +23,10 @@ import {
 } from "@/components/model/pagination.interface";
 import { useRouter } from "next/router";
 import { LocalWaterfallChart } from "@/components/shap/ExplanationCharts";
+import {
+  invalidateExplanation,
+  setExplanationProgress,
+} from "@/lib/useExplanation";
 import { queryToString } from "@/lib/queryToString";
 import { isNull } from "lodash";
 import {
@@ -484,9 +488,19 @@ export function History() {
           // becomes false.
           patchRecord(payload.id, payload);
         }
-        // 'prediction:explain' fires after the heatmap/beeswarm are ready.
-        // The list page on this route doesn't show them, so we ignore it
-        // here — the parent /prediction page can subscribe if needed.
+        // The waterfall reads the explanation over HTTP, so these two events
+        // only have to say when to look again, and how far along it is.
+        if (ev.event === "prediction:explanation" && predictionId) {
+          invalidateExplanation(predictionId);
+        } else if (
+          ev.event === "prediction:explanation-progress" &&
+          predictionId
+        ) {
+          setExplanationProgress(predictionId, {
+            done: payload.done,
+            total: payload.total,
+          });
+        }
       } catch (err) {
         // eslint-disable-next-line no-console
         console.warn("[prediction SSE] bad payload:", err);

@@ -91,3 +91,16 @@ def test_a_model_that_fails_to_load_is_a_503_everywhere(client, server, monkeypa
     monkeypatch.setattr(server, "ModelLoader", Stub)
     response = client.post(url, json=GOOD_BODY)
     assert response.status_code == 503
+
+
+@pytest.mark.parametrize("url", ENDPOINTS)
+def test_non_numeric_input_is_rejected_before_it_becomes_nan(client, loadable, url):
+    """`transformer` coerces with errors="coerce", so a non-numeric cell becomes
+    NaN rather than an error. Only `explain_values` used to notice, downstream in
+    `build_payload`; the plot endpoints drew the NaN and `predict` fed it to the
+    model. All five now refuse it, and say which column was at fault."""
+    response = client.post(url, json={
+        "dataframe_split": {"columns": ["a"], "data": [["not-a-number"]]},
+    })
+    assert response.status_code == 400
+    assert "a" in response.get_json()["error"]

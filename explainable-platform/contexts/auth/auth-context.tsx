@@ -1,4 +1,4 @@
-import { createContext, FC, useContext, useState } from "react";
+import { createContext, FC, useContext, useState, PropsWithChildren } from "react";
 import { useMutation, useQueryClient } from "react-query";
 import { useRouter } from "next/router";
 import { useLocalStorage } from "usehooks-ts";
@@ -17,7 +17,7 @@ export interface UserContextValue {
 
 const UserContext = createContext<UserContextValue | any>(null);
 
-export const UserProvider: FC = ({ children }) => {
+export const UserProvider: FC<PropsWithChildren> = ({ children }) => {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { mutateAsync: signIn } = useMutation(auth.signIn);

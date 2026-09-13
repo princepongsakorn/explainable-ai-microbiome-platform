@@ -5,9 +5,7 @@ import { ChevronRightIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import { IPredictions } from "@/components/model/model.interface";
 import Drawer from "react-modern-drawer";
-import {
-  getPredictions,
-} from "../api/predict";
+import { getPredictions } from "../api/predict";
 import { useSse } from "@/lib/useSse";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
@@ -20,6 +18,10 @@ import {
 } from "@/components/model/pagination.interface";
 import { useRouter } from "next/router";
 import { queryToString } from "@/lib/queryToString";
+import {
+  invalidateExplanation,
+  setExplanationProgress,
+} from "@/lib/useExplanation";
 import {
   GlobalBeeswarmChart,
   GlobalHeatmapChart,
@@ -37,23 +39,6 @@ export function History() {
 
   const currentPage = Number(router.query.page) || 1;
 
-  // Patch one prediction in both the open drawer and its list row, so the
-  // two never drift apart (after an SSE update or an optimistic clear).
-  const patchPrediction = (id: string, patch: Partial<IPredictions>) => {
-    setSelectPrediction((prev) =>
-      prev && prev.id === id ? { ...prev, ...patch } : prev
-    );
-    setPredictions((prev) =>
-      prev
-        ? {
-            ...prev,
-            items: prev.items.map((it) =>
-              it.id === id ? { ...it, ...patch } : it
-            ),
-          }
-        : prev
-    );
-  };
 
 
   const getPredictionsRecordList = async () => {
@@ -86,12 +71,16 @@ export function History() {
         if (!ev.data) return;
         try {
           const payload = JSON.parse(ev.data);
-          if (ev.event === "prediction:explain") {
-            patchPrediction(payload.predictionId, {
-              heatmap: payload.heatmap,
-              heatmapError: payload.heatmapError,
-              beeswarm: payload.beeswarm,
-              beeswarmError: payload.beeswarmError,
+          const id = selectPrediction?.id;
+          if (!id) return;
+          // The charts read the explanation over HTTP, so the only thing these
+          // events have to do is say when to look again.
+          if (ev.event === "prediction:explanation") {
+            invalidateExplanation(id);
+          } else if (ev.event === "prediction:explanation-progress") {
+            setExplanationProgress(id, {
+              done: payload.done,
+              total: payload.total,
             });
           }
         } catch (err) {
