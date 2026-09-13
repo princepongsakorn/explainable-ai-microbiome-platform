@@ -318,3 +318,74 @@ describe("waterfallLayout — axis marks", () => {
     ]);
   });
 });
+
+describe("waterfallLayout — x axis", () => {
+  const rows: WaterfallRows = {
+    rows: [{
+      label: "x", featureIndex: 0, isOtherRow: false,
+      value: 0.248, left: 0.524, width: 0.248, row: 0, color: "#ff0051",
+    }],
+    baseValue: 0.524,
+    modelOutput: 0.772,
+    collapsedCount: 0,
+  };
+  const opts = {
+    width: 900, rowHeight: 20, marginLeft: 200, marginRight: 40, marginTop: 10,
+  };
+
+  it("picks the same round ticks matplotlib's MaxNLocator would", () => {
+    // Over [0.524, 0.772] SHAP's own figure ticks at 0.55 .. 0.80 in steps of
+    // 0.05, which is what the 1/2/2.5/5/10 step ladder produces here.
+    const ticks = waterfallLayout(rows, opts).xTicks;
+    expect(ticks.map((t) => t.label)).toEqual([
+      "0.55", "0.60", "0.65", "0.70", "0.75",
+    ]);
+  });
+
+  it("places ticks on the same scale as the bars", () => {
+    const layout = waterfallLayout(rows, opts);
+    const base = layout.axisMarks.find((m) => m.kind === "base")!;
+    const output = layout.axisMarks.find((m) => m.kind === "output")!;
+    for (const tick of layout.xTicks) {
+      expect(tick.x).toBeGreaterThanOrEqual(base.x);
+      expect(tick.x).toBeLessThanOrEqual(output.x);
+    }
+  });
+
+  it("takes its label precision from the step, not from the value control", () => {
+    // An axis tick is a round number by construction, so "55%" says everything
+    // "55.00%" does. The control still decides percent vs decimal.
+    const percent = waterfallLayout(rows, { ...opts, decimals: "percent" });
+    expect(percent.xTicks.map((t) => t.label)).toEqual([
+      "55%", "60%", "65%", "70%", "75%",
+    ]);
+    const four = waterfallLayout(rows, { ...opts, decimals: 4 });
+    expect(four.xTicks.map((t) => t.label)).toEqual([
+      "0.55", "0.60", "0.65", "0.70", "0.75",
+    ]);
+  });
+
+  it("leaves room below the plot for the ticks and the base-value label", () => {
+    const layout = waterfallLayout(rows, opts);
+    expect(layout.height).toBeGreaterThan(layout.plotBottom + 40);
+  });
+});
+
+describe("waterfallLayout — plot bounds", () => {
+  it("reports the plot edges the axis is drawn between", () => {
+    const layout = waterfallLayout(
+      {
+        rows: [{
+          label: "x", featureIndex: 0, isOtherRow: false,
+          value: 1, left: 0, width: 1, row: 0, color: "#ff0051",
+        }],
+        baseValue: 0, modelOutput: 1, collapsedCount: 0,
+      },
+      { width: 400, rowHeight: 20, marginLeft: 200, marginRight: 40, marginTop: 10 },
+    );
+    expect(layout.plotLeft).toBe(200);
+    expect(layout.plotRight).toBe(360);
+    expect(layout.separators[0].x1).toBe(layout.plotLeft);
+    expect(layout.separators[0].x2).toBe(layout.plotRight);
+  });
+});
