@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Explanation } from "../core/types";
 import { parseExplanation } from "../core/parse";
+import { groupExplanationByGenus } from "../core/taxonomy";
 import { globalImportance, orderFeatures } from "../core/order";
 import { collapseToDisplay } from "../core/collapse";
 import { barLayout } from "../core/barLayout";
@@ -11,6 +12,8 @@ export type ShapBarProps = {
   explanation: Explanation;
   maxDisplay?: number;
   faithfulOtherRow?: boolean;
+  /** Collapse `Genus_species` Features into their genus before drawing. */
+  groupByGenus?: boolean;
   classIndex?: number;
   width?: number;
   rowHeight?: number;
@@ -21,6 +24,7 @@ export function ShapBar({
   explanation,
   maxDisplay = 10,
   faithfulOtherRow = false,
+  groupByGenus = false,
   classIndex = 1,
   width = 720,
   rowHeight = 26,
@@ -29,7 +33,8 @@ export function ShapBar({
   const [hovered, setHovered] = useState<number | null>(null);
 
   const layout = useMemo(() => {
-    const parsed = parseExplanation(explanation, { classIndex });
+    const raw = parseExplanation(explanation, { classIndex });
+    const parsed = groupByGenus ? groupExplanationByGenus(raw) : raw;
     const importance = globalImportance(parsed);
     const order = orderFeatures(importance);
     const rows = collapseToDisplay(
@@ -38,7 +43,7 @@ export function ShapBar({
     return barLayout(rows, {
       width, rowHeight, marginLeft: 260, marginRight: 90, marginTop: 8,
     });
-  }, [explanation, maxDisplay, faithfulOtherRow, classIndex, width, rowHeight]);
+  }, [groupByGenus, explanation, maxDisplay, faithfulOtherRow, classIndex, width, rowHeight]);
 
   return (
     <svg width={width} height={layout.height} role="img"

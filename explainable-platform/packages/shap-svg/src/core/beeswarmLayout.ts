@@ -1,5 +1,6 @@
 import { collapseToDisplay } from "./collapse";
 import { sampleColormap } from "./colormap";
+import { RowSort, sortDisplayRows } from "./rowSort";
 import {
   AXIS_TITLE_DY,
   AxisSpine,
@@ -175,6 +176,7 @@ export function beeswarmRows(
   maxDisplay: number,
   faithfulOtherRow: boolean,
   seed = 0,
+  rowSort: RowSort = "importance",
 ): BeeswarmRows {
   if (!Number.isInteger(maxDisplay) || maxDisplay <= 0) {
     throw new RangeError(`maxDisplay must be a positive integer, received ${maxDisplay}`);
@@ -185,12 +187,17 @@ export function beeswarmRows(
 
   const importance = globalImportance(explanation);
   const order = orderFeatures(importance);
-  const display = collapseToDisplay(
-    explanation.featureNames,
-    importance,
-    order,
-    maxDisplay,
-    faithfulOtherRow,
+  // Which rows are shown is decided by importance; rowSort only reorders them.
+  const display = sortDisplayRows(
+    collapseToDisplay(
+      explanation.featureNames,
+      importance,
+      order,
+      maxDisplay,
+      faithfulOtherRow,
+    ),
+    rowSort,
+    explanation.data,
   );
   const visibleFeatures = new Set(
     display.rows.flatMap((row) => row.featureIndex === null ? [] : [row.featureIndex]),

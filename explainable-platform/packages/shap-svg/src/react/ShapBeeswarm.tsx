@@ -4,12 +4,18 @@ import { sampleColormap } from "../core/colormap";
 import { formatShapValue } from "../core/format";
 import { XAxis } from "./XAxis";
 import { parseExplanation } from "../core/parse";
+import { groupExplanationByGenus } from "../core/taxonomy";
+import { RowSort } from "../core/rowSort";
 import { Explanation } from "../core/types";
 
 export type ShapBeeswarmProps = {
   explanation: Explanation;
   maxDisplay?: number;
   faithfulOtherRow?: boolean;
+  /** Collapse `Genus_species` Features into their genus before drawing. */
+  groupByGenus?: boolean;
+  /** Order of the displayed rows. Never changes which rows are shown. */
+  rowSort?: RowSort;
   classIndex?: number;
   width?: number;
   rowHeight?: number;
@@ -24,6 +30,8 @@ export function ShapBeeswarm({
   explanation,
   maxDisplay = 10,
   faithfulOtherRow = false,
+  groupByGenus = false,
+  rowSort = "importance",
   classIndex = 1,
   width = 720,
   rowHeight = 28,
@@ -35,8 +43,9 @@ export function ShapBeeswarm({
   const marginTop = 8;
 
   const layout = useMemo(() => {
-    const parsed = parseExplanation(explanation, { classIndex });
-    const rows = beeswarmRows(parsed, maxDisplay, faithfulOtherRow, seed);
+    const raw = parseExplanation(explanation, { classIndex });
+    const parsed = groupByGenus ? groupExplanationByGenus(raw) : raw;
+    const rows = beeswarmRows(parsed, maxDisplay, faithfulOtherRow, seed, rowSort);
     return beeswarmLayout(rows, {
       width,
       rowHeight,
@@ -45,7 +54,7 @@ export function ShapBeeswarm({
       marginTop,
       dotRadius,
     });
-  }, [
+  }, [groupByGenus, rowSort, 
     explanation,
     maxDisplay,
     faithfulOtherRow,

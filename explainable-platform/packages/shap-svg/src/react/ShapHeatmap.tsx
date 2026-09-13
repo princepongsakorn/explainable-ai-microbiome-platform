@@ -3,12 +3,18 @@ import { formatShapValue } from "../core/format";
 import { XAxis } from "./XAxis";
 import { heatmapLayout, heatmapRows } from "../core/heatmapLayout";
 import { parseExplanation } from "../core/parse";
+import { groupExplanationByGenus } from "../core/taxonomy";
+import { RowSort } from "../core/rowSort";
 import { Explanation } from "../core/types";
 
 export type ShapHeatmapProps = {
   explanation: Explanation;
   maxDisplay?: number;
   faithfulOtherRow?: boolean;
+  /** Collapse `Genus_species` Features into their genus before drawing. */
+  groupByGenus?: boolean;
+  /** Order of the displayed rows. Never changes which rows are shown. */
+  rowSort?: RowSort;
   classIndex?: number;
   width?: number;
   rowHeight?: number;
@@ -20,6 +26,8 @@ export function ShapHeatmap({
   explanation,
   maxDisplay = 10,
   faithfulOtherRow = false,
+  groupByGenus = false,
+  rowSort = "importance",
   classIndex = 1,
   width = 720,
   rowHeight = 26,
@@ -30,8 +38,9 @@ export function ShapHeatmap({
   const marginTop = 72;
 
   const layout = useMemo(() => {
-    const parsed = parseExplanation(explanation, { classIndex });
-    const rows = heatmapRows(parsed, maxDisplay, faithfulOtherRow);
+    const raw = parseExplanation(explanation, { classIndex });
+    const parsed = groupByGenus ? groupExplanationByGenus(raw) : raw;
+    const rows = heatmapRows(parsed, maxDisplay, faithfulOtherRow, rowSort);
     return heatmapLayout(rows, {
       width,
       rowHeight,
@@ -39,7 +48,7 @@ export function ShapHeatmap({
       marginRight: 100,
       marginTop,
     });
-  }, [explanation, maxDisplay, faithfulOtherRow, classIndex, width, rowHeight]);
+  }, [groupByGenus, rowSort, explanation, maxDisplay, faithfulOtherRow, classIndex, width, rowHeight]);
 
   const activeColumn = hoveredColumn === null ? undefined : layout.columns[hoveredColumn];
   const tooltipX = activeColumn
