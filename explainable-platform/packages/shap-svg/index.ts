@@ -7,3 +7,4 @@ export * from "./src/core/barLayout";
 export * from "./src/core/waterfallLayout";
 export * from "./src/core/colormap";
 export * from "./src/core/beeswarmLayout";
+export * from "./src/core/heatmapLayout";

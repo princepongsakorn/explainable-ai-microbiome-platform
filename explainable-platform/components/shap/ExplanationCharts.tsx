@@ -1,6 +1,11 @@
 import { ReactNode, useState } from "react";
 import type { Explanation } from "@/packages/shap-svg";
-import { ShapBar, ShapBeeswarm, ShapWaterfall } from "@/packages/shap-svg/react";
+import {
+  ShapBar,
+  ShapBeeswarm,
+  ShapHeatmap,
+  ShapWaterfall,
+} from "@/packages/shap-svg/react";
 import { useExplanation, sampleIndexOf } from "@/lib/useExplanation";
 
 const MIN_DISPLAY = 5;
@@ -76,6 +81,34 @@ export function GlobalBeeswarmChart({ predictionId }: { predictionId?: string })
     <ChartFrame predictionId={predictionId} emptyLabel="No explanation available.">
       {(explanation, maxDisplay) => (
         <ShapBeeswarm explanation={explanation} maxDisplay={maxDisplay} />
+      )}
+    </ChartFrame>
+  );
+}
+
+/**
+ * One cell per sample per feature, coloured by the SHAP value.
+ *
+ * Clicking a column hands back the sample id so the caller can open that
+ * sample's breakdown — the data is already in memory, so it costs no request.
+ * The original PNG labelled its x axis "Instances" and nothing more, which made
+ * the substructure it exists to show impossible to read.
+ */
+export function GlobalHeatmapChart({
+  predictionId,
+  onSampleClick,
+}: {
+  predictionId?: string;
+  onSampleClick?: (sampleId: string) => void;
+}) {
+  return (
+    <ChartFrame predictionId={predictionId} emptyLabel="No explanation available.">
+      {(explanation, maxDisplay) => (
+        <ShapHeatmap
+          explanation={explanation}
+          maxDisplay={maxDisplay}
+          onSampleClick={onSampleClick}
+        />
       )}
     </ChartFrame>
   );
