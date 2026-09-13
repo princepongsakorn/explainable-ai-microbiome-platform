@@ -14,6 +14,8 @@ import json
 import logging
 import os
 import threading
+import time
+from functools import lru_cache
 from io import BytesIO
 
 import matplotlib
@@ -105,30 +107,117 @@ def _load_pyfunc_cached(model_uri):
     return mlflow.pyfunc.load_model(model_uri)
 
 
-def load_explainable_model(model_name):
-    """Look up the Production version of ``model_name`` and load it as an
-    ``ExplainableModel`` (pyfunc-backed)."""
-    client = mlflow.tracking.MlflowClient()
-    model_versions = client.get_latest_versions(model_name, stages=["Production"])
-    if not model_versions:
-        raise ValueError(
-            f"No model version for '{model_name}' in Production stage."
-        )
-    mv = model_versions[-1]
-    version = mv.version
-    run_id = mv.run_id
-    model_uri = f"models:/{model_name}/{version}"
+# joblib.Memory is a *disk* cache: every hit hashes the arguments, then reads and
+# unpickles the stored value. That is what we want across pod restarts, and far
+# too expensive per request — a 200-400 MB torch+shap bundle costs 0.5-1.0 s of
+# blocking work before any real work starts. These process-local caches sit in
+# front of it, leaving joblib as the cold-start path.
+#
+# A consequence worth stating: every request now shares one model object instead
+# of receiving a freshly unpickled copy. Inference is a read — predictors and
+# SHAP explainers do not mutate themselves — so concurrent Flask threads are
+# fine, and sharing is the point: warm explainer state survives. A model that
+# mutates itself during predict would need a lock here, and none of the
+# ExplainableModel implementations do.
+_MODEL_CACHE_SIZE = 4
+_MODEL_VERSION_TTL_SECONDS = 60
 
+# model_name -> (fetched_at, version, run_id)
+_version_cache: dict[str, tuple[float, str, str]] = {}
+_version_lock = threading.Lock()
+
+
+@lru_cache(maxsize=_MODEL_CACHE_SIZE)
+def _load_explainable_cached(model_uri):
+    """Load and validate one model version, once per process.
+
+    ``lru_cache`` does not memoize exceptions, so a model that fails the
+    contract check is re-examined on the next request rather than being
+    remembered as broken.
+    """
+    logger.info(f"Unpickling {model_uri} (cold: not in the process cache)")
     loaded = _load_pyfunc_cached(model_uri)
     impl = loaded._model_impl.python_model
     if not isinstance(impl, ExplainableModel):
         raise TypeError(
-            f"Model '{model_name}' (version {version}) was not logged via "
+            f"Model '{model_uri}' was not logged via "
             f"mlflow_explainable.log_explainable_model — its python_model is "
             f"{type(impl).__name__} but the runtime requires an ExplainableModel. "
             f"Re-train and log with log_explainable_model() to register a "
             f"compatible version."
         )
+    return loaded, impl
+
+
+@lru_cache(maxsize=_MODEL_CACHE_SIZE)
+def _feature_names_cached(run_id, artifact_path):
+    """Process-local front for ``load_feature_names_cached``, same reasoning."""
+    return load_feature_names_cached(run_id, artifact_path)
+
+
+def _reset_model_caches():
+    """Drop every process-local cache. For tests."""
+    _load_explainable_cached.cache_clear()
+    _feature_names_cached.cache_clear()
+    with _version_lock:
+        _version_cache.clear()
+
+
+def _resolve_production_version(model_name):
+    """The Production ``(version, run_id)`` for ``model_name``, cached briefly.
+
+    Without this the registry is queried on every request: a blocking 10-200 ms
+    round trip that also makes the whole service fail whenever the tracking
+    server is briefly unreachable.
+
+    The two failure modes are deliberately not treated alike.
+
+    *The registry could not be reached.* If we have served this model before,
+    keep serving that version — a promotion we are up to 60 s late in noticing
+    is a far smaller problem than refusing every request while MLflow restarts.
+    With nothing cached there is no answer to give, so the error propagates.
+
+    *The registry replied, and nothing is in Production.* That is an answer, not
+    an outage, and it usually means someone archived the version on purpose.
+    Serving the stale one would quietly override that decision, so the entry is
+    dropped and the caller gets the error.
+    """
+    now = time.monotonic()
+    with _version_lock:
+        cached = _version_cache.get(model_name)
+    if cached is not None and now - cached[0] < _MODEL_VERSION_TTL_SECONDS:
+        return cached[1], cached[2]
+
+    try:
+        client = mlflow.tracking.MlflowClient()
+        model_versions = client.get_latest_versions(model_name, stages=["Production"])
+    except Exception as exc:
+        if cached is None:
+            raise
+        logger.warning(
+            f"Registry lookup for '{model_name}' failed ({exc}); serving the "
+            f"cached version {cached[1]}."
+        )
+        return cached[1], cached[2]
+
+    if not model_versions:
+        with _version_lock:
+            _version_cache.pop(model_name, None)
+        raise ValueError(
+            f"No model version for '{model_name}' in Production stage."
+        )
+
+    mv = model_versions[-1]
+    with _version_lock:
+        _version_cache[model_name] = (now, mv.version, mv.run_id)
+    return mv.version, mv.run_id
+
+
+def load_explainable_model(model_name):
+    """Look up the Production version of ``model_name`` and load it as an
+    ``ExplainableModel`` (pyfunc-backed)."""
+    version, run_id = _resolve_production_version(model_name)
+    loaded, impl = _load_explainable_cached(f"models:/{model_name}/{version}")
     return loaded, impl, run_id
 
 
@@ -145,7 +234,7 @@ class ModelLoader:
         logger.info(f"Loaded ExplainableModel '{self.model_name}' (run {run_id})")
 
         try:
-            input_columns = load_feature_names_cached(
+            input_columns = _feature_names_cached(
                 run_id, "model/artifacts/feature_names.json"
             )
             logger.info(
@@ -514,6 +603,32 @@ def _load_model_or_error(model_name):
         )
 
 
+
+def _prepare(model_name):
+    """Everything the five model endpoints do before they diverge.
+
+    Returns ``(loaded, impl, input_data, None)`` on success, or
+    ``(None, None, None, (response, status))`` on failure.
+
+    ``request.get_json()`` is deliberately left outside any ``except`` here. A
+    body that is not JSON raises werkzeug's ``BadRequest``, which Flask turns
+    into a **400**; previously it was swallowed by each handler's blanket
+    ``except Exception`` and reported as a 500. 400 is the honest answer — the
+    body is the caller's — and it matters upstream: the chunked explain job
+    does not retry 4xx, so a malformed body now fails once instead of being
+    retried three times before failing anyway.
+    """
+    loaded, impl, input_columns, err = _load_model_or_error(model_name)
+    if err:
+        return None, None, None, err
+
+    input_df, err = _parse_dataframe_split(request.get_json())
+    if err:
+        return None, None, None, err
+
+    return loaded, impl, transformer(input_df, input_columns), None
+
+
 # ---- explain endpoints -----------------------------------------------------
 @app.route("/v1/explain/values/<model_name>", methods=["POST"])
 def explain_values(model_name):
@@ -522,17 +637,11 @@ def explain_values(model_name):
     Unlike the three plot endpoints below this holds no matplotlib lock: it is
     pure numerics, so concurrent requests actually run concurrently.
     """
-    loaded, impl, input_columns, err = _load_model_or_error(model_name)
+    loaded, impl, input_data, err = _prepare(model_name)
     if err:
         return err
 
     try:
-        req_json = request.get_json()
-        input_df, err = _parse_dataframe_split(req_json)
-        if err:
-            return err
-        input_data = transformer(input_df, input_columns)
-
         aggregate_by = request.args.get("aggregate_by")
         shap_object = get_shap_value(impl, X=input_data, aggregate_by=aggregate_by)
 
@@ -561,19 +670,11 @@ def explain_values(model_name):
 
 @app.route("/v1/explain/beeswarm/<model_name>", methods=["POST"])
 def explain_beeswarm(model_name):
-    loaded, impl, input_columns, err = _load_model_or_error(model_name)
+    loaded, impl, input_data, err = _prepare(model_name)
     if err:
         return err
 
     try:
-        req_json = request.get_json()
-        input_df, err = _parse_dataframe_split(req_json)
-        if err:
-            return err
-        input_data = transformer(input_df, input_columns)
-
-        # Query param ?aggregate_by=genus collapses Genus_species columns
-        # into single per-genus attributions — recommended for GCN models.
         aggregate_by = request.args.get("aggregate_by")
         shap_object = get_shap_value(impl, X=input_data, aggregate_by=aggregate_by)
         beeswarm = get_beeswarm(shap_object.explanation)
@@ -585,19 +686,11 @@ def explain_beeswarm(model_name):
 
 @app.route("/v1/explain/heatmap/<model_name>", methods=["POST"])
 def explain_heatmap(model_name):
-    loaded, impl, input_columns, err = _load_model_or_error(model_name)
+    loaded, impl, input_data, err = _prepare(model_name)
     if err:
         return err
 
     try:
-        req_json = request.get_json()
-        input_df, err = _parse_dataframe_split(req_json)
-        if err:
-            return err
-        input_data = transformer(input_df, input_columns)
-
-        # Query param ?aggregate_by=genus collapses Genus_species columns
-        # into single per-genus attributions — recommended for GCN models.
         aggregate_by = request.args.get("aggregate_by")
         shap_object = get_shap_value(impl, X=input_data, aggregate_by=aggregate_by)
         heatmap = get_heatmap(shap_object.explanation)
@@ -609,22 +702,14 @@ def explain_heatmap(model_name):
 
 @app.route("/v1/explain/waterfall/<model_name>", methods=["POST"])
 def explain_waterfall(model_name):
-    loaded, impl, input_columns, err = _load_model_or_error(model_name)
+    loaded, impl, input_data, err = _prepare(model_name)
     if err:
         return err
 
     try:
-        req_json = request.get_json()
-        input_df, err = _parse_dataframe_split(req_json)
-        if err:
-            return err
-        input_data = transformer(input_df, input_columns)
-
         if len(input_data) != 1:
             return jsonify({"error": "Waterfall explanation requires exactly one row of input"}), 400
 
-        # Query param ?aggregate_by=genus collapses Genus_species columns
-        # into single per-genus attributions — recommended for GCN models.
         aggregate_by = request.args.get("aggregate_by")
         shap_object = get_shap_value(impl, X=input_data, aggregate_by=aggregate_by)
         explain = [
@@ -645,17 +730,11 @@ def explain_waterfall(model_name):
 # ---- predict endpoint ------------------------------------------------------
 @app.route("/v1/predict/<model_name>", methods=["POST"])
 def predict(model_name):
-    loaded, impl, input_columns, err = _load_model_or_error(model_name)
+    loaded, impl, input_data, err = _prepare(model_name)
     if err:
         return err
 
     try:
-        req_json = request.get_json()
-        input_df, err = _parse_dataframe_split(req_json)
-        if err:
-            return err
-        input_data = transformer(input_df, input_columns)
-
         # Uniform contract: pyfunc predict returns DataFrame[Y_proba, Y_class].
         result_df = loaded.predict(input_data)
         # Defensive — in case a subclass returned a different schema.
