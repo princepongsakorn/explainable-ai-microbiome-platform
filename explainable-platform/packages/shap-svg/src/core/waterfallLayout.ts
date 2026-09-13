@@ -75,7 +75,24 @@ export type WaterfallAxisMark = {
   kind: "base" | "output";
   value: number;
   x: number;
+  /** Vertical extent of the dashed rule. The two do not match — see below. */
+  y1: number;
+  y2: number;
   label: string;
+};
+
+/**
+ * The dashed vertical joining one bar's start to the next bar's end.
+ *
+ * shap/plots/_waterfall.py:130-137 draws these inside the loop that walks the
+ * contributions, at `loc` immediately after `loc -= sval` — so the line sits
+ * exactly where the two bars meet, which is what shows the reader that the
+ * steps really do join up.
+ */
+export type WaterfallConnector = {
+  x: number;
+  y1: number;
+  y2: number;
 };
 
 export type WaterfallTick = {
@@ -93,6 +110,7 @@ export type WaterfallSeparator = {
 export type WaterfallLayout = {
   arrows: WaterfallArrowGeometry[];
   axisMarks: WaterfallAxisMark[];
+  connectors: WaterfallConnector[];
   xTicks: WaterfallTick[];
   separators: WaterfallSeparator[];
   xDomain: [number, number];
@@ -329,8 +347,26 @@ export function waterfallLayout(
 
   const plotBottom = marginTop + valueRows.rows.length * rowHeight;
   const { ticks, step } = niceTicks(min, max);
+
+  // SHAP draws a connector per *individually* plotted Feature, so the Other row
+  // never gets one below it. Without an Other row the condition becomes
+  // `i + 4 < num_individual`, dropping the last four: one would be enough to
+  // keep the line off the axis, and the 4 is unexplained in SHAP. Reproduced
+  // as found rather than corrected, because this is a faithful detail.
+  const individualCount = valueRows.rows.filter((row) => !row.isOtherRow).length;
+  const hasOtherRow = individualCount < valueRows.rows.length;
+  const connectors: WaterfallConnector[] = [];
+  for (let index = 0; index < individualCount; index++) {
+    if (!hasOtherRow && index + 4 >= individualCount) continue;
+    connectors.push({
+      x: arrows[index].startX,
+      y1: marginTop + index * rowHeight + inset,
+      y2: marginTop + (index + 1) * rowHeight + inset + barHeight,
+    });
+  }
   return {
     arrows,
+    connectors,
     xTicks: ticks.map((value) => ({
       value,
       x: toX(value),
@@ -341,12 +377,20 @@ export function waterfallLayout(
         kind: "base",
         value: valueRows.baseValue,
         x: toX(valueRows.baseValue),
+        // axvline(base_values, 0, 1 / num_features) — one row tall, not full
+        // height. Drawn the full height it reads as a y axis the chart has not
+        // got, which is the whole reason SHAP hides the left spine.
+        y1: plotBottom - rowHeight,
+        y2: plotBottom,
         label: `E[f(X)] = ${formatLevel(valueRows.baseValue, opts.decimals)}`,
       },
       {
         kind: "output",
         value: valueRows.modelOutput,
         x: toX(valueRows.modelOutput),
+        // axvline(fx, 0, 1) — the full height.
+        y1: marginTop,
+        y2: plotBottom,
         label: `f(x) = ${formatLevel(valueRows.modelOutput, opts.decimals)}`,
       },
     ],
