@@ -37,7 +37,10 @@ export type HeatmapCell = {
 
 export type HeatmapColumn = {
   sampleIndex: number;
+  /** The record UUID: the key for click-through, never shown to a person. */
   sampleId?: string;
+  /** What a person reads for this Sample, when the payload carries labels. */
+  sampleLabel?: string;
   /** Sum of all SHAP values for this Sample. */
   total: number;
 };
@@ -53,6 +56,8 @@ export type HeatmapRow = {
 };
 
 export type HeatmapRows = {
+  /** Header of the uploaded column the labels came from, when it had one. */
+  sampleLabelColumn?: string;
   /** Feature rows in top-to-bottom display order. */
   rows: HeatmapRow[];
   /** Sample columns in descending total-attribution order. */
@@ -123,6 +128,7 @@ export type HeatmapYTick = { y: number; x1: number; x2: number };
 const Y_TICK_LENGTH = 5;
 
 export type HeatmapLayout = {
+  sampleLabelColumn?: string;
   rows: HeatmapRowGeometry[];
   columns: HeatmapColumnGeometry[];
   fxLine: HeatmapLinePoint[];
@@ -198,6 +204,7 @@ export function heatmapRows(
     .map((sample, sampleIndex): HeatmapColumn => ({
       sampleIndex,
       sampleId: explanation.sampleIds?.[sampleIndex],
+      sampleLabel: explanation.sampleLabels?.[sampleIndex],
       total: sample.reduce((sum, value) => sum + value, 0),
     }))
     .sort((a, b) => (b.total - a.total) || (a.sampleIndex - b.sampleIndex));
@@ -252,6 +259,7 @@ export function heatmapRows(
     vmin,
     vmax,
     collapsedCount: display.collapsedCount,
+    sampleLabelColumn: explanation.sampleLabelColumn,
   };
 }
 
@@ -373,6 +381,7 @@ export function heatmapLayout(
       x2: marginLeft,
     })),
     ...heatmapXAxis(valueRows.columns.length, marginLeft, cellWidth, plotWidth, plotBottom),
+    sampleLabelColumn: valueRows.sampleLabelColumn,
     plotWidth,
     cellWidth,
     height: plotBottom + AXIS_HEIGHT,

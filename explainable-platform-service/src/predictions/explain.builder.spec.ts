@@ -3,6 +3,7 @@ import {
   ExplainPayload,
   chunkIndices,
   concatPayloads,
+  sampleLabelsFor,
   sliceSample,
 } from './explain.builder';
 
@@ -151,3 +152,77 @@ describe('sliceSample', () => {
     expect(part).toBeCloseTo(whole, 10);
   });
 });
+
+describe('sampleLabelsFor', () => {
+  const features = ['Bacteroides_dorei', 'Parvimonas_micra'];
+  const record = (recordNumber: number, first: string | number) => ({
+    record_number: recordNumber,
+    dfData: [first, 0.1, 0.2],
+  });
+
+  it('labels each Sample with the id from the file first column, and names that column', () => {
+    expect(
+      sampleLabelsFor(
+        [record(7, 'SAMD00114722'), record(8, 'SAMD00114723')],
+        ['sample_id', ...features],
+        features,
+      ),
+    ).toEqual({
+      sample_labels: ['SAMD00114722', 'SAMD00114723'],
+      sample_label_column: 'sample_id',
+    });
+  });
+
+  it('keeps a numeric id as text, since some studies number their subjects', () => {
+    expect(
+      sampleLabelsFor([record(7, 10037)], ['subject_id', ...features], features)
+        .sample_labels,
+    ).toEqual(['10037']);
+  });
+
+  it('omits the column name when the header is blank, as a pandas index writes it', () => {
+    const out = sampleLabelsFor([record(7, 'AHCNC2ADXX')], ['', ...features], features);
+    expect(out.sample_labels).toEqual(['AHCNC2ADXX']);
+    expect(out.sample_label_column).toBeUndefined();
+  });
+
+  it('falls back to the record number when the first column is a model feature', () => {
+    // Then the file has no id column at all: its first column is a taxon.
+    expect(
+      sampleLabelsFor([record(7, 0.1), record(8, 0.3)], features, features),
+    ).toEqual({ sample_labels: ['Record #7', 'Record #8'] });
+  });
+
+  it('falls back for one Sample whose id cell is blank, without affecting the others', () => {
+    expect(
+      sampleLabelsFor(
+        [record(7, 'A'), record(8, '   ')],
+        ['sample_id', ...features],
+        features,
+      ).sample_labels,
+    ).toEqual(['A', 'Record #8']);
+  });
+});
+
+describe('sample labels through concat and slice', () => {
+  it('concatenates sample_labels in order and keeps the column name', () => {
+    const out = concatPayloads([
+      { ...chunk(['a'], 1), sample_labels: ['SAMD1'], sample_label_column: 'sample_id' },
+      { ...chunk(['b'], 2), sample_labels: ['SAMD2'], sample_label_column: 'sample_id' },
+    ]);
+    expect(out.sample_labels).toEqual(['SAMD1', 'SAMD2']);
+    expect(out.sample_label_column).toBe('sample_id');
+  });
+
+  it('slices a Sample own label, never another Sample', () => {
+    const payload = {
+      ...chunk(['a', 'b'], 1),
+      sample_labels: ['SAMD1', 'SAMD2'],
+      sample_label_column: 'subject_id',
+    };
+    const one = sliceSample(payload, 'b');
+    expect(one.sample_labels).toEqual(['SAMD2']);
+    expect(one.sample_label_column).toBe('subject_id');
+  });
+});
+

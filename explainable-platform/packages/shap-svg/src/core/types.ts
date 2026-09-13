@@ -6,6 +6,10 @@ export type Explanation = {
   data: number[][];
   feature_names: string[];
   sample_ids?: string[];
+  /** n — what a person reads for each Sample; never a join key. */
+  sample_labels?: string[];
+  /** Header of the uploaded column the labels came from, when it had one. */
+  sample_label_column?: string;
   output_names?: string[];
   model_name?: string;
   model_version?: string;
@@ -23,6 +27,9 @@ export type ParsedExplanation = {
   featureNames: string[];
   /** length n, undefined when the payload omitted it */
   sampleIds?: string[];
+  /** length n — display names. sampleIds stays the key for joins and click-through. */
+  sampleLabels?: string[];
+  sampleLabelColumn?: string;
   outputName?: string;
   nSamples: number;
   nFeatures: number;

@@ -23,6 +23,7 @@ import {
   ExplainPayload,
   chunkIndices,
   concatPayloads,
+  sampleLabelsFor,
 } from './explain.builder';
 
 /**
@@ -219,7 +220,14 @@ export class PredictionProcessor {
         );
       }
 
-      const payload = concatPayloads(chunks);
+      // Labels are what a person reads; sample_ids stay the record UUIDs every
+      // join relies on. The records were fetched in record_number order above,
+      // so the labels line up with the payload's rows by position.
+      const joined = concatPayloads(chunks);
+      const payload: ExplainPayload = {
+        ...joined,
+        ...sampleLabelsFor(records, prediction.dfColumns ?? [], joined.feature_names),
+      };
       const raw = Buffer.from(JSON.stringify(payload), 'utf8');
       const etag = createHash('sha256').update(raw).digest('hex');
 
