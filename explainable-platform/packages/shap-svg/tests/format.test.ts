@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatShapValue, formatFeatureLabel, formatValue } from "../src/core/format";
+import { formatShapValue, formatFeatureLabel } from "../src/core/format";
 
 describe("formatShapValue", () => {
   it("keeps three significant figures for ordinary magnitudes", () => {
@@ -49,36 +49,26 @@ describe("formatShapValue — display precision", () => {
   });
 });
 
-describe("formatValue — fidelity units", () => {
-  it("reproduces SHAP's %+0.02f, trailing zeros stripped", () => {
-    // shap/utils/_general.py::format_value does `format_str % s` then
-    // re.sub(r"\.?0+$", "", s), so "+0.10" becomes "+0.1" and "+2.00" "+2".
-    expect(formatValue(0.0215, "shap")).toBe("+0.02");
-    expect(formatValue(0.1, "shap")).toBe("+0.1");
-    expect(formatValue(2, "shap")).toBe("+2");
+describe("formatShapValue — percent", () => {
+  it("writes the value as a percentage", () => {
+    // The model output is a probability, so a contribution of 0.0215 moves the
+    // prediction by 2.15 percentage points.
+    expect(formatShapValue(0.021539, "percent")).toBe("+2.15%");
+    expect(formatShapValue(-0.5, "percent")).toBe("−50.00%");
   });
 
-  it("keeps SHAP's unreadable zero for tiny values, which is the point of (a)", () => {
-    // Most relative abundances land here. Faithful mode reproduces it on
-    // purpose; it is the defect V1 exists to avoid at the other levels.
-    expect(formatValue(0.0003, "shap")).toBe("+0");
-    expect(formatValue(-0.0002, "shap")).toBe("−0");
+  it("reaches values that decimals cannot show without an exponent", () => {
+    // 0.0003 is "+3e-4" at every decimal setting below four, but it is a
+    // perfectly ordinary 0.03% — which is the point of offering percent.
+    expect(formatShapValue(0.0003, 2)).toBe("+3e-4");
+    expect(formatShapValue(0.0003, "percent")).toBe("+0.03%");
   });
 
-  it("uses a unicode minus, never an ASCII hyphen", () => {
-    expect(formatValue(-1.5, "shap")).toBe("−1.5");
+  it("still refuses to render a signed zero", () => {
+    expect(formatShapValue(0.0000001, "percent")).toBe("+1e-7");
   });
 
-  it("reads probability points in microbiome units", () => {
-    // phi is in the model's output space, which this platform's contract
-    // guarantees is a probability, so 0.021 really is 2.1 points of risk.
-    expect(formatValue(0.021, "percentagePoints")).toBe("+2.1 pp");
-    expect(formatValue(-0.0034, "percentagePoints")).toBe("−0.3 pp");
-    expect(formatValue(0.021539, "percentagePoints", 2)).toBe("+2.15 pp");
-  });
-
-  it("delegates to the significant-figure format at the adapted level", () => {
-    expect(formatValue(0.0125, "significant")).toBe(formatShapValue(0.0125));
-    expect(formatValue(0.0125, "significant", 3)).toBe(formatShapValue(0.0125, 3));
+  it("renders an exact zero without a sign or a unit", () => {
+    expect(formatShapValue(0, "percent")).toBe("0");
   });
 });

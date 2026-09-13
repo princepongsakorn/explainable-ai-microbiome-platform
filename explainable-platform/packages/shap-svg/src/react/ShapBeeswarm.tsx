@@ -1,20 +1,14 @@
 import { MouseEvent as ReactMouseEvent, useMemo, useState } from "react";
 import { beeswarmLayout, beeswarmRows } from "../core/beeswarmLayout";
 import { sampleColormap } from "../core/colormap";
-import { formatValue } from "../core/format";
+import { formatShapValue } from "../core/format";
 import { parseExplanation } from "../core/parse";
-import { DEFAULT_FIDELITY, Fidelity, presentationFor } from "../core/fidelity";
-import { applyFidelity } from "../core/applyFidelity";
-import { prevalence } from "../core/taxonomy";
-
 import { Explanation } from "../core/types";
 
 export type ShapBeeswarmProps = {
   explanation: Explanation;
   maxDisplay?: number;
   faithfulOtherRow?: boolean;
-  /** How closely to reproduce SHAP. See core/fidelity.ts. */
-  fidelity?: Fidelity;
   classIndex?: number;
   width?: number;
   rowHeight?: number;
@@ -28,8 +22,7 @@ type HoveredPoint = { rowIndex: number; pointIndex: number };
 export function ShapBeeswarm({
   explanation,
   maxDisplay = 10,
-  faithfulOtherRow,
-  fidelity = DEFAULT_FIDELITY,
+  faithfulOtherRow = false,
   classIndex = 1,
   width = 720,
   rowHeight = 28,
@@ -40,21 +33,9 @@ export function ShapBeeswarm({
   const [hovered, setHovered] = useState<HoveredPoint | null>(null);
   const marginTop = 8;
 
-  // A table lookup, not work: it needs no memo, and keeping it out of one
-  // means the render can read it without the memo having to hand it back.
-  const { units, taxonomicNames, numericLegend, abundanceScale } =
-    presentationFor(fidelity);
-
   const layout = useMemo(() => {
-    const resolved = presentationFor(fidelity);
-    const parsed = applyFidelity(
-      parseExplanation(explanation, { classIndex }),
-      resolved,
-    );
-    const otherRow = faithfulOtherRow ?? resolved.faithfulOtherRow;
-    const rows = beeswarmRows(
-      parsed, maxDisplay, otherRow, seed, resolved.abundanceScale,
-    );
+    const parsed = parseExplanation(explanation, { classIndex });
+    const rows = beeswarmRows(parsed, maxDisplay, faithfulOtherRow, seed);
     return beeswarmLayout(rows, {
       width,
       rowHeight,
@@ -67,7 +48,6 @@ export function ShapBeeswarm({
     explanation,
     maxDisplay,
     faithfulOtherRow,
-    fidelity,
     classIndex,
     width,
     rowHeight,
@@ -122,7 +102,7 @@ export function ShapBeeswarm({
             dominantBaseline="middle"
             fontSize={13}
             fill="#333333"
-            fontStyle={!row.isOtherRow && taxonomicNames ? "italic" : "normal"}
+            fontStyle={row.isOtherRow ? "normal" : "italic"}
           >
             {row.label}
           </text>
@@ -152,17 +132,8 @@ export function ShapBeeswarm({
               fill={sampleColormap("red_blue", index / (legendSteps - 1))}
             />
           ))}
-          {/* Spec V4. SHAP labels the scale only "Low" and "High", which cannot
-              be read off — the reader has no idea whether "High" is 0.3% or 30%.
-              Faithful mode keeps it; above it the ends carry their values, and
-              on a ranked scale they carry the rank, since that is what the
-              colour then means. */}
           <text x={width - 160} y={layout.height - 3} fontSize={10} fill="#555555">
-            {!numericLegend
-              ? "Low"
-              : abundanceScale === "percentile"
-                ? "Least"
-                : formatValue(activeRow.vmin, units)}
+            {formatShapValue(activeRow.vmin)}
           </text>
           <text
             x={width - 32}
@@ -171,11 +142,7 @@ export function ShapBeeswarm({
             fontSize={10}
             fill="#555555"
           >
-            {!numericLegend
-              ? "High"
-              : abundanceScale === "percentile"
-                ? "Most"
-                : formatValue(activeRow.vmax, units)}
+            {formatShapValue(activeRow.vmax)}
           </text>
         </g>
       )}
@@ -189,11 +156,11 @@ export function ShapBeeswarm({
           <rect x={0} y={-16} width={210} height={54} rx={3} fill="#ffffff" stroke="#cccccc" />
           <text x={7} y={0} fontSize={11} fill="#222222">{activeRow.label}</text>
           <text x={7} y={15} fontSize={11} fill="#222222">
-            {`SHAP value: ${formatValue(activePoint.valueX, units)}`}
+            {`SHAP value: ${formatShapValue(activePoint.valueX)}`}
           </text>
           <text x={7} y={30} fontSize={11} fill="#222222">
             {`Feature value: ${Number.isFinite(activePoint.featureValue)
-              ? formatValue(activePoint.featureValue, units)
+              ? formatShapValue(activePoint.featureValue)
               : "missing"}`}
           </text>
         </g>
