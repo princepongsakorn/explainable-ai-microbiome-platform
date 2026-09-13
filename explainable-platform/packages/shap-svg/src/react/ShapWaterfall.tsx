@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Explanation } from "../core/types";
 import { parseExplanation } from "../core/parse";
+import { groupExplanationByGenus } from "../core/taxonomy";
 import { ValuePrecision } from "../core/format";
 import {
   WATERFALL_BASE_LABEL_DY,
@@ -14,6 +15,8 @@ export type ShapWaterfallProps = {
   sampleIndex?: number;
   maxDisplay?: number;
   faithfulOtherRow?: boolean;
+  /** Collapse `Genus_species` Features into their genus before drawing. */
+  groupByGenus?: boolean;
   classIndex?: number;
   width?: number;
   rowHeight?: number;
@@ -27,6 +30,7 @@ export function ShapWaterfall({
   sampleIndex = 0,
   maxDisplay = 10,
   faithfulOtherRow = false,
+  groupByGenus = false,
   classIndex = 1,
   width = 720,
   rowHeight = 30,
@@ -37,7 +41,8 @@ export function ShapWaterfall({
   const marginTop = 34;
 
   const layout = useMemo(() => {
-    const parsed = parseExplanation(explanation, { classIndex });
+    const raw = parseExplanation(explanation, { classIndex });
+    const parsed = groupByGenus ? groupExplanationByGenus(raw) : raw;
     const rows = waterfallRows(parsed, sampleIndex, maxDisplay, faithfulOtherRow);
     return waterfallLayout(rows, {
       width,
@@ -47,7 +52,7 @@ export function ShapWaterfall({
       marginTop,
       decimals,
     });
-  }, [
+  }, [groupByGenus, 
     explanation, sampleIndex, maxDisplay, faithfulOtherRow,
     classIndex, width, rowHeight, decimals,
   ]);

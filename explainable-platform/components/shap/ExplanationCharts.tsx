@@ -1,7 +1,8 @@
 import { ReactNode, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowsPointingOutIcon, XMarkIcon } from "@heroicons/react/24/outline";
-import type { Explanation, ValuePrecision } from "@/packages/shap-svg";
+import { genusOf } from "@/packages/shap-svg";
+import type { Explanation, RowSort, ValuePrecision } from "@/packages/shap-svg";
 import {
   ShapBar,
   ShapBeeswarm,
@@ -24,6 +25,11 @@ const PRECISIONS: { value: ValuePrecision; label: string; hint: string }[] = [
   },
 ];
 const DEFAULT_PRECISION: ValuePrecision = 2;
+const ROW_SORTS: { value: RowSort; label: string }[] = [
+  { value: "importance", label: "Importance" },
+  { value: "name", label: "Name" },
+  { value: "featureValue", label: "Feature value" },
+];
 
 const INLINE_WIDTH = 720;
 /** Room for the overlay's own padding, so the chart does not sit under its edge. */
@@ -38,6 +44,8 @@ type ChartView = {
   explanation: Explanation;
   maxDisplay: number;
   decimals: ValuePrecision;
+  groupByGenus: boolean;
+  rowSort: RowSort;
   width: number;
   rowHeight: number;
 };
@@ -91,6 +99,7 @@ function ChartFrame({
   emptyLabel,
   rowHeight,
   showPrecision = false,
+  showRowSort = false,
 }: {
   predictionId?: string;
   /** Names the chart in the expanded view. */
@@ -99,11 +108,15 @@ function ChartFrame({
   rowHeight: number;
   /** Offer the decimal-places control. Only the waterfall labels each bar. */
   showPrecision?: boolean;
+  /** Offer the row-order control. Only beeswarm and heatmap have rows to reorder freely. */
+  showRowSort?: boolean;
   children: (view: ChartView) => ReactNode;
 }) {
   const { explanation, error, loading, progress } = useExplanation(predictionId);
   const [maxDisplay, setMaxDisplay] = useState(DEFAULT_DISPLAY);
   const [decimals, setDecimals] = useState<ValuePrecision>(DEFAULT_PRECISION);
+  const [groupByGenus, setGroupByGenus] = useState(false);
+  const [rowSort, setRowSort] = useState<RowSort>("importance");
   const [expanded, setExpanded] = useState(false);
   // A portal needs a document, which the server render does not have.
   const [mounted, setMounted] = useState(false);
@@ -128,7 +141,10 @@ function ChartFrame({
     );
   }
 
-  const featureCount = explanation.feature_names.length;
+  // Grouped, the slider counts genera — the rows the chart actually has.
+  const featureCount = groupByGenus
+    ? new Set(explanation.feature_names.map(genusOf)).size
+    : explanation.feature_names.length;
   const sliderMax = Math.min(MAX_DISPLAY, featureCount);
   const shown = Math.min(maxDisplay, sliderMax);
 
@@ -147,6 +163,30 @@ function ChartFrame({
       <span className="tabular-nums w-16 text-right">
         {shown} / {featureCount}
       </span>
+      <label className="flex items-center gap-1 pl-3 border-l border-gray-200 whitespace-nowrap">
+        <input
+          type="checkbox"
+          checked={groupByGenus}
+          onChange={(event) => setGroupByGenus(event.target.checked)}
+        />
+        Group by genus
+      </label>
+      {showRowSort && (
+        <label className="flex items-center gap-1 pl-3 border-l border-gray-200 whitespace-nowrap">
+          Sort
+          <select
+            value={rowSort}
+            onChange={(event) => setRowSort(event.target.value as RowSort)}
+            className="border border-gray-200 rounded px-1 py-0.5 text-sm"
+          >
+            {ROW_SORTS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       {showPrecision && (
         <span className="flex items-center gap-1 pl-3 border-l border-gray-200">
           <span>Values</span>
@@ -192,6 +232,8 @@ function ChartFrame({
           explanation,
           maxDisplay: shown,
           decimals,
+          groupByGenus,
+          rowSort,
           width: INLINE_WIDTH,
           rowHeight,
         })}
@@ -231,6 +273,8 @@ function ChartFrame({
                   explanation,
                   maxDisplay: shown,
                   decimals,
+                  groupByGenus,
+                  rowSort,
                   width: Math.max(
                     MIN_EXPANDED_WIDTH,
                     viewportWidth - EXPANDED_CHROME
@@ -255,9 +299,10 @@ export function GlobalImportanceChart({ predictionId }: { predictionId?: string 
       emptyLabel="No explanation available."
       rowHeight={26}
     >
-      {({ explanation, maxDisplay, width, rowHeight }) => (
+      {({ explanation, maxDisplay, groupByGenus, width, rowHeight }) => (
         <ShapBar
           explanation={explanation}
+          groupByGenus={groupByGenus}
           maxDisplay={maxDisplay}
           width={width}
           rowHeight={rowHeight}
@@ -273,12 +318,15 @@ export function GlobalBeeswarmChart({ predictionId }: { predictionId?: string })
     <ChartFrame
       predictionId={predictionId}
       title="Beeswarm"
+      showRowSort
       emptyLabel="No explanation available."
       rowHeight={28}
     >
-      {({ explanation, maxDisplay, width, rowHeight }) => (
+      {({ explanation, maxDisplay, groupByGenus, rowSort, width, rowHeight }) => (
         <ShapBeeswarm
           explanation={explanation}
+          groupByGenus={groupByGenus}
+          rowSort={rowSort}
           maxDisplay={maxDisplay}
           width={width}
           rowHeight={rowHeight}
@@ -307,12 +355,15 @@ export function GlobalHeatmapChart({
     <ChartFrame
       predictionId={predictionId}
       title="Heatmap"
+      showRowSort
       emptyLabel="No explanation available."
       rowHeight={26}
     >
-      {({ explanation, maxDisplay, width, rowHeight }) => (
+      {({ explanation, maxDisplay, groupByGenus, rowSort, width, rowHeight }) => (
         <ShapHeatmap
           explanation={explanation}
+          groupByGenus={groupByGenus}
+          rowSort={rowSort}
           maxDisplay={maxDisplay}
           width={width}
           rowHeight={rowHeight}
@@ -344,7 +395,7 @@ export function LocalWaterfallChart({
       rowHeight={30}
       showPrecision
     >
-      {({ explanation, maxDisplay, decimals, width, rowHeight }) => {
+      {({ explanation, maxDisplay, decimals, groupByGenus, width, rowHeight }) => {
         const sampleIndex = sampleIndexOf(explanation, recordId);
         if (sampleIndex < 0) {
           return (
@@ -356,6 +407,7 @@ export function LocalWaterfallChart({
         return (
           <ShapWaterfall
             explanation={explanation}
+            groupByGenus={groupByGenus}
             sampleIndex={sampleIndex}
             maxDisplay={maxDisplay}
             decimals={decimals}

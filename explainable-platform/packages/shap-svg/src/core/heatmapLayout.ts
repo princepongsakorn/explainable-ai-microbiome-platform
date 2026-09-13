@@ -1,6 +1,7 @@
 import { collapseToDisplay } from "./collapse";
 import { sampleColormap } from "./colormap";
 import { formatShapValue } from "./format";
+import { RowSort, sortDisplayRows } from "./rowSort";
 import {
   AXIS_TITLE_DY,
   AxisSpine,
@@ -167,6 +168,7 @@ export function heatmapRows(
   explanation: ParsedExplanation,
   maxDisplay: number,
   faithfulOtherRow: boolean,
+  rowSort: RowSort = "importance",
 ): HeatmapRows {
   if (!Number.isInteger(maxDisplay) || maxDisplay <= 0) {
     throw new RangeError(`maxDisplay must be a positive integer, received ${maxDisplay}`);
@@ -174,12 +176,18 @@ export function heatmapRows(
 
   const importance = globalImportance(explanation);
   const featureOrder = orderFeatures(importance);
-  const display = collapseToDisplay(
-    explanation.featureNames,
-    importance,
-    featureOrder,
-    maxDisplay,
-    faithfulOtherRow,
+  // Which rows are shown is decided by importance; rowSort only reorders them.
+  // Sample columns keep SHAP's order either way.
+  const display = sortDisplayRows(
+    collapseToDisplay(
+      explanation.featureNames,
+      importance,
+      featureOrder,
+      maxDisplay,
+      faithfulOtherRow,
+    ),
+    rowSort,
+    explanation.data,
   );
   const displayedFeatures = new Set(
     display.rows.flatMap((row) => row.featureIndex === null ? [] : [row.featureIndex]),

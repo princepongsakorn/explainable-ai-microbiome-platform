@@ -1,4 +1,6 @@
 export * from "./src/core/types";
+export * from "./src/core/taxonomy";
+export * from "./src/core/rowSort";
 export * from "./src/core/parse";
 export * from "./src/core/order";
 export * from "./src/core/format";
