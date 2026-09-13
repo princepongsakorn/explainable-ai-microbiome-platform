@@ -258,6 +258,64 @@ def capture_beeswarm(values, base_values, data, feature_names, max_display: int)
     }
 
 
+def capture_heatmap(values, base_values, data, feature_names, max_display: int) -> dict:
+    """Record what `shap.plots.heatmap` draws.
+
+    This repo does **not** use SHAP's default `hclust` instance ordering — the
+    runtime passes `instance_order=explanation.sum(1)` (see
+    kserve-shap-multi-modelserver.py), which `convert_ordering` turns into a
+    descending sort by the row's total attribution. That is an O(n log n) sort a
+    renderer can do itself, so the capture reflects what the platform actually
+    draws rather than SHAP's default.
+    """
+    captured: dict = {}
+    original = matplotlib.axes.Axes.imshow
+
+    def spy(self, X, **kwargs):
+        captured.setdefault("matrix", np.asarray(X, dtype=float))
+        captured.setdefault("vmin", kwargs.get("vmin"))
+        captured.setdefault("vmax", kwargs.get("vmax"))
+        captured.setdefault("aspect", kwargs.get("aspect"))
+        return original(self, X, **kwargs)
+
+    matplotlib.axes.Axes.imshow = spy
+    try:
+        explanation = shap.Explanation(
+            np.asarray(values, dtype=float),
+            base_values=np.asarray(base_values, dtype=float).ravel(),
+            data=np.asarray(data, dtype=float),
+            feature_names=[str(n) for n in feature_names],
+        )
+        plt.figure()
+        shap.plots.heatmap(
+            explanation,
+            instance_order=explanation.sum(1),
+            max_display=max_display,
+            show=False,
+        )
+        ticks = [t.get_text() for t in plt.gca().get_yticklabels()]
+        plt.close("all")
+    finally:
+        matplotlib.axes.Axes.imshow = original
+
+    matrix = captured["matrix"]  # imshow receives values.T — features x instances
+    return {
+        "max_display": max_display,
+        "instance_order": "sum(1) descending",
+        # The first tick is the f(x) line's label, not a Feature.
+        "labels": [t for t in ticks if t and "f(x)" not in t],
+        "vmin": sigfig(captured["vmin"], 6),
+        "vmax": sigfig(captured["vmax"], 6),
+        "aspect": sigfig(captured["aspect"], 6),
+        "n_features_drawn": int(matrix.shape[0]),
+        "n_instances": int(matrix.shape[1]),
+        # Row-major, features x instances, exactly as imshow received it.
+        "matrix": [[sigfig(v, 6) for v in row] for row in matrix],
+        # Sum over features per instance — the line drawn above the grid.
+        "fx_line": [sigfig(v, 6) for v in matrix.sum(axis=0)],
+    }
+
+
 def write_colormaps() -> None:
     """Dump SHAP's colormaps as lookup tables.
 
@@ -344,6 +402,10 @@ def main() -> None:
     write(
         "real.beeswarm.golden.json",
         capture_beeswarm(real_v, real_b, real_X.values, real_X.columns, 10),
+    )
+    write(
+        "tiny.heatmap.golden.json",
+        capture_heatmap(tiny_v, tiny_b, tiny_d, tiny_names, 10),
     )
     write_colormaps()
 
