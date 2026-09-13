@@ -51,8 +51,22 @@ export function ShapHeatmap({
   }, [groupByGenus, rowSort, explanation, maxDisplay, faithfulOtherRow, classIndex, width, rowHeight]);
 
   const activeColumn = hoveredColumn === null ? undefined : layout.columns[hoveredColumn];
+
+  // What a person reads for a column. sampleId is the record UUID — the key
+  // onSampleClick hands back — and is never shown: an old payload without
+  // labels reads "Sample n" rather than a UUID.
+  const nameOf = (column: { sampleIndex: number; sampleLabel?: string }) => {
+    if (!column.sampleLabel) return `Sample ${column.sampleIndex + 1}`;
+    return layout.sampleLabelColumn
+      ? `${layout.sampleLabelColumn}: ${column.sampleLabel}`
+      : column.sampleLabel;
+  };
+  // Real ids ("subject_id: CCIS02856720ST-4-0") run past a fixed box.
+  const tooltipWidth = activeColumn
+    ? Math.max(190, nameOf(activeColumn).length * 6.5 + 16)
+    : 190;
   const tooltipX = activeColumn
-    ? Math.min(activeColumn.centerX + 8, width - 198)
+    ? Math.max(0, Math.min(activeColumn.centerX + 8, width - tooltipWidth - 8))
     : 0;
 
   return (
@@ -186,9 +200,7 @@ export function ShapHeatmap({
           width={column.width}
           height={layout.plotBottom - 8}
           fill="transparent"
-          aria-label={column.sampleId
-            ? `Sample ${column.sampleId}, total SHAP value ${formatShapValue(column.total)}`
-            : `Sample ${column.sampleIndex + 1}, total SHAP value ${formatShapValue(column.total)}`}
+          aria-label={`${nameOf(column)}, total SHAP value ${formatShapValue(column.total)}`}
           onMouseEnter={() => setHoveredColumn(columnIndex)}
           onMouseLeave={() => setHoveredColumn(null)}
           onClick={() => {
@@ -200,9 +212,9 @@ export function ShapHeatmap({
 
       {activeColumn && (
         <g pointerEvents="none" transform={`translate(${tooltipX} 10)`}>
-          <rect x={0} y={0} width={190} height={42} rx={3} fill="#ffffff" stroke="#cccccc" />
+          <rect x={0} y={0} width={tooltipWidth} height={42} rx={3} fill="#ffffff" stroke="#cccccc" />
           <text x={7} y={15} fontSize={11} fill="#222222">
-            {activeColumn.sampleId ?? `Sample ${activeColumn.sampleIndex + 1}`}
+            {nameOf(activeColumn)}
           </text>
           <text x={7} y={31} fontSize={11} fill="#222222">
             {`Σφ: ${formatShapValue(activeColumn.total)}`}

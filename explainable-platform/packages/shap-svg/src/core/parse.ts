@@ -127,6 +127,17 @@ export function parseExplanation(
       );
     }
   }
+  if (e.sample_labels !== undefined) {
+    assertStringArray(e.sample_labels, "sample_labels");
+    if (e.sample_labels.length !== nSamples) {
+      throw new InvalidExplanationError(
+        `sample_labels has ${e.sample_labels.length} entries but there are ${nSamples} Samples`,
+      );
+    }
+  }
+  if (e.sample_label_column !== undefined && typeof e.sample_label_column !== "string") {
+    throw new InvalidExplanationError("sample_label_column must be a string");
+  }
   if (e.output_names !== undefined) assertStringArray(e.output_names, "output_names");
 
   return {
@@ -135,6 +146,8 @@ export function parseExplanation(
     baseValues,
     featureNames: e.feature_names,
     sampleIds: e.sample_ids,
+    sampleLabels: e.sample_labels,
+    sampleLabelColumn: e.sample_label_column,
     outputName: e.output_names?.[0],
     nSamples,
     nFeatures,

@@ -27,6 +27,8 @@ One payload per Prediction. Content type `application/json`, stored and transmit
 
   // --- optional: platform extras, absent for third-party callers ---
   "sample_ids":    ["a1b2…", ...],   // n — enables click-through to a Local explanation
+  "sample_labels": ["SAMD00114722", ...], // n, optional — what a person reads; never a join key
+  "sample_label_column": "sample_id",     // optional — header the labels came from
   "output_names":  ["CRC"],          // labels the Model output axis
   "model_name":    "crc-rynazal-notebook",
   "model_version": "1"
@@ -129,6 +131,18 @@ GET /predict/:id/records/:recordId/explain     → a slice of the same artifact,
   `Cache-Control: private, max-age=0, must-revalidate`.
 * No signed URLs on this path. A signed URL expires inside an open tab; an ETag does not.
 
+**Sample labels are for reading, `sample_ids` are for joining.** A label comes from an uploaded file,
+so nothing guarantees it is unique; every join — the per-record route, the waterfall's row lookup,
+click-through — uses `sample_ids`, which are record UUIDs, and a renderer never shows one.
+
+The first uploaded column is taken as the identifier **unless its header is one of the model's
+`feature_names`** — then the file has no identifier column. The test is by meaning, not by name:
+the sample files alone use `sample_id`, `subject_id` and a blank header, and some number their
+subjects, so neither a list of names nor "is it non-numeric" holds. A Sample with no usable id
+(no identifier column, or a blank cell) is labelled `Record #<record_number>`, prefixed so it cannot
+be read as a numeric id from the file. Payloads built before labels existed have none; renderers
+fall back to `Sample <n>`.
+
 `PredictionRecord.id` maps to the payload's `sample_ids` entry at the same index. **Record** is the
 platform's word and **Sample** is the payload's word for the same thing; the boundary between them is
 this mapping and nowhere else.
@@ -161,6 +175,8 @@ type Explanation = {
   data: number[][];
   feature_names: string[];
   sample_ids?: string[];
+  sample_labels?: string[];
+  sample_label_column?: string;
   output_names?: string[];
   model_name?: string;
   model_version?: string;
