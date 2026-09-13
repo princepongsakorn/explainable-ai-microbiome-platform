@@ -42,10 +42,9 @@ export function ShapBar({
   return (
     <svg width={width} height={layout.height} role="img"
          aria-label="Mean absolute SHAP value per feature">
-      {layout.showZeroRule && (
-        <line x1={layout.xZero} x2={layout.xZero} y1={0} y2={layout.height - 30}
-              stroke="#000000" strokeWidth={1} />
-      )}
+      <line x1={layout.zeroLine.x} x2={layout.zeroLine.x}
+            y1={layout.zeroLine.y1} y2={layout.zeroLine.y2}
+            stroke="#333333" strokeWidth={1} />
       {layout.bars.map((bar, i) => (
         <g key={`row-${i}`}
            onMouseEnter={() => setHovered(i)}
