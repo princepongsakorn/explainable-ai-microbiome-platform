@@ -47,6 +47,9 @@ lerna-debug.log*
 .tmp
 
 # Runtime data
+# Local stand-in for the storage bucket when GCS_BUCKET is unset
+# (StorageService): uploaded predictions' plots and explanation payloads.
+/.local-storage
 pids
 *.pid
 *.seed
