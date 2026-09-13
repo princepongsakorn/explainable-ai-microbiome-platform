@@ -132,13 +132,19 @@ function placeValueLabel(
     return { ...base, x: (startX + endX) / 2, anchor: "middle", inside: true };
   }
 
-  const outward = { ...base, x: endX + VALUE_LABEL_GAP, anchor: "start" as const, inside: false };
-  if (value >= 0) return outward;
+  if (value >= 0) {
+    return { ...base, x: endX + VALUE_LABEL_GAP, anchor: "start", inside: false };
+  }
 
+  // A negative bar points left, so its label belongs off the left tip.
   const outsideLeftEdge = endX - VALUE_LABEL_GAP - estimatedWidth;
-  return outsideLeftEdge >= gutterX
-    ? { ...base, x: endX - VALUE_LABEL_GAP, anchor: "end", inside: false }
-    : outward;
+  if (outsideLeftEdge >= gutterX) {
+    return { ...base, x: endX - VALUE_LABEL_GAP, anchor: "end", inside: false };
+  }
+  // No room there, so flip to the far side of the bar and read rightward from
+  // its tail. That is startX, not endX: endX is the arrowhead, and starting
+  // there would lay the text across the bar in the bar's own colour.
+  return { ...base, x: startX + VALUE_LABEL_GAP, anchor: "start", inside: false };
 }
 
 /**

@@ -244,10 +244,26 @@ describe("waterfallLayout — value label placement", () => {
     expect(arrow.valueLabel.x).toBeLessThan(arrow.endX);
   });
 
-  it("flips a cramped negative label to the inner side of its bar", () => {
+  it("flips a cramped negative label past the bar's tail, clear of the bar", () => {
     const arrow = waterfallLayout(rowsFor(-0.2, 0.2), opts).arrows[0];
     expect(arrow.valueLabel.anchor).toBe("start");
-    expect(arrow.valueLabel.x).toBeGreaterThanOrEqual(arrow.endX);
+    // startX is a negative bar's right-hand end: the label reads away from it.
+    expect(arrow.valueLabel.x).toBeGreaterThanOrEqual(arrow.startX);
+  });
+
+  it("never draws an outside label over its own bar", () => {
+    const cases = [[8, 0], [0.2, 0], [-0.2, 10], [-0.2, 0.2], [-8, 8], [-1, 1.2]];
+    for (const [value, left] of cases) {
+      const arrow = waterfallLayout(rowsFor(value, left), opts).arrows[0];
+      if (arrow.valueLabel.inside) continue;
+
+      const left_ = leftEdgeOf(arrow.valueLabel);
+      const right = left_ + arrow.valueLabel.estimatedWidth;
+      const barLeft = Math.min(arrow.startX, arrow.endX);
+      const barRight = Math.max(arrow.startX, arrow.endX);
+      // Disjoint intervals: the text is wholly left of the bar or wholly right.
+      expect(right <= barLeft || left_ >= barRight).toBe(true);
+    }
   });
 
   it("never lets a label reach into the feature-name gutter", () => {
