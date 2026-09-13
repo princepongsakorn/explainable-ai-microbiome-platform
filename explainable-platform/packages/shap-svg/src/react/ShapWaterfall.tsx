@@ -116,9 +116,9 @@ export function ShapWaterfall({
             strokeWidth={1}
           />
           <text
-            x={arrow.endX + (arrow.width < 0 ? -6 : 6)}
+            x={arrow.valueLabel.x}
             y={arrow.centerY}
-            textAnchor={arrow.width < 0 ? "end" : "start"}
+            textAnchor={arrow.valueLabel.anchor}
             dominantBaseline="middle"
             fontSize={12}
             fill={arrow.color}
