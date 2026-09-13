@@ -626,7 +626,28 @@ def _prepare(model_name):
     if err:
         return None, None, None, err
 
-    return loaded, impl, transformer(input_df, input_columns), None
+    input_data = transformer(input_df, input_columns)
+
+    # transformer() coerces with errors="coerce", so a cell the caller sent as
+    # text becomes NaN instead of raising. Only /v1/explain/values used to
+    # notice, downstream in build_payload; the plot endpoints drew the NaN and
+    # predict handed it to the model. Catching it here makes all five agree,
+    # and names the columns so the caller can find the bad data.
+    non_finite = input_data.columns[~np.isfinite(input_data.to_numpy()).all(axis=0)]
+    if len(non_finite):
+        shown = ", ".join(str(c) for c in non_finite[:5])
+        more = f" (and {len(non_finite) - 5} more)" if len(non_finite) > 5 else ""
+        logger.warning(
+            "%s rejected non-numeric input for '%s': %s", request.endpoint, model_name, shown
+        )
+        return None, None, None, (
+            jsonify({
+                "error": f"These columns contain values that are not numbers: {shown}{more}."
+            }),
+            400,
+        )
+
+    return loaded, impl, input_data, None
 
 
 # ---- explain endpoints -----------------------------------------------------

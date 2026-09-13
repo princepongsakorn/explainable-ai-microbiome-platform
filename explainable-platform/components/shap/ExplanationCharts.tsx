@@ -92,7 +92,7 @@ function ChartFrame({
   showPrecision?: boolean;
   children: (view: ChartView) => ReactNode;
 }) {
-  const { explanation, error, loading } = useExplanation(predictionId);
+  const { explanation, error, loading, progress } = useExplanation(predictionId);
   const [maxDisplay, setMaxDisplay] = useState(DEFAULT_DISPLAY);
   const [decimals, setDecimals] = useState<ValuePrecision>(DEFAULT_PRECISION);
   const [expanded, setExpanded] = useState(false);
@@ -107,7 +107,16 @@ function ChartFrame({
     return <div className="text-sm text-gray-400 py-4">Loading explanation…</div>;
   }
   if (error || !explanation) {
-    return <div className="text-sm text-gray-500 py-4">{error ?? emptyLabel}</div>;
+    return (
+      <div className="text-sm text-gray-500 py-4">
+        {/* The job reports its progress over SSE, and takes about a minute for
+            a few hundred Samples — long enough that "not computed yet" on its
+            own reads as a failure rather than as a wait. */}
+        {progress
+          ? `Computing explanation… ${progress.done} / ${progress.total} samples`
+          : error ?? emptyLabel}
+      </div>
+    );
   }
 
   const featureCount = explanation.feature_names.length;
