@@ -1,14 +1,9 @@
 import { ReactNode, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowsPointingOutIcon, XMarkIcon } from "@heroicons/react/24/outline";
-import { genusOf } from "@/packages/shap-svg";
-import type { Explanation, RowSort, ValuePrecision } from "@/packages/shap-svg";
-import {
-  ShapBar,
-  ShapBeeswarm,
-  ShapHeatmap,
-  ShapWaterfall,
-} from "@/packages/shap-svg/react";
+import { genusOf } from "shap-svg";
+import type { Explanation, RowSort, ValuePrecision } from "shap-svg";
+import { Plots } from "shap-svg/react";
 import { useExplanation, sampleIndexOf } from "@/lib/useExplanation";
 
 const MIN_DISPLAY = 5;
@@ -300,7 +295,7 @@ export function GlobalImportanceChart({ predictionId }: { predictionId?: string 
       rowHeight={26}
     >
       {({ explanation, maxDisplay, groupByGenus, width, rowHeight }) => (
-        <ShapBar
+        <Plots.bar
           explanation={explanation}
           groupByGenus={groupByGenus}
           maxDisplay={maxDisplay}
@@ -323,7 +318,7 @@ export function GlobalBeeswarmChart({ predictionId }: { predictionId?: string })
       rowHeight={28}
     >
       {({ explanation, maxDisplay, groupByGenus, rowSort, width, rowHeight }) => (
-        <ShapBeeswarm
+        <Plots.beeswarm
           explanation={explanation}
           groupByGenus={groupByGenus}
           rowSort={rowSort}
@@ -360,7 +355,7 @@ export function GlobalHeatmapChart({
       rowHeight={26}
     >
       {({ explanation, maxDisplay, groupByGenus, rowSort, width, rowHeight }) => (
-        <ShapHeatmap
+        <Plots.heatmap
           explanation={explanation}
           groupByGenus={groupByGenus}
           rowSort={rowSort}
@@ -405,7 +400,7 @@ export function LocalWaterfallChart({
           );
         }
         return (
-          <ShapWaterfall
+          <Plots.waterfall
             explanation={explanation}
             groupByGenus={groupByGenus}
             sampleIndex={sampleIndex}

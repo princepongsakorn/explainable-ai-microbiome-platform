@@ -1,6 +1,6 @@
 import { useEffect, useReducer } from "react";
 import { getExplanation } from "@/pages/api/predict";
-import type { Explanation } from "@/packages/shap-svg";
+import type { Explanation } from "shap-svg";
 
 export interface ExplanationProgress {
   done: number;

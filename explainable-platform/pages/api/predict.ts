@@ -10,7 +10,7 @@ import {
   IPagination,
   IPaginationRequestParams,
 } from "@/components/model/pagination.interface";
-import type { Explanation } from "@/packages/shap-svg";
+import type { Explanation } from "shap-svg";
 
 export const postModelPredict = async (
   dataFile: File,
