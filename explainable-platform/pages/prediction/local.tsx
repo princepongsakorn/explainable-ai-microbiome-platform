@@ -11,7 +11,6 @@ import {
   patchPredictionRecordsComment,
   postCancelPredict,
   postRePredict,
-  postRegenWaterfall,
 } from "../api/predict";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
@@ -23,6 +22,12 @@ import {
   IPaginationRequestParams,
 } from "@/components/model/pagination.interface";
 import { useRouter } from "next/router";
+import { LocalWaterfallChart } from "@/components/shap/ExplanationCharts";
+import {
+  invalidateExplanation,
+  revalidateExplanation,
+  setExplanationProgress,
+} from "@/lib/useExplanation";
 import { queryToString } from "@/lib/queryToString";
 import { isNull } from "lodash";
 import {
@@ -32,7 +37,6 @@ import {
 } from "@heroicons/react/24/outline";
 import { Popover, Modal, Textarea, Button } from "flowbite-react";
 import Drawer from "react-modern-drawer";
-import { ShapPlotPlaceholder } from "@/components/ui/ImageEmpty/ImageEmpty";
 import { MainButton } from "@/components/ui/Button/Button";
 import { useSse } from "@/lib/useSse";
 
@@ -422,24 +426,6 @@ export function History() {
     await getPredictionsList();
   };
 
-  // Re-generate just the waterfall plot for the open record. The plot is
-  // optimistically cleared so the in-progress spinner — derived from "no
-  // image + no error" — shows at once; the backend also clears it
-  // server-side, so the state survives a refresh and is scoped to this
-  // record. The result arrives over SSE as a 'record:update'.
-  const onRegenWaterfall = async () => {
-    const id = selectPrediction?.id;
-    if (!id) return;
-    patchRecord(id, { waterfall: undefined, waterfallError: undefined });
-    try {
-      await postRegenWaterfall(predictionId, id);
-    } catch {
-      const data = await getPredictionsList();
-      const fresh = data?.items.find((it) => it.id === id);
-      if (fresh) patchRecord(id, fresh);
-    }
-  };
-
   const onSaveComment = async () => {
     if (selectPrediction?.id) {
       setSaveCommentLoading(true);
@@ -489,22 +475,37 @@ export function History() {
     // was down is lost. Re-fetch once on every (re)connect so the table is
     // reconciled with the server before we start applying live patches.
     onOpen() {
-      getPredictionsList();
+      getPredictionsList().then((data) => {
+        if (!data) return;
+        // The open drawer holds its own copy of the record; reconcile it too.
+        setSelectPrediction((prev) =>
+          prev ? data.items.find((it) => it.id === prev.id) ?? prev : prev
+        );
+      });
+      // An explanation finished or rebuilt while the socket was down.
+      if (predictionId) revalidateExplanation(predictionId);
     },
     onMessage(ev) {
       if (!ev.data) return;
       try {
         const payload = JSON.parse(ev.data);
         if (ev.event === "record:update") {
-          // Patches the table row and the open drawer together. The waterfall
-          // spinner clears on its own here: once the event carries a
-          // waterfall URL or a waterfallError, the derived in-progress flag
-          // becomes false.
+          // Patches the table row and the open drawer together.
           patchRecord(payload.id, payload);
         }
-        // 'prediction:explain' fires after the heatmap/beeswarm are ready.
-        // The list page on this route doesn't show them, so we ignore it
-        // here — the parent /prediction page can subscribe if needed.
+        // The waterfall reads the explanation over HTTP, so these two events
+        // only have to say when to look again, and how far along it is.
+        if (ev.event === "prediction:explanation" && predictionId) {
+          invalidateExplanation(predictionId);
+        } else if (
+          ev.event === "prediction:explanation-progress" &&
+          predictionId
+        ) {
+          setExplanationProgress(predictionId, {
+            done: payload.done,
+            total: payload.total,
+          });
+        }
       } catch (err) {
         // eslint-disable-next-line no-console
         console.warn("[prediction SSE] bad payload:", err);
@@ -852,27 +853,18 @@ export function History() {
             <div className="font-bold bg-gray-50 px-4 py-2 rounded-lg my-4">
               Waterfall plot
             </div>
-            <div className="flex flex-col mb-3 mt-3 ">
-              <div className="text-sm pb-3 text-gray-500">
-                This SHAP waterfall plot illustrates how each factor (listed on
-                the left) influences the predicted outcome. Blue bars indicate a
-                decrease in the likelihood of disease, while red bars indicate
-                an increase. By summing these contributions, you can see which
-                factors drive the final prediction, offering a clear
-                interpretation of the model’s decision.
+            <div className="flex flex-col mb-3 mt-3">
+              <div className="font-medium">Contribution breakdown</div>
+              <div className="text-sm py-2 text-gray-500">
+                How this sample&apos;s features move the prediction from the
+                model&apos;s base value to its final output. Red pushes the
+                prediction up, blue pushes it down; the bars always add up to the
+                difference. Drawn in the browser from the same explanation the
+                other charts use.
               </div>
-              <ShapPlotPlaceholder
-                src={selectPrediction?.waterfall}
-                plotName="Waterfall plot"
-                showShapLabel
-                errorReason={selectPrediction?.waterfallError}
-                onRegenerate={onRegenWaterfall}
-                regenerating={
-                  !selectPrediction?.waterfall &&
-                  !selectPrediction?.waterfallError &&
-                  selectPrediction?.status !== PredictionStatus.ERROR &&
-                  selectPrediction?.status !== PredictionStatus.CANCELED
-                }
+              <LocalWaterfallChart
+                predictionId={predictionId}
+                recordId={selectPrediction?.id}
               />
             </div>
             <div className="font-bold bg-gray-50 px-4 py-2 rounded-lg my-4">

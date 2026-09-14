@@ -10,6 +10,7 @@ import {
   IPagination,
   IPaginationRequestParams,
 } from "@/components/model/pagination.interface";
+import type { Explanation } from "shap-svg";
 
 export const postModelPredict = async (
   dataFile: File,
@@ -97,6 +98,21 @@ export const patchPredictionRecordsComment = async (
     {
       comment: comment ?? "",
     }
+  );
+  return data;
+};
+
+/**
+ * The whole Prediction's SHAP Explanation.
+ *
+ * The response is gzipped and carries an ETag; the browser revalidates and the
+ * server answers 304 from a single database read, so re-opening a drawer costs
+ * nothing. Every chart is drawn from this one payload — changing how many
+ * features are shown does not come back here.
+ */
+export const getExplanation = async (predictionId: string) => {
+  const { data } = await httpClient.get<Explanation>(
+    `/predict/${predictionId}/explain`
   );
   return data;
 };

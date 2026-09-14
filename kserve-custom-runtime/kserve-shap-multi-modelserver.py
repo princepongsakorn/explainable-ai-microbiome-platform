@@ -14,6 +14,8 @@ import json
 import logging
 import os
 import threading
+import time
+from functools import lru_cache
 from io import BytesIO
 
 import matplotlib
@@ -21,14 +23,17 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
 import mlflow  # noqa: E402
+import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 import shap  # noqa: E402
-from flask import Flask, jsonify, request  # noqa: E402
+from flask import Flask, g, jsonify, request  # noqa: E402
 from joblib import Memory  # noqa: E402
 from mlflow.exceptions import MlflowException  # noqa: E402
 from mlflow.server import get_app_client  # noqa: E402
 
 from mlflow_explainable import ExplainableModel  # noqa: E402
+
+from explain_payload import PayloadError, build_payload  # noqa: E402
 
 # Matplotlib uses global pyplot state. Flask serves requests in multiple
 # threads by default (threaded=True since Flask 1.0), so concurrent
@@ -58,10 +63,23 @@ def safe_jsonify(obj):
 
 
 class ShapValueObject:
-    def __init__(self, base_value, shap_df, explanation):
-        self.base_value = base_value
+    """SHAP values for a set of samples, with one base value per sample.
+
+    There is deliberately no scalar ``base_value`` here. Collapsing to sample 0's
+    value is correct for TreeExplainer, which tiles one expected value across
+    every row, and wrong for the permutation path, which computes one per row —
+    see docs/shap-explain-spec.md 1.3. The one consumer that genuinely needs a
+    scalar (``waterfall_legacy``) selects the value for the sample it is drawing.
+    """
+
+    def __init__(self, shap_df, explanation, base_values):
+        self.base_values = np.asarray(base_values, dtype=float)
         self.shap_df = shap_df
         self.explanation = explanation
+
+    def base_value_for(self, subject_id) -> float:
+        """The base value of one sample, by its index label."""
+        return float(self.base_values[self.shap_df.index.get_loc(subject_id)])
 
 
 # ---------------------------------------------------------------------------
@@ -89,31 +107,181 @@ def _load_pyfunc_cached(model_uri):
     return mlflow.pyfunc.load_model(model_uri)
 
 
-def load_explainable_model(model_name):
-    """Look up the Production version of ``model_name`` and load it as an
-    ``ExplainableModel`` (pyfunc-backed)."""
-    client = mlflow.tracking.MlflowClient()
-    model_versions = client.get_latest_versions(model_name, stages=["Production"])
-    if not model_versions:
-        raise ValueError(
-            f"No model version for '{model_name}' in Production stage."
-        )
-    mv = model_versions[-1]
-    version = mv.version
-    run_id = mv.run_id
-    model_uri = f"models:/{model_name}/{version}"
+# joblib.Memory is a *disk* cache: every hit hashes the arguments, then reads and
+# unpickles the stored value. That is what we want across pod restarts, and far
+# too expensive per request — a 200-400 MB torch+shap bundle costs 0.5-1.0 s of
+# blocking work before any real work starts. These process-local caches sit in
+# front of it, leaving joblib as the cold-start path.
+#
+# A consequence worth stating: every request now shares one model object instead
+# of receiving a freshly unpickled copy. Inference is a read — predictors and
+# SHAP explainers do not mutate themselves — so concurrent Flask threads are
+# fine, and sharing is the point: warm explainer state survives. A model that
+# mutates itself during predict would need a lock here, and none of the
+# ExplainableModel implementations do.
+_MODEL_CACHE_SIZE = 4
+_MODEL_VERSION_TTL_SECONDS = 60
 
+# model_name -> (fetched_at, version, run_id)
+_version_cache: dict[str, tuple[float, str, str]] = {}
+_version_lock = threading.Lock()
+# Model names whose registry lookup is running in the background right now.
+_refreshing: set[str] = set()
+
+# One lock per key for work that must not run twice at once: a cold model load
+# (a 200-400 MB unpickle per copy) and a model's first registry lookup.
+_flight_locks: dict[str, threading.Lock] = {}
+_flight_locks_guard = threading.Lock()
+
+
+def _single_flight(key):
+    """The lock that lets only one caller at a time do the work named by ``key``."""
+    with _flight_locks_guard:
+        return _flight_locks.setdefault(key, threading.Lock())
+
+
+class NoProductionVersionError(ValueError):
+    """The registry answered, and no version of the model is in Production."""
+
+
+def _start_refresh(target):
+    """Run ``target`` off the request thread. Tests replace this to run it inline."""
+    threading.Thread(target=target, daemon=True, name="registry-refresh").start()
+
+
+@lru_cache(maxsize=_MODEL_CACHE_SIZE)
+def _load_explainable_cached(model_uri):
+    """Load and validate one model version, once per process.
+
+    ``lru_cache`` does not memoize exceptions, so a model that fails the
+    contract check is re-examined on the next request rather than being
+    remembered as broken.
+    """
+    logger.info(f"Unpickling {model_uri} (cold: not in the process cache)")
     loaded = _load_pyfunc_cached(model_uri)
     impl = loaded._model_impl.python_model
     if not isinstance(impl, ExplainableModel):
         raise TypeError(
-            f"Model '{model_name}' (version {version}) was not logged via "
+            f"Model '{model_uri}' was not logged via "
             f"mlflow_explainable.log_explainable_model — its python_model is "
             f"{type(impl).__name__} but the runtime requires an ExplainableModel. "
             f"Re-train and log with log_explainable_model() to register a "
             f"compatible version."
         )
-    return loaded, impl, run_id
+    return loaded, impl
+
+
+@lru_cache(maxsize=_MODEL_CACHE_SIZE)
+def _feature_names_cached(run_id, artifact_path):
+    """Process-local front for ``load_feature_names_cached``, same reasoning."""
+    return load_feature_names_cached(run_id, artifact_path)
+
+
+def _reset_model_caches():
+    """Drop every process-local cache. For tests."""
+    _load_explainable_cached.cache_clear()
+    _feature_names_cached.cache_clear()
+    with _version_lock:
+        _version_cache.clear()
+        _refreshing.clear()
+
+
+def _fetch_production_version(model_name):
+    """Ask the registry for the Production version and remember the answer.
+
+    Raises whatever the client raises when the registry cannot be reached. When
+    it replies that nothing is in Production, the cached entry is dropped and
+    ``ValueError`` is raised.
+    """
+    fetched_at = time.monotonic()
+    client = mlflow.tracking.MlflowClient()
+    model_versions = client.get_latest_versions(model_name, stages=["Production"])
+    if not model_versions:
+        with _version_lock:
+            _version_cache.pop(model_name, None)
+        raise NoProductionVersionError(
+            f"No model version for '{model_name}' in Production stage."
+        )
+
+    mv = model_versions[-1]
+    with _version_lock:
+        _version_cache[model_name] = (fetched_at, mv.version, mv.run_id)
+    return mv.version, mv.run_id
+
+
+def _refresh_in_background(model_name):
+    """Re-check the registry for ``model_name`` without making anyone wait."""
+    with _version_lock:
+        if model_name in _refreshing:
+            return
+        _refreshing.add(model_name)
+
+    def refresh():
+        try:
+            _fetch_production_version(model_name)
+        except NoProductionVersionError as exc:
+            logger.warning(f"{exc} Dropped the cached version.")
+        except Exception as exc:
+            logger.warning(
+                f"Registry lookup for '{model_name}' failed ({exc}); still "
+                f"serving the cached version."
+            )
+        finally:
+            with _version_lock:
+                _refreshing.discard(model_name)
+
+    _start_refresh(refresh)
+
+
+def _resolve_production_version(model_name):
+    """The Production ``(version, run_id)`` for ``model_name``, cached briefly.
+
+    The registry is a remote round trip — the tracking server's /health alone
+    took 0.5-1.0 s from the development machine — so no request that already has
+    an answer waits for it. Only the first request for a model looks the version
+    up inline. After that the cached version is served, and once it is older than
+    the TTL a single background refresh re-checks the registry.
+
+    The two failure modes of that refresh are deliberately not treated alike.
+
+    *The registry could not be reached.* Keep serving the cached version — a
+    promotion noticed late is a far smaller problem than refusing every request
+    while MLflow restarts. With nothing cached there is no answer to give, so
+    the first request's error propagates.
+
+    *The registry replied, and nothing is in Production.* That is an answer, not
+    an outage, and it usually means someone archived the version on purpose.
+    The entry is dropped, so the next request looks it up inline and gets the
+    error. The request that started the refresh is still served the old version,
+    which it would equally have been a moment earlier.
+    """
+    with _version_lock:
+        cached = _version_cache.get(model_name)
+    if cached is None:
+        # Concurrent first requests share one lookup: whoever holds the lock
+        # fills the cache, and the rest find it filled once they get the lock.
+        with _single_flight(f"registry:{model_name}"):
+            with _version_lock:
+                cached = _version_cache.get(model_name)
+            if cached is None:
+                return _fetch_production_version(model_name)
+        return cached[1], cached[2]
+
+    if time.monotonic() - cached[0] >= _MODEL_VERSION_TTL_SECONDS:
+        _refresh_in_background(model_name)
+    return cached[1], cached[2]
+
+
+def load_explainable_model(model_name):
+    """Look up the Production version of ``model_name`` and load it as an
+    ``ExplainableModel`` (pyfunc-backed)."""
+    version, run_id = _resolve_production_version(model_name)
+    model_uri = f"models:/{model_name}/{version}"
+    # lru_cache does not stop concurrent misses from each loading a copy; the
+    # lock does. A warm hit holds it only for the cache lookup.
+    with _single_flight(f"load:{model_uri}"):
+        loaded, impl = _load_explainable_cached(model_uri)
+    return loaded, impl, run_id, version
 
 
 class ModelLoader:
@@ -125,11 +293,12 @@ class ModelLoader:
         mlflow.set_tracking_uri(self.mlflow_url)
 
     def load(self):
-        loaded, impl, run_id = load_explainable_model(self.model_name)
+        loaded, impl, run_id, version = load_explainable_model(self.model_name)
+        self.version = version
         logger.info(f"Loaded ExplainableModel '{self.model_name}' (run {run_id})")
 
         try:
-            input_columns = load_feature_names_cached(
+            input_columns = _feature_names_cached(
                 run_id, "model/artifacts/feature_names.json"
             )
             logger.info(
@@ -147,8 +316,8 @@ class ModelLoader:
 # SHAP — uniform consumption of the contract's ``shap_explain`` output
 # ---------------------------------------------------------------------------
 def _aggregate_shap_by_genus(
-    values: pd.DataFrame | "np.ndarray",  # noqa: F821
-    data: "np.ndarray",  # noqa: F821
+    values: pd.DataFrame | np.ndarray,
+    data: np.ndarray,
     feature_names: list,
 ):
     """Sum SHAP values / abundance within each genus.
@@ -164,8 +333,6 @@ def _aggregate_shap_by_genus(
     aggregated waterfall still adds up correctly. ``data`` (used for
     beeswarm color) is summed too = total relative abundance of the genus.
     """
-    import numpy as np
-
     values = np.asarray(values)
     data = np.asarray(data)
     feature_names = list(feature_names)
@@ -193,6 +360,27 @@ def _aggregate_shap_by_genus(
     return values_agg, data_agg, seen
 
 
+def _positive_class_base(base, n_rows, per_class_values):
+    """The positive-class base value(s) out of whatever shape the model returned.
+
+    The ExplainableModel contract allows ``()``, ``(n_classes,)`` or
+    ``(n, n_classes)`` whichever shape ``values`` has. With per-class values a
+    trailing 2 is always the class axis. With positive-class values a 1-D pair
+    is read as per-class too — unless there are exactly two samples, where it is
+    indistinguishable from one value per sample and is kept as that.
+    """
+    base = np.asarray(base, dtype=float)
+    if base.ndim == 0:
+        return base
+    if per_class_values:
+        return base[..., 1] if base.shape[-1] == 2 else base
+    if base.ndim == 2 and base.shape[1] == 2:
+        return base[:, 1]
+    if base.ndim == 1 and base.shape[0] == 2 and n_rows != 2:
+        return base[1]
+    return base
+
+
 def get_shap_value(impl, X, aggregate_by: str | None = None):
     """Call ``impl.shap_explain(X)`` and reshape into the legacy
     ``ShapValueObject`` so the plotting helpers can stay unchanged.
@@ -211,24 +399,13 @@ def get_shap_value(impl, X, aggregate_by: str | None = None):
     # (one column per class) or (n, features) (positive class only).
     if values.ndim == 3:
         values_class = values[:, :, 1]
-        # base_values shape can be () / (2,) / (n, 2) depending on the
-        # explainer. Pick the positive-class index when present.
-        if hasattr(base, "ndim") and base.ndim >= 1:
-            base_value = base[..., 1] if base.shape[-1] == 2 else base
-        else:
-            base_value = base
     elif values.ndim == 2:
         values_class = values
-        base_value = base
     else:
         raise ValueError(f"Unsupported SHAP values shape: {values.shape}")
-
-    # When ``base_value`` is per-sample, the legacy waterfall helper expects
-    # a scalar — use the first sample's value (they're usually identical).
-    if hasattr(base_value, "ndim") and base_value.ndim >= 1:
-        base_scalar = float(base_value.ravel()[0])
-    else:
-        base_scalar = float(base_value)
+    base_value = _positive_class_base(
+        base, values_class.shape[0], per_class_values=values.ndim == 3
+    )
 
     feature_names = list(X.columns)
     patient_ids = X.index
@@ -250,7 +427,23 @@ def get_shap_value(impl, X, aggregate_by: str | None = None):
     shap_df = pd.DataFrame(
         values_class, columns=feature_names, index=patient_ids
     )
-    return ShapValueObject(base_scalar, shap_df, explanation)
+
+    # One base value per sample, without assuming they are equal. An unexpected
+    # size is a real shape problem — inventing n copies of one value would make
+    # every downstream additivity check pass while reporting the wrong number.
+    base_arr = np.asarray(base_value, dtype=float).ravel()
+    n_rows = values_class.shape[0]
+    if base_arr.size == n_rows:
+        base_values = base_arr
+    elif base_arr.size == 1:
+        base_values = np.full(n_rows, base_arr[0])
+    else:
+        raise ValueError(
+            f"base_values has size {base_arr.size} for {n_rows} samples; "
+            "expected one per sample or a single shared value"
+        )
+
+    return ShapValueObject(shap_df, explanation, base_values)
 
 
 # ---------------------------------------------------------------------------
@@ -347,7 +540,7 @@ def get_local_waterfall_plot(subject_id, shap_value_object):
         plt.figure()
         max_display = 8
         shap_df = shap_value_object.shap_df
-        base_value = shap_value_object.base_value
+        base_value = shap_value_object.base_value_for(subject_id)
         fig = shap.plots._waterfall.waterfall_legacy(
             base_value,
             shap_df.loc[subject_id],
@@ -430,10 +623,13 @@ app = Flask(__name__)
 
 
 def _parse_dataframe_split(req_json):
+    # Valid JSON is not necessarily an object: a body of `null` or `[1]` must be
+    # the caller's 400, not a TypeError's 500.
+    split = req_json.get("dataframe_split") if isinstance(req_json, dict) else None
     if (
-        "dataframe_split" not in req_json
-        or "data" not in req_json["dataframe_split"]
-        or "columns" not in req_json["dataframe_split"]
+        not isinstance(split, dict)
+        or "data" not in split
+        or "columns" not in split
     ):
         return None, (
             jsonify({
@@ -443,7 +639,19 @@ def _parse_dataframe_split(req_json):
         )
     columns = req_json["dataframe_split"]["columns"]
     data = req_json["dataframe_split"]["data"]
-    return pd.DataFrame(data=data, columns=columns), None
+    # `index` is optional, and honoured by every endpoint as the DataFrame index
+    # — so it also sets the `id` each waterfall response reports.
+    # /v1/explain/values additionally serializes it as `sample_ids`.
+    index = req_json["dataframe_split"].get("index")
+    if index is not None and len(index) != len(data):
+        return None, (
+            jsonify({
+                "error": f"dataframe_split.index has {len(index)} entries "
+                         f"but data has {len(data)} rows."
+            }),
+            400,
+        )
+    return pd.DataFrame(data=data, columns=columns, index=index), None
 
 
 def _load_model_or_error(model_name):
@@ -463,10 +671,14 @@ def _load_model_or_error(model_name):
     response body.
     """
     try:
-        loaded, impl, input_columns = ModelLoader(model_name).load()
+        loader = ModelLoader(model_name)
+        loaded, impl, input_columns = loader.load()
+        # Read back by explain_values, so a payload names the version behind it.
+        g.model_version = getattr(loader, "version", None)
         return loaded, impl, input_columns, None
-    except ValueError as e:
-        # Raised by load_explainable_model when there is no Production version.
+    except NoProductionVersionError as e:
+        # Only a registry answer is a 404. Any other ValueError while loading —
+        # a malformed artifact, bad feature metadata — is the model failing.
         logger.warning(f"Model '{model_name}' unavailable: {e}")
         return None, None, None, (jsonify({"error": str(e)}), 404)
     except Exception as e:  # noqa: BLE001
@@ -479,22 +691,100 @@ def _load_model_or_error(model_name):
         )
 
 
-# ---- explain endpoints -----------------------------------------------------
-@app.route("/v1/explain/beeswarm/<model_name>", methods=["POST"])
-def explain_beeswarm(model_name):
+
+def _prepare(model_name):
+    """Everything the five model endpoints do before they diverge.
+
+    Returns ``(loaded, impl, input_data, None)`` on success, or
+    ``(None, None, None, (response, status))`` on failure.
+
+    ``request.get_json()`` is deliberately left outside any ``except`` here. A
+    body that is not JSON raises werkzeug's ``BadRequest``, which Flask turns
+    into a **400**; previously it was swallowed by each handler's blanket
+    ``except Exception`` and reported as a 500. 400 is the honest answer — the
+    body is the caller's — and it matters upstream: the chunked explain job
+    does not retry 4xx, so a malformed body now fails once instead of being
+    retried three times before failing anyway.
+    """
     loaded, impl, input_columns, err = _load_model_or_error(model_name)
+    if err:
+        return None, None, None, err
+
+    input_df, err = _parse_dataframe_split(request.get_json())
+    if err:
+        return None, None, None, err
+
+    input_data = transformer(input_df, input_columns)
+
+    # transformer() coerces with errors="coerce", so a cell the caller sent as
+    # text becomes NaN instead of raising. Only /v1/explain/values used to
+    # notice, downstream in build_payload; the plot endpoints drew the NaN and
+    # predict handed it to the model. Catching it here makes all five agree,
+    # and names the columns so the caller can find the bad data.
+    non_finite = input_data.columns[~np.isfinite(input_data.to_numpy()).all(axis=0)]
+    if len(non_finite):
+        shown = ", ".join(str(c) for c in non_finite[:5])
+        more = f" (and {len(non_finite) - 5} more)" if len(non_finite) > 5 else ""
+        logger.warning(
+            "%s rejected non-numeric input for '%s': %s", request.endpoint, model_name, shown
+        )
+        return None, None, None, (
+            jsonify({
+                "error": f"These columns contain values that are not numbers: {shown}{more}."
+            }),
+            400,
+        )
+
+    return loaded, impl, input_data, None
+
+
+# ---- explain endpoints -----------------------------------------------------
+@app.route("/v1/explain/values/<model_name>", methods=["POST"])
+def explain_values(model_name):
+    """Return SHAP values as JSON — docs/shap-explain-spec.md 1.
+
+    Unlike the three plot endpoints below this holds no matplotlib lock: it is
+    pure numerics, so concurrent requests actually run concurrently.
+    """
+    loaded, impl, input_data, err = _prepare(model_name)
     if err:
         return err
 
     try:
-        req_json = request.get_json()
-        input_df, err = _parse_dataframe_split(req_json)
-        if err:
-            return err
-        input_data = transformer(input_df, input_columns)
+        aggregate_by = request.args.get("aggregate_by")
+        shap_object = get_shap_value(impl, X=input_data, aggregate_by=aggregate_by)
 
-        # Query param ?aggregate_by=genus collapses Genus_species columns
-        # into single per-genus attributions — recommended for GCN models.
+        payload = build_payload(
+            values=shap_object.shap_df.values,
+            base_values=shap_object.base_values,
+            data=shap_object.explanation.data,
+            feature_names=list(shap_object.shap_df.columns),
+            sample_ids=[str(i) for i in shap_object.shap_df.index],
+            model_name=model_name,
+            model_version=g.get("model_version"),
+        )
+        return jsonify(payload)
+    except PayloadError as e:
+        # The caller sent something transformer() could not coerce to a number.
+        # Narrowly typed on purpose: a bare ValueError here would also catch
+        # get_shap_value's "unsupported SHAP shape", which is a server fault —
+        # and the chunked job upstream does not retry 4xx, so mislabelling it
+        # would turn a transient server problem into a permanently failed
+        # prediction blamed on the user.
+        logger.warning("explain_values rejected input for '%s': %s", model_name, e)
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:  # noqa: BLE001
+        logger.exception("explain_values failed")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/v1/explain/beeswarm/<model_name>", methods=["POST"])
+def explain_beeswarm(model_name):
+    loaded, impl, input_data, err = _prepare(model_name)
+    if err:
+        return err
+
+    try:
         aggregate_by = request.args.get("aggregate_by")
         shap_object = get_shap_value(impl, X=input_data, aggregate_by=aggregate_by)
         beeswarm = get_beeswarm(shap_object.explanation)
@@ -506,19 +796,11 @@ def explain_beeswarm(model_name):
 
 @app.route("/v1/explain/heatmap/<model_name>", methods=["POST"])
 def explain_heatmap(model_name):
-    loaded, impl, input_columns, err = _load_model_or_error(model_name)
+    loaded, impl, input_data, err = _prepare(model_name)
     if err:
         return err
 
     try:
-        req_json = request.get_json()
-        input_df, err = _parse_dataframe_split(req_json)
-        if err:
-            return err
-        input_data = transformer(input_df, input_columns)
-
-        # Query param ?aggregate_by=genus collapses Genus_species columns
-        # into single per-genus attributions — recommended for GCN models.
         aggregate_by = request.args.get("aggregate_by")
         shap_object = get_shap_value(impl, X=input_data, aggregate_by=aggregate_by)
         heatmap = get_heatmap(shap_object.explanation)
@@ -530,22 +812,14 @@ def explain_heatmap(model_name):
 
 @app.route("/v1/explain/waterfall/<model_name>", methods=["POST"])
 def explain_waterfall(model_name):
-    loaded, impl, input_columns, err = _load_model_or_error(model_name)
+    loaded, impl, input_data, err = _prepare(model_name)
     if err:
         return err
 
     try:
-        req_json = request.get_json()
-        input_df, err = _parse_dataframe_split(req_json)
-        if err:
-            return err
-        input_data = transformer(input_df, input_columns)
-
         if len(input_data) != 1:
             return jsonify({"error": "Waterfall explanation requires exactly one row of input"}), 400
 
-        # Query param ?aggregate_by=genus collapses Genus_species columns
-        # into single per-genus attributions — recommended for GCN models.
         aggregate_by = request.args.get("aggregate_by")
         shap_object = get_shap_value(impl, X=input_data, aggregate_by=aggregate_by)
         explain = [
@@ -566,17 +840,11 @@ def explain_waterfall(model_name):
 # ---- predict endpoint ------------------------------------------------------
 @app.route("/v1/predict/<model_name>", methods=["POST"])
 def predict(model_name):
-    loaded, impl, input_columns, err = _load_model_or_error(model_name)
+    loaded, impl, input_data, err = _prepare(model_name)
     if err:
         return err
 
     try:
-        req_json = request.get_json()
-        input_df, err = _parse_dataframe_split(req_json)
-        if err:
-            return err
-        input_data = transformer(input_df, input_columns)
-
         # Uniform contract: pyfunc predict returns DataFrame[Y_proba, Y_class].
         result_df = loaded.predict(input_data)
         # Defensive — in case a subclass returned a different schema.

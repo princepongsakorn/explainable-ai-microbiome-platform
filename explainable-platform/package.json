@@ -31,6 +31,7 @@
     "react-modern-drawer": "^1.4.0",
     "react-paginate": "^8.3.0",
     "react-query": "^3.39.3",
+    "shap-svg": "0.2.3",
     "sweetalert2": "^11.17.2",
     "usehooks-ts": "^3.1.1",
     "yup": "^1.6.1"
@@ -40,7 +41,8 @@
     "@types/lodash": "^4.17.15",
     "@types/node": "18.14.4",
     "@types/papaparse": "^5.3.15",
-    "@types/react": "17.0.27",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
     "autoprefixer": "10.3.7",
     "eslint": "8.0.0",
     "eslint-config-next": "13.1.6",

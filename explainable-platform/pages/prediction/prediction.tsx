@@ -5,11 +5,7 @@ import { ChevronRightIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import { IPredictions } from "@/components/model/model.interface";
 import Drawer from "react-modern-drawer";
-import {
-  getPredictions,
-  postRegenBeeswarm,
-  postRegenHeatmap,
-} from "../api/predict";
+import { getPredictions } from "../api/predict";
 import { useSse } from "@/lib/useSse";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
@@ -22,7 +18,16 @@ import {
 } from "@/components/model/pagination.interface";
 import { useRouter } from "next/router";
 import { queryToString } from "@/lib/queryToString";
-import { ShapPlotPlaceholder } from "@/components/ui/ImageEmpty/ImageEmpty";
+import {
+  invalidateExplanation,
+  revalidateExplanation,
+  setExplanationProgress,
+} from "@/lib/useExplanation";
+import {
+  GlobalBeeswarmChart,
+  GlobalHeatmapChart,
+  GlobalImportanceChart,
+} from "@/components/shap/ExplanationCharts";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -34,55 +39,6 @@ export function History() {
   const [selectPrediction, setSelectPrediction] = useState<IPredictions>();
 
   const currentPage = Number(router.query.page) || 1;
-
-  // Patch one prediction in both the open drawer and its list row, so the
-  // two never drift apart (after an SSE update or an optimistic clear).
-  const patchPrediction = (id: string, patch: Partial<IPredictions>) => {
-    setSelectPrediction((prev) =>
-      prev && prev.id === id ? { ...prev, ...patch } : prev
-    );
-    setPredictions((prev) =>
-      prev
-        ? {
-            ...prev,
-            items: prev.items.map((it) =>
-              it.id === id ? { ...it, ...patch } : it
-            ),
-          }
-        : prev
-    );
-  };
-
-  // Re-generate prediction-level plots. The plot is optimistically cleared so
-  // the in-progress spinner — derived from "no image + no error" — shows at
-  // once. The backend also clears it server-side, so the state is correct
-  // after a refresh and is scoped to this prediction (no shared flag). The
-  // final result arrives over SSE as 'prediction:explain'.
-  const onRegenHeatmap = async () => {
-    const id = selectPrediction?.id;
-    if (!id) return;
-    patchPrediction(id, { heatmap: undefined, heatmapError: undefined });
-    try {
-      await postRegenHeatmap(id);
-    } catch {
-      const data = await getPredictionsRecordList();
-      const fresh = data.items.find((it) => it.id === id);
-      if (fresh) patchPrediction(id, fresh);
-    }
-  };
-
-  const onRegenBeeswarm = async () => {
-    const id = selectPrediction?.id;
-    if (!id) return;
-    patchPrediction(id, { beeswarm: undefined, beeswarmError: undefined });
-    try {
-      await postRegenBeeswarm(id);
-    } catch {
-      const data = await getPredictionsRecordList();
-      const fresh = data.items.find((it) => it.id === id);
-      if (fresh) patchPrediction(id, fresh);
-    }
-  };
 
   const getPredictionsRecordList = async () => {
     const params: IPaginationRequestParams = {
@@ -109,17 +65,23 @@ export function History() {
             return data.items.find((it) => it.id === prev.id) ?? prev;
           });
         });
+        // An explanation finished or rebuilt while the socket was down.
+        if (selectPrediction?.id) revalidateExplanation(selectPrediction.id);
       },
       onMessage(ev) {
         if (!ev.data) return;
         try {
           const payload = JSON.parse(ev.data);
-          if (ev.event === "prediction:explain") {
-            patchPrediction(payload.predictionId, {
-              heatmap: payload.heatmap,
-              heatmapError: payload.heatmapError,
-              beeswarm: payload.beeswarm,
-              beeswarmError: payload.beeswarmError,
+          const id = selectPrediction?.id;
+          if (!id) return;
+          // The charts read the explanation over HTTP, so the only thing these
+          // events have to do is say when to look again.
+          if (ev.event === "prediction:explanation") {
+            invalidateExplanation(id);
+          } else if (ev.event === "prediction:explanation-progress") {
+            setExplanationProgress(id, {
+              done: payload.done,
+              total: payload.total,
             });
           }
         } catch (err) {
@@ -226,7 +188,7 @@ export function History() {
         open={isOpen}
         onClose={() => setIsOpen(false)}
         direction="right"
-        className="shadow-2xs max-w-2xl overflow-y-auto"
+        className="shadow-2xs max-w-4xl overflow-y-auto"
         duration={150}
         size={"60vw"}
       >
@@ -267,47 +229,36 @@ export function History() {
           <div className="font-bold bg-gray-50 px-4 py-2 rounded-lg my-4">
             Summary
           </div>
-          <div className="flex flex-col mb-3 mt-3 ">
-            <div>
-              <div className="font-medium">Beeswarm plot</div>
-            </div>
+          <div className="flex flex-col mb-3 mt-3">
+            <div className="font-medium">Feature importance</div>
             <div className="text-sm py-2 text-gray-500">
-              This SHAP beeswarm plot visualizes the impact of each feature on
-              the model’s predictions. Each dot represents an individual SHAP
-              value, with color indicating the original feature value. The
-              distribution of points shows both the magnitude and direction of
-              each feature’s effect, highlighting the most influential drivers
-              in the dataset.
+              Mean absolute SHAP value per feature across every sample in this
+              prediction — how much each taxon moved the model, regardless of
+              direction. Drawn in the browser from the explanation values, so the
+              number of features shown can be changed without recomputing
+              anything.
             </div>
-            <ShapPlotPlaceholder
-              src={selectPrediction?.beeswarm}
-              plotName="Beeswarm plot"
-              showShapLabel
-              errorReason={selectPrediction?.beeswarmError}
-              onRegenerate={onRegenBeeswarm}
-              regenerating={
-                !selectPrediction?.beeswarm && !selectPrediction?.beeswarmError
-              }
-            />
+            <GlobalImportanceChart predictionId={selectPrediction?.id} />
           </div>
           <div className="flex flex-col mb-3 mt-3 border-t-[1px] border-[#EAEAEA] pt-3">
-            <div className="font-medium">Heatmap plot</div>
+            <div className="font-medium">Beeswarm</div>
             <div className="text-sm py-2 text-gray-500">
-              This SHAP heatmap clusters data points based on their explanation
-              profiles, not raw feature values. The color intensity shows each
-              feature’s contribution to the model’s predictions, revealing
-              distinct subpopulations within the dataset.
+              One dot per sample per feature. Horizontal position is that
+              sample&apos;s SHAP value; colour is its relative abundance, scaled
+              within the row so a single dominant taxon cannot wash out the
+              others. Interactive — hover a dot for its values.
             </div>
-            <ShapPlotPlaceholder
-              src={selectPrediction?.heatmap}
-              plotName="Heatmap plot"
-              showShapLabel
-              errorReason={selectPrediction?.heatmapError}
-              onRegenerate={onRegenHeatmap}
-              regenerating={
-                !selectPrediction?.heatmap && !selectPrediction?.heatmapError
-              }
-            />
+            <GlobalBeeswarmChart predictionId={selectPrediction?.id} />
+          </div>
+          <div className="flex flex-col mb-3 mt-3 border-t-[1px] border-[#EAEAEA] pt-3">
+            <div className="font-medium">Heatmap</div>
+            <div className="text-sm py-2 text-gray-500">
+              Every sample as a column, every feature as a row, coloured by SHAP
+              value — white at zero, red above, blue below. Samples are ordered
+              by total attribution, so groups with similar explanations sit
+              together. Hover a column to see which sample it is.
+            </div>
+            <GlobalHeatmapChart predictionId={selectPrediction?.id} />
           </div>
         </div>
       </Drawer>

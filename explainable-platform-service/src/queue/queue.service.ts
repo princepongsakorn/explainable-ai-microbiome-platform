@@ -27,7 +27,10 @@ export class QueueService {
 
   // --- Targeted plot re-generation (without re-running the prediction) ---
   async addRegenWaterfallJob(predictionId: string, recordId: string) {
-    await this.predictionQueue.add('regenWaterfall', { predictionId, recordId });
+    await this.predictionQueue.add('regenWaterfall', {
+      predictionId,
+      recordId,
+    });
   }
 
   async addRegenHeatmapJob(predictionId: string) {
@@ -36,6 +39,10 @@ export class QueueService {
 
   async addRegenBeeswarmJob(predictionId: string) {
     await this.predictionQueue.add('regenBeeswarm', { predictionId });
+  }
+
+  async addRegenExplanationJob(predictionId: string) {
+    await this.predictionQueue.add('regenExplanation', { predictionId });
   }
 
   async cancelPredictionJob(predictionId: string) {
@@ -51,7 +58,9 @@ export class QueueService {
         try {
           const jobInstance = await this.predictionQueue.getJob(job.id);
           if (!jobInstance) {
-            console.warn(`[QueueService] cancelPredictionJob: Job ${job.id} does not exist.`);
+            console.warn(
+              `[QueueService] cancelPredictionJob: Job ${job.id} does not exist.`,
+            );
             continue;
           }
 
@@ -65,17 +74,25 @@ export class QueueService {
               `[QueueService] cancelPredictionJob: Canceled Job: ${job.id} (PredictionID: ${predictionId}, RecordID: ${jobData.recordId})`,
             );
           } else {
-            console.warn(`[QueueService] cancelPredictionJob: ${job.id} is already completed or failed.`);
+            console.warn(
+              `[QueueService] cancelPredictionJob: ${job.id} is already completed or failed.`,
+            );
           }
         } catch (error) {
-          console.error(`[QueueService] cancelPredictionJob: error removing job ${job.id}:`, error.message);
+          console.error(
+            `[QueueService] cancelPredictionJob: error removing job ${job.id}:`,
+            (error as Error).message,
+          );
         }
       }
     }
-    
+
     await this.recordsRepository.update(
-      { prediction: { id: predictionId }, status: In([PredictionStatus.PENDING, PredictionStatus.IN_PROGRESS]) },
-      { status: PredictionStatus.CANCELED, errorMsg: 'Job was canceled' }
+      {
+        prediction: { id: predictionId },
+        status: In([PredictionStatus.PENDING, PredictionStatus.IN_PROGRESS]),
+      },
+      { status: PredictionStatus.CANCELED, errorMsg: 'Job was canceled' },
     );
 
     // await this.recordsRepository
