@@ -221,7 +221,10 @@ function DetailList({ entries }: { entries: [string, string][] }) {
   return (
     <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-6 text-sm">
       {entries.map(([name, value]) => (
-        <div key={name} className="col-span-2 grid grid-cols-subgrid border-b py-2 last:border-b-0">
+        <div
+          key={name}
+          className="col-span-2 -mx-2 grid grid-cols-subgrid rounded-md border-b px-2 py-2 transition-colors last:border-b-0 hover:bg-muted"
+        >
           <dt className="min-w-0 break-words text-muted-foreground">{name}</dt>
           <dd className="max-w-[20rem] break-all text-right tabular-nums">{value}</dd>
         </div>
@@ -809,7 +812,7 @@ export function Experiments() {
                   </h3>
                   <DetailList
                     entries={Object.entries(runInfo.data.metrics ?? {}).map(([name, value]) => [
-                      name.replaceAll("_", " "),
+                      name,
                       displayValue(value),
                     ])}
                   />
