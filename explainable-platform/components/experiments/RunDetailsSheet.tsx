@@ -1,6 +1,14 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { CubeTransparentIcon } from "@heroicons/react/24/outline";
 
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { IRunDetail } from "@/components/model/experiments.interface";
 import { IModelType } from "@/components/model/model.interface";
 import { Badge } from "@/components/ui/badge";
@@ -210,11 +218,14 @@ export function RunDetailsSheet({
   open,
   onOpenChange,
   onChanged,
+  unavailable,
 }: {
   runId?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onChanged?: () => void;
+  /** Set when there is nothing to load, e.g. a model version since deleted. */
+  unavailable?: { title: string; description: string };
 }) {
   const [run, setRun] = useState<IRunDetail>();
   const [modelTypes, setModelTypes] = useState<IModelType[]>();
@@ -273,15 +284,19 @@ export function RunDetailsSheet({
         <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-2xl">
           <SheetHeader className="space-y-1 border-b px-6 py-4 pr-14 text-left">
             <div className="flex flex-wrap items-center gap-2">
-              <SheetTitle className="break-all">{run?.info.run_name ?? "Loading run…"}</SheetTitle>
-              {run && (
+              <SheetTitle className="break-all">
+                {unavailable?.title ?? run?.info.run_name ?? "Loading run…"}
+              </SheetTitle>
+              {run && !unavailable && (
                 <Badge variant={isPublished(run) ? "default" : "secondary"}>
                   {isPublished(run) ? "Published" : "Not Published"}
                 </Badge>
               )}
             </div>
             <SheetDescription>
-              {run
+              {unavailable
+                ? "Model version unavailable."
+                : run
                 ? `${run.info.user_name} · ${formatDateTime(run.info.start_time)} · ${formatDuration(
                     run.info.start_time,
                     run.info.end_time
@@ -291,7 +306,17 @@ export function RunDetailsSheet({
           </SheetHeader>
 
           <div className="flex flex-1 flex-col gap-8 overflow-y-auto overscroll-contain px-6 py-6">
-            {!run ? (
+            {unavailable ? (
+              <Empty className="flex-1">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <CubeTransparentIcon aria-hidden="true" />
+                  </EmptyMedia>
+                  <EmptyTitle>Model Not Found</EmptyTitle>
+                  <EmptyDescription>{unavailable.description}</EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            ) : !run ? (
               <div className="flex flex-col gap-3">
                 <Skeleton className="h-9 w-40" />
                 {Array.from({ length: 6 }, (_, index) => (

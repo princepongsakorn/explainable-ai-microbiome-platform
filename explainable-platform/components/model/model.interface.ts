@@ -68,6 +68,11 @@ export interface IPredictions {
   id: string;
   predictionNumber: number;
   modelName: string;
+  /**
+   * The registry version of `modelName` that made this prediction. Recorded
+   * since explanations started carrying it; null for older predictions.
+   */
+  modelVersion?: string | null;
   records: IRecordCounts;
   createdAt: string;
   heatmap?: string;

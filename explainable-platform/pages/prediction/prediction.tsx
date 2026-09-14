@@ -5,6 +5,7 @@ import { ChevronRightIcon, TableCellsIcon } from "@heroicons/react/24/outline";
 
 import Layout from "@/components/common/Layout";
 import { PageHeader } from "@/components/common/PageHeader";
+import { ModelLink } from "@/components/experiments/ModelLink";
 import { IPredictionSummary, IPredictions } from "@/components/model/model.interface";
 import { IPagination } from "@/components/model/pagination.interface";
 import { Pagination } from "@/components/ui/Pagination";
@@ -269,7 +270,13 @@ export function PredictionListPage() {
             <div className="min-w-0">
               <SheetTitle>Prediction {selectPrediction?.predictionNumber}</SheetTitle>
               <SheetDescription>
-                {selectPrediction?.modelName} · {selectPrediction?.records.total} samples ·{" "}
+                {selectPrediction && (
+                  <ModelLink
+                    name={selectPrediction.modelName}
+                    version={selectPrediction.modelVersion}
+                  />
+                )}{" "}
+                · {selectPrediction?.records.total} samples ·{" "}
                 {formatDateTime(selectPrediction?.createdAt)}
               </SheetDescription>
             </div>
