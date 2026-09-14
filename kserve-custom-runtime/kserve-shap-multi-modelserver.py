@@ -26,7 +26,7 @@ import mlflow  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 import shap  # noqa: E402
-from flask import Flask, jsonify, request  # noqa: E402
+from flask import Flask, g, jsonify, request  # noqa: E402
 from joblib import Memory  # noqa: E402
 from mlflow.exceptions import MlflowException  # noqa: E402
 from mlflow.server import get_app_client  # noqa: E402
@@ -128,6 +128,21 @@ _version_lock = threading.Lock()
 # Model names whose registry lookup is running in the background right now.
 _refreshing: set[str] = set()
 
+# One lock per key for work that must not run twice at once: a cold model load
+# (a 200-400 MB unpickle per copy) and a model's first registry lookup.
+_flight_locks: dict[str, threading.Lock] = {}
+_flight_locks_guard = threading.Lock()
+
+
+def _single_flight(key):
+    """The lock that lets only one caller at a time do the work named by ``key``."""
+    with _flight_locks_guard:
+        return _flight_locks.setdefault(key, threading.Lock())
+
+
+class NoProductionVersionError(ValueError):
+    """The registry answered, and no version of the model is in Production."""
+
 
 def _start_refresh(target):
     """Run ``target`` off the request thread. Tests replace this to run it inline."""
@@ -184,7 +199,7 @@ def _fetch_production_version(model_name):
     if not model_versions:
         with _version_lock:
             _version_cache.pop(model_name, None)
-        raise ValueError(
+        raise NoProductionVersionError(
             f"No model version for '{model_name}' in Production stage."
         )
 
@@ -204,7 +219,7 @@ def _refresh_in_background(model_name):
     def refresh():
         try:
             _fetch_production_version(model_name)
-        except ValueError as exc:
+        except NoProductionVersionError as exc:
             logger.warning(f"{exc} Dropped the cached version.")
         except Exception as exc:
             logger.warning(
@@ -243,7 +258,14 @@ def _resolve_production_version(model_name):
     with _version_lock:
         cached = _version_cache.get(model_name)
     if cached is None:
-        return _fetch_production_version(model_name)
+        # Concurrent first requests share one lookup: whoever holds the lock
+        # fills the cache, and the rest find it filled once they get the lock.
+        with _single_flight(f"registry:{model_name}"):
+            with _version_lock:
+                cached = _version_cache.get(model_name)
+            if cached is None:
+                return _fetch_production_version(model_name)
+        return cached[1], cached[2]
 
     if time.monotonic() - cached[0] >= _MODEL_VERSION_TTL_SECONDS:
         _refresh_in_background(model_name)
@@ -254,8 +276,12 @@ def load_explainable_model(model_name):
     """Look up the Production version of ``model_name`` and load it as an
     ``ExplainableModel`` (pyfunc-backed)."""
     version, run_id = _resolve_production_version(model_name)
-    loaded, impl = _load_explainable_cached(f"models:/{model_name}/{version}")
-    return loaded, impl, run_id
+    model_uri = f"models:/{model_name}/{version}"
+    # lru_cache does not stop concurrent misses from each loading a copy; the
+    # lock does. A warm hit holds it only for the cache lookup.
+    with _single_flight(f"load:{model_uri}"):
+        loaded, impl = _load_explainable_cached(model_uri)
+    return loaded, impl, run_id, version
 
 
 class ModelLoader:
@@ -267,7 +293,8 @@ class ModelLoader:
         mlflow.set_tracking_uri(self.mlflow_url)
 
     def load(self):
-        loaded, impl, run_id = load_explainable_model(self.model_name)
+        loaded, impl, run_id, version = load_explainable_model(self.model_name)
+        self.version = version
         logger.info(f"Loaded ExplainableModel '{self.model_name}' (run {run_id})")
 
         try:
@@ -333,6 +360,27 @@ def _aggregate_shap_by_genus(
     return values_agg, data_agg, seen
 
 
+def _positive_class_base(base, n_rows, per_class_values):
+    """The positive-class base value(s) out of whatever shape the model returned.
+
+    The ExplainableModel contract allows ``()``, ``(n_classes,)`` or
+    ``(n, n_classes)`` whichever shape ``values`` has. With per-class values a
+    trailing 2 is always the class axis. With positive-class values a 1-D pair
+    is read as per-class too — unless there are exactly two samples, where it is
+    indistinguishable from one value per sample and is kept as that.
+    """
+    base = np.asarray(base, dtype=float)
+    if base.ndim == 0:
+        return base
+    if per_class_values:
+        return base[..., 1] if base.shape[-1] == 2 else base
+    if base.ndim == 2 and base.shape[1] == 2:
+        return base[:, 1]
+    if base.ndim == 1 and base.shape[0] == 2 and n_rows != 2:
+        return base[1]
+    return base
+
+
 def get_shap_value(impl, X, aggregate_by: str | None = None):
     """Call ``impl.shap_explain(X)`` and reshape into the legacy
     ``ShapValueObject`` so the plotting helpers can stay unchanged.
@@ -351,17 +399,13 @@ def get_shap_value(impl, X, aggregate_by: str | None = None):
     # (one column per class) or (n, features) (positive class only).
     if values.ndim == 3:
         values_class = values[:, :, 1]
-        # base_values shape can be () / (2,) / (n, 2) depending on the
-        # explainer. Pick the positive-class index when present.
-        if hasattr(base, "ndim") and base.ndim >= 1:
-            base_value = base[..., 1] if base.shape[-1] == 2 else base
-        else:
-            base_value = base
     elif values.ndim == 2:
         values_class = values
-        base_value = base
     else:
         raise ValueError(f"Unsupported SHAP values shape: {values.shape}")
+    base_value = _positive_class_base(
+        base, values_class.shape[0], per_class_values=values.ndim == 3
+    )
 
     feature_names = list(X.columns)
     patient_ids = X.index
@@ -579,10 +623,13 @@ app = Flask(__name__)
 
 
 def _parse_dataframe_split(req_json):
+    # Valid JSON is not necessarily an object: a body of `null` or `[1]` must be
+    # the caller's 400, not a TypeError's 500.
+    split = req_json.get("dataframe_split") if isinstance(req_json, dict) else None
     if (
-        "dataframe_split" not in req_json
-        or "data" not in req_json["dataframe_split"]
-        or "columns" not in req_json["dataframe_split"]
+        not isinstance(split, dict)
+        or "data" not in split
+        or "columns" not in split
     ):
         return None, (
             jsonify({
@@ -624,10 +671,14 @@ def _load_model_or_error(model_name):
     response body.
     """
     try:
-        loaded, impl, input_columns = ModelLoader(model_name).load()
+        loader = ModelLoader(model_name)
+        loaded, impl, input_columns = loader.load()
+        # Read back by explain_values, so a payload names the version behind it.
+        g.model_version = getattr(loader, "version", None)
         return loaded, impl, input_columns, None
-    except ValueError as e:
-        # Raised by load_explainable_model when there is no Production version.
+    except NoProductionVersionError as e:
+        # Only a registry answer is a 404. Any other ValueError while loading —
+        # a malformed artifact, bad feature metadata — is the model failing.
         logger.warning(f"Model '{model_name}' unavailable: {e}")
         return None, None, None, (jsonify({"error": str(e)}), 404)
     except Exception as e:  # noqa: BLE001
@@ -710,6 +761,7 @@ def explain_values(model_name):
             feature_names=list(shap_object.shap_df.columns),
             sample_ids=[str(i) for i in shap_object.shap_df.index],
             model_name=model_name,
+            model_version=g.get("model_version"),
         )
         return jsonify(payload)
     except PayloadError as e:

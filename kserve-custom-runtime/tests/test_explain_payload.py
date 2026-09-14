@@ -28,6 +28,16 @@ def test_sigfig_normalises_negative_zero():
     assert math.copysign(1.0, sigfig(-0.0)) == 1.0
 
 
+def test_a_scalar_base_value_is_shared_by_every_sample():
+    p = build_payload(
+        values=[[1.0], [2.0], [3.0]],
+        base_values=0.5,
+        data=[[0.0], [0.0], [0.0]],
+        feature_names=["a"],
+    )
+    assert p["base_values"] == [0.5, 0.5, 0.5]
+
+
 def test_build_payload_shape_and_version():
     p = build_payload(
         values=np.array([[1.0, -2.0], [3.0, 4.0]]),

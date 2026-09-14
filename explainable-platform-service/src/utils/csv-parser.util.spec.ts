@@ -1,6 +1,10 @@
 import { InvalidCsvError, toNumericRows } from './csv-parser.util';
 
-const columns = ['subject_id', 'Fusobacterium_nucleatum', 'Bacteroides_fragilis'];
+const columns = [
+  'subject_id',
+  'Fusobacterium_nucleatum',
+  'Bacteroides_fragilis',
+];
 
 describe('toNumericRows', () => {
   it('converts every cell to a number', () => {
@@ -10,7 +14,9 @@ describe('toNumericRows', () => {
   });
 
   it('treats an empty cell as a true biological zero, not missing data', () => {
-    expect(toNumericRows(columns, [['s1', '', '0.5']])).toEqual([['s1', 0, 0.5]]);
+    expect(toNumericRows(columns, [['s1', '', '0.5']])).toEqual([
+      ['s1', 0, 0.5],
+    ]);
   });
 
   it('accepts scientific notation and negative numbers', () => {

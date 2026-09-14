@@ -72,11 +72,51 @@ def test_a_model_not_in_production_is_a_404_everywhere(client, server, monkeypat
             pass
 
         def load(self):
-            raise ValueError("No model version for 'm' in Production stage.")
+            raise server.NoProductionVersionError(
+                "No model version for 'm' in Production stage."
+            )
 
     monkeypatch.setattr(server, "ModelLoader", Stub)
     response = client.post(url, json=GOOD_BODY)
     assert response.status_code == 404
+
+
+@pytest.mark.parametrize("url", ENDPOINTS)
+def test_any_other_value_error_while_loading_is_a_503(client, server, monkeypatch, url):
+    """A malformed artifact must not read as "no such model"."""
+
+    class Stub:
+        def __init__(self, model_name):
+            pass
+
+        def load(self):
+            raise ValueError("feature_names.json is not a list")
+
+    monkeypatch.setattr(server, "ModelLoader", Stub)
+    response = client.post(url, json=GOOD_BODY)
+    assert response.status_code == 503
+
+
+@pytest.mark.parametrize("body", ["null", "[1]", '{"dataframe_split": null}'])
+@pytest.mark.parametrize("url", ENDPOINTS)
+def test_json_that_is_not_an_object_is_a_400(client, loadable, url, body):
+    response = client.post(url, data=body, content_type="application/json")
+    assert response.status_code == 400
+
+
+def test_the_loaded_version_is_kept_for_the_request(server, monkeypatch):
+    class Stub:
+        def __init__(self, model_name):
+            self.version = "7"
+
+        def load(self):
+            return object(), object(), ["a"]
+
+    monkeypatch.setattr(server, "ModelLoader", Stub)
+    with server.app.test_request_context():
+        *_, err = server._load_model_or_error("m")
+        assert err is None
+        assert server.g.model_version == "7"
 
 
 @pytest.mark.parametrize("url", ENDPOINTS)

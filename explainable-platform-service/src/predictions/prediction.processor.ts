@@ -255,7 +255,11 @@ export class PredictionProcessor {
       const joined = concatPayloads(chunks);
       const payload: ExplainPayload = {
         ...joined,
-        ...sampleLabelsFor(records, prediction.dfColumns ?? [], joined.feature_names),
+        ...sampleLabelsFor(
+          records,
+          prediction.dfColumns ?? [],
+          joined.feature_names,
+        ),
       };
       const raw = Buffer.from(JSON.stringify(payload), 'utf8');
       const etag = createHash('sha256').update(raw).digest('hex');

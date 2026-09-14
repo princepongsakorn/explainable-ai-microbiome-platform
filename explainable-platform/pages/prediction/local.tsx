@@ -25,6 +25,7 @@ import { useRouter } from "next/router";
 import { LocalWaterfallChart } from "@/components/shap/ExplanationCharts";
 import {
   invalidateExplanation,
+  revalidateExplanation,
   setExplanationProgress,
 } from "@/lib/useExplanation";
 import { queryToString } from "@/lib/queryToString";
@@ -474,7 +475,15 @@ export function History() {
     // was down is lost. Re-fetch once on every (re)connect so the table is
     // reconciled with the server before we start applying live patches.
     onOpen() {
-      getPredictionsList();
+      getPredictionsList().then((data) => {
+        if (!data) return;
+        // The open drawer holds its own copy of the record; reconcile it too.
+        setSelectPrediction((prev) =>
+          prev ? data.items.find((it) => it.id === prev.id) ?? prev : prev
+        );
+      });
+      // An explanation finished or rebuilt while the socket was down.
+      if (predictionId) revalidateExplanation(predictionId);
     },
     onMessage(ev) {
       if (!ev.data) return;

@@ -100,6 +100,10 @@ def build_payload(
     names = [str(n) for n in feature_names]
 
     n_samples = len(value_rows)
+    if np.ndim(base_values) == 0 and n_samples > 1:
+        # A bare scalar is the documented shape for one base value every Sample
+        # shares. A one-element list is not: that is a count mismatch.
+        base_row = base_row * n_samples
     if len(data_rows) != n_samples:
         raise PayloadError(
             f"data has {len(data_rows)} Samples but values has {n_samples}"

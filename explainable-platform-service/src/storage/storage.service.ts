@@ -32,7 +32,8 @@ export class StorageService {
 
   constructor(private configService: ConfigService) {
     this.bucketName = this.configService.get<string>('GCS_BUCKET') ?? '';
-    this.prefix = this.configService.get<string>('GCS_PREDICTIONS_PREFIX') ?? 'predictions';
+    this.prefix =
+      this.configService.get<string>('GCS_PREDICTIONS_PREFIX') ?? 'predictions';
     this.signedUrlTtlSec = parseInt(
       this.configService.get<string>('GCS_SIGNED_URL_TTL_SEC') ?? '3600',
       10,

@@ -12,35 +12,35 @@ function fakeRedisPair() {
   let publishFails = false;
 
   const sub: EventsRedis = {
-    publish: async () => 0,
-    subscribe: async (...channels: string[]) => {
+    publish: () => Promise.resolve(0),
+    subscribe: (...channels: string[]) => {
       channels.forEach((c) => subscribed.add(c));
-      return channels.length;
+      return Promise.resolve(channels.length);
     },
-    unsubscribe: async (...channels: string[]) => {
+    unsubscribe: (...channels: string[]) => {
       channels.forEach((c) => subscribed.delete(c));
-      return channels.length;
+      return Promise.resolve(channels.length);
     },
     on: (_event, cb) => {
       listeners.push(cb);
       return sub;
     },
-    quit: async () => 'OK',
+    quit: () => Promise.resolve('OK'),
     disconnect: () => undefined,
   };
 
   const pub: EventsRedis = {
-    publish: async (channel: string, message: string) => {
-      if (publishFails) throw new Error('redis down');
+    publish: (channel: string, message: string) => {
+      if (publishFails) return Promise.reject(new Error('redis down'));
       if (subscribed.has(channel)) {
         listeners.forEach((cb) => cb(channel, message));
       }
-      return 1;
+      return Promise.resolve(1);
     },
-    subscribe: async () => 0,
-    unsubscribe: async () => 0,
+    subscribe: () => Promise.resolve(0),
+    unsubscribe: () => Promise.resolve(0),
     on: () => pub,
-    quit: async () => 'OK',
+    quit: () => Promise.resolve('OK'),
     disconnect: () => undefined,
   };
 
@@ -62,7 +62,9 @@ describe('EventsHub', () => {
     const redis = fakeRedisPair();
     const hub = new EventsHub(redis.pub, redis.sub);
 
-    const received = firstValueFrom(hub.subscribe('prediction:p1').pipe(take(1)));
+    const received = firstValueFrom(
+      hub.subscribe('prediction:p1').pipe(take(1)),
+    );
     await hub.flush();
     hub.publish('prediction:p1', 'thing:happened', { n: 1 });
 
@@ -76,7 +78,9 @@ describe('EventsHub', () => {
     const redis = fakeRedisPair();
     const hub = new EventsHub(redis.pub, redis.sub);
 
-    const received = firstValueFrom(hub.subscribe('prediction:p1').pipe(take(1)));
+    const received = firstValueFrom(
+      hub.subscribe('prediction:p1').pipe(take(1)),
+    );
     await hub.flush();
 
     redis.deliverFromElsewhere(
@@ -108,7 +112,9 @@ describe('EventsHub', () => {
     const redis = fakeRedisPair();
     const hub = new EventsHub(redis.pub, redis.sub);
 
-    const subscription = hub.subscribe('prediction:p1').subscribe(() => undefined);
+    const subscription = hub
+      .subscribe('prediction:p1')
+      .subscribe(() => undefined);
     await hub.flush();
     expect(redis.subscribed.has('events:prediction:p1')).toBe(true);
 
@@ -121,7 +127,9 @@ describe('EventsHub', () => {
     const redis = fakeRedisPair();
     const hub = new EventsHub(redis.pub, redis.sub);
 
-    const received = firstValueFrom(hub.subscribe('prediction:p1').pipe(take(1)));
+    const received = firstValueFrom(
+      hub.subscribe('prediction:p1').pipe(take(1)),
+    );
     await hub.flush();
     redis.breakPublish();
 
@@ -143,7 +151,7 @@ describe('EventsHub', () => {
     await hub.flush();
     hub.publish('prediction:p1', 'second', { n: 2 });
 
-    const events = (await collected) as MessageEvent[];
+    const events: MessageEvent[] = await collected;
     expect(events.map((e) => e.type)).toEqual(['first', 'second']);
   });
 

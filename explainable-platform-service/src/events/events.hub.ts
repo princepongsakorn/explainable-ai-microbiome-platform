@@ -57,7 +57,10 @@ export class EventsHub implements OnModuleDestroy {
       const stream = this.streams.get(topic);
       if (!stream) return;
       try {
-        const { type, data } = JSON.parse(message);
+        const { type, data } = JSON.parse(message) as {
+          type: string;
+          data: unknown;
+        };
         stream.next({ type, data } as MessageEvent);
       } catch (error) {
         this.logger.warn(
@@ -103,11 +106,13 @@ export class EventsHub implements OnModuleDestroy {
       stream = new Subject<MessageEvent>();
       this.streams.set(topic, stream);
       this.track(
-        this.subscriber.subscribe(channel).catch((error) =>
-          this.logger.warn(
-            `subscribe to ${channel} failed: ${(error as Error).message}`,
+        this.subscriber
+          .subscribe(channel)
+          .catch((error) =>
+            this.logger.warn(
+              `subscribe to ${channel} failed: ${(error as Error).message}`,
+            ),
           ),
-        ),
       );
     }
 
@@ -118,11 +123,13 @@ export class EventsHub implements OnModuleDestroy {
           current.complete();
           this.streams.delete(topic);
           this.track(
-            this.subscriber.unsubscribe(channel).catch((error) =>
-              this.logger.warn(
-                `unsubscribe from ${channel} failed: ${(error as Error).message}`,
+            this.subscriber
+              .unsubscribe(channel)
+              .catch((error) =>
+                this.logger.warn(
+                  `unsubscribe from ${channel} failed: ${(error as Error).message}`,
+                ),
               ),
-            ),
           );
         }
       }),
