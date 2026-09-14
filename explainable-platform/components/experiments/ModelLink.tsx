@@ -57,6 +57,7 @@ export function ModelLink({ name, version }: { name: string; version?: string | 
         runId={runId}
         open={open}
         onOpenChange={setOpen}
+        readOnly
         unavailable={
           missing
             ? {
