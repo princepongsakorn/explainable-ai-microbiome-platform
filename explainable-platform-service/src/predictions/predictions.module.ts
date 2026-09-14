@@ -25,6 +25,11 @@ import { ConfigModule } from '@nestjs/config';
     ConfigModule,
   ],
   controllers: [PredictionsController],
-  providers: [PredictionsService, PredictionProcessor, StorageService, QueueService],
+  providers: [
+    PredictionsService,
+    PredictionProcessor,
+    StorageService,
+    QueueService,
+  ],
 })
 export class PredictionsModule {}

@@ -77,6 +77,15 @@ export function concatPayloads(chunks: ExplainPayload[]): ExplainPayload {
         `chunk ${index} has different feature_names from the first; refusing to concatenate`,
       );
     }
+    // A job runs for minutes, and the runtime follows Production promotions
+    // while it does. Values from two models are not one Explanation.
+    if ((chunk.model_version ?? null) !== (first.model_version ?? null)) {
+      throw new Error(
+        `chunk ${index} was explained by model version ${chunk.model_version ?? 'unknown'} ` +
+          `but the first by ${first.model_version ?? 'unknown'}; the model changed ` +
+          `during the job, so rebuild the explanation`,
+      );
+    }
   }
 
   // Absent sample_ids is meaningful — a third-party payload need not carry them —
@@ -181,7 +190,9 @@ export function sampleLabelsFor(
   });
 
   const column = hasIdColumn ? header.trim() : '';
-  return column ? { sample_labels, sample_label_column: column } : { sample_labels };
+  return column
+    ? { sample_labels, sample_label_column: column }
+    : { sample_labels };
 }
 
 /** The outcome of adding labels to one stored payload. */
@@ -209,7 +220,10 @@ export function backfillSampleLabels(
     return { status: 'skipped', reason: 'already has sample_labels' };
   }
   if (!payload.sample_ids) {
-    return { status: 'skipped', reason: 'has no sample_ids to join records on' };
+    return {
+      status: 'skipped',
+      reason: 'has no sample_ids to join records on',
+    };
   }
 
   const byId = new Map(records.map((record) => [record.id, record]));

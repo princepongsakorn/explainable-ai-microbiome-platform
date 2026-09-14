@@ -93,9 +93,8 @@ export class PredictionsController {
     @Headers('if-none-match') ifNoneMatch: string | undefined,
     @Res() res: Response,
   ) {
-    const { key, etag } = await this.predictionsService.getExplanationRef(
-      predictionId,
-    );
+    const { key, etag } =
+      await this.predictionsService.getExplanationRef(predictionId);
     const quoted = `"${etag}"`;
 
     res.setHeader('ETag', quoted);

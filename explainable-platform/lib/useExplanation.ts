@@ -55,12 +55,19 @@ function notify(entry: Entry) {
   entry.listeners.forEach((listener) => listener());
 }
 
-function messageFor(error: { response?: { status?: number } }): string {
+type RequestError = {
+  response?: { status?: number; data?: { message?: unknown } };
+};
+
+function messageFor(error: RequestError): string {
+  const status = error?.response?.status;
   // 404 means "not computed yet", which is the normal state while the job runs
   // and for predictions made before this pipeline existed.
-  return error?.response?.status === 404
-    ? "No explanation for this prediction yet."
-    : "The explanation could not be loaded.";
+  if (status === 404) return "No explanation for this prediction yet.";
+  // 422 means the job ran and failed; the server's message says why.
+  const message = error?.response?.data?.message;
+  if (status === 422 && typeof message === "string") return message;
+  return "The explanation could not be loaded.";
 }
 
 function load(predictionId: string) {
@@ -80,10 +87,16 @@ function load(predictionId: string) {
         entry.error = undefined;
         entry.progress = undefined;
       },
-      (requestError) => {
+      (requestError: RequestError) => {
         if (entry.stale) return;
+        // No response at all — the network dropped — says nothing about the
+        // explanation, so a chart that is already drawn stays drawn.
+        if (entry.data && !requestError?.response) return;
         entry.data = undefined;
         entry.error = messageFor(requestError);
+        // The frame shows progress ahead of an error, so a failure after any
+        // progress event would otherwise read "Computing…" indefinitely.
+        entry.progress = undefined;
       }
     )
     .then(() => {
@@ -123,6 +136,23 @@ export function invalidateExplanation(predictionId: string) {
     // The request in flight may have left before the change it is being told
     // about — a 404 sent just before the job finished — so fetch again once it
     // lands instead of trusting its answer.
+    entry.stale = true;
+    return;
+  }
+  load(predictionId);
+}
+
+/**
+ * Fetch a Prediction's Explanation again, keeping what is drawn meanwhile.
+ *
+ * For an SSE (re)connect: events sent while the socket was down are lost, so a
+ * finished or rebuilt explanation may have gone unannounced. An unchanged one
+ * costs a 304.
+ */
+export function revalidateExplanation(predictionId: string) {
+  const entry = store.get(predictionId);
+  if (!entry) return;
+  if (entry.loading) {
     entry.stale = true;
     return;
   }

@@ -61,12 +61,25 @@ describe('concatPayloads', () => {
 
   it('rejects chunks whose feature_names disagree', () => {
     const bad = { ...chunk(['s3'], 2), feature_names: ['a', 'c'] };
-    expect(() => concatPayloads([chunk(['s1'], 1), bad])).toThrow(/feature_names/);
+    expect(() => concatPayloads([chunk(['s1'], 1), bad])).toThrow(
+      /feature_names/,
+    );
   });
 
   it('rejects chunks whose contract_version disagrees', () => {
     const bad = { ...chunk(['s3'], 2), contract_version: 2 };
-    expect(() => concatPayloads([chunk(['s1'], 1), bad])).toThrow(/contract_version/);
+    expect(() => concatPayloads([chunk(['s1'], 1), bad])).toThrow(
+      /contract_version/,
+    );
+  });
+
+  it('rejects chunks explained by different model versions', () => {
+    expect(() =>
+      concatPayloads([
+        { ...chunk(['s1'], 1), model_version: '3' },
+        { ...chunk(['s2'], 1), model_version: '4' },
+      ]),
+    ).toThrow(/model version 4 but the first by 3/);
   });
 
   it('rejects an empty chunk list', () => {
@@ -75,8 +88,9 @@ describe('concatPayloads', () => {
 
   it('omits sample_ids entirely when no chunk carried them', () => {
     const withoutIds = (ids: string[]) => {
-      const { sample_ids, ...rest } = chunk(ids, 1);
-      return rest as ExplainPayload;
+      const rest: ExplainPayload = chunk(ids, 1);
+      delete rest.sample_ids;
+      return rest;
     };
     const out = concatPayloads([withoutIds(['s1']), withoutIds(['s2'])]);
     expect(out.sample_ids).toBeUndefined();
@@ -140,16 +154,17 @@ describe('sliceSample', () => {
   });
 
   it('throws when the payload carries no sample_ids at all', () => {
-    const { sample_ids, ...anonymous } = payload;
-    expect(() => sliceSample(anonymous as ExplainPayload, 's1')).toThrow(
-      /sample_ids/,
-    );
+    const anonymous: ExplainPayload = { ...payload };
+    delete anonymous.sample_ids;
+    expect(() => sliceSample(anonymous, 's1')).toThrow(/sample_ids/);
   });
 
   it('preserves additivity: base + sum(values) is unchanged by slicing', () => {
-    const whole = payload.base_values[1] + payload.values[1].reduce((a, b) => a + b, 0);
+    const whole =
+      payload.base_values[1] + payload.values[1].reduce((a, b) => a + b, 0);
     const sliced = sliceSample(payload, 's2');
-    const part = sliced.base_values[0] + sliced.values[0].reduce((a, b) => a + b, 0);
+    const part =
+      sliced.base_values[0] + sliced.values[0].reduce((a, b) => a + b, 0);
     expect(part).toBeCloseTo(whole, 10);
   });
 });
@@ -182,7 +197,11 @@ describe('sampleLabelsFor', () => {
   });
 
   it('omits the column name when the header is blank, as a pandas index writes it', () => {
-    const out = sampleLabelsFor([record(7, 'AHCNC2ADXX')], ['', ...features], features);
+    const out = sampleLabelsFor(
+      [record(7, 'AHCNC2ADXX')],
+      ['', ...features],
+      features,
+    );
     expect(out.sample_labels).toEqual(['AHCNC2ADXX']);
     expect(out.sample_label_column).toBeUndefined();
   });
@@ -208,8 +227,16 @@ describe('sampleLabelsFor', () => {
 describe('sample labels through concat and slice', () => {
   it('concatenates sample_labels in order and keeps the column name', () => {
     const out = concatPayloads([
-      { ...chunk(['a'], 1), sample_labels: ['SAMD1'], sample_label_column: 'sample_id' },
-      { ...chunk(['b'], 2), sample_labels: ['SAMD2'], sample_label_column: 'sample_id' },
+      {
+        ...chunk(['a'], 1),
+        sample_labels: ['SAMD1'],
+        sample_label_column: 'sample_id',
+      },
+      {
+        ...chunk(['b'], 2),
+        sample_labels: ['SAMD2'],
+        sample_label_column: 'sample_id',
+      },
     ]);
     expect(out.sample_labels).toEqual(['SAMD1', 'SAMD2']);
     expect(out.sample_label_column).toBe('sample_id');
@@ -249,7 +276,9 @@ describe('backfillSampleLabels', () => {
     const before = payload();
     const result = backfillSampleLabels(before, records, columns);
     if (result.status !== 'updated') throw new Error('expected an update');
-    const { sample_labels, sample_label_column, ...rest } = result.payload;
+    const rest: ExplainPayload = { ...result.payload };
+    delete rest.sample_labels;
+    delete rest.sample_label_column;
     expect(rest).toEqual(before);
   });
 
@@ -262,7 +291,8 @@ describe('backfillSampleLabels', () => {
   });
 
   it('skips a payload without sample_ids, which cannot be joined to records', () => {
-    const { sample_ids, ...noIds } = payload();
+    const noIds = payload();
+    delete noIds.sample_ids;
     const result = backfillSampleLabels(noIds, records, columns);
     expect(result.status).toBe('skipped');
   });
@@ -275,4 +305,3 @@ describe('backfillSampleLabels', () => {
     });
   });
 });
-

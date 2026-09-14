@@ -1,4 +1,12 @@
-import { ReactNode, useEffect, useState } from "react";
+import {
+  ReactNode,
+  RefObject,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { ArrowsPointingOutIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { genusOf } from "shap-svg";
@@ -60,13 +68,52 @@ function useViewportWidth(active: boolean) {
   return width;
 }
 
-/** Escape to close, and no scrolling the page behind the overlay. */
-function useOverlayBehaviour(open: boolean, close: () => void) {
+const FOCUSABLE =
+  'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+/**
+ * What aria-modal promises: focus moves into the dialog, Tab cannot leave it,
+ * Escape closes it, and focus returns to whatever opened it. Also no scrolling
+ * the page behind the overlay.
+ */
+function useOverlayBehaviour(
+  open: boolean,
+  close: () => void,
+  dialogRef: RefObject<HTMLDivElement>
+) {
   useEffect(() => {
     if (!open) return;
 
+    const opener =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    dialogRef.current?.focus();
+
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
+      if (event.key === "Escape") {
+        close();
+        return;
+      }
+      const dialog = dialogRef.current;
+      if (event.key !== "Tab" || !dialog) return;
+
+      const focusable = Array.from(
+        dialog.querySelectorAll<HTMLElement>(FOCUSABLE)
+      ).filter((element) => !element.hasAttribute("disabled"));
+      if (focusable.length === 0) {
+        event.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      const outside = !dialog.contains(active);
+      if (event.shiftKey && (active === first || active === dialog || outside)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || outside)) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", onKey);
 
@@ -76,8 +123,9 @@ function useOverlayBehaviour(open: boolean, close: () => void) {
     return () => {
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = previousOverflow;
+      opener?.focus();
     };
-  }, [open, close]);
+  }, [open, close, dialogRef]);
 }
 
 /**
@@ -116,11 +164,19 @@ function ChartFrame({
   // A portal needs a document, which the server render does not have.
   const [mounted, setMounted] = useState(false);
 
+  // Three frames can share a drawer, and the expanded view repeats the
+  // controls, so the slider's id cannot come from the prediction alone.
+  const sliderId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  // Stable, or the overlay effect would re-run — and re-focus — every render.
+  const closeExpanded = useCallback(() => setExpanded(false), []);
+
   useEffect(() => setMounted(true), []);
-  useOverlayBehaviour(expanded, () => setExpanded(false));
+  useOverlayBehaviour(expanded, closeExpanded, dialogRef);
   const viewportWidth = useViewportWidth(expanded);
 
-  if (loading) {
+  // Only while there is nothing to show: a revalidation keeps the chart up.
+  if (loading && !explanation) {
     return <div className="text-sm text-gray-400 py-4">Loading explanation…</div>;
   }
   if (error || !explanation) {
@@ -143,13 +199,15 @@ function ChartFrame({
   const sliderMax = Math.min(MAX_DISPLAY, featureCount);
   const shown = Math.min(maxDisplay, sliderMax);
 
-  const controls = (
+  const controls = (placement: "inline" | "expanded") => (
     <div className="flex items-center gap-3 text-sm text-gray-600">
-      <label htmlFor={`max-display-${predictionId}`}>Features shown</label>
+      <label htmlFor={`${sliderId}-${placement}`}>Features shown</label>
       <input
-        id={`max-display-${predictionId}`}
+        id={`${sliderId}-${placement}`}
         type="range"
-        min={MIN_DISPLAY}
+        // A chart with fewer rows than the usual minimum still gets a slider
+        // whose range is valid.
+        min={Math.min(MIN_DISPLAY, sliderMax)}
         max={sliderMax}
         value={shown}
         onChange={(event) => setMaxDisplay(Number(event.target.value))}
@@ -209,7 +267,7 @@ function ChartFrame({
   return (
     <div>
       <div className="flex items-center gap-3 mb-2">
-        <div className="flex-1">{controls}</div>
+        <div className="flex-1">{controls("inline")}</div>
         <button
           type="button"
           onClick={() => setExpanded(true)}
@@ -241,10 +299,12 @@ function ChartFrame({
           // the containing block for a fixed overlay and trap it there.
           // Portalling to body is what keeps "full screen" meaning full screen.
           <div
+            ref={dialogRef}
             role="dialog"
             aria-modal="true"
             aria-label={title}
-            className="fixed inset-0 z-[9999] bg-black/60 flex items-center justify-center p-4"
+            tabIndex={-1}
+            className="fixed inset-0 z-[9999] bg-black/60 flex items-center justify-center p-4 outline-none"
             onClick={() => setExpanded(false)}
           >
             <div
@@ -262,7 +322,9 @@ function ChartFrame({
                   <XMarkIcon className="w-5 h-5 text-gray-600" />
                 </button>
               </div>
-              <div className="px-4 py-3 border-b border-gray-200">{controls}</div>
+              <div className="px-4 py-3 border-b border-gray-200">
+                {controls("expanded")}
+              </div>
               <div className="flex-1 overflow-auto p-4">
                 {children({
                   explanation,

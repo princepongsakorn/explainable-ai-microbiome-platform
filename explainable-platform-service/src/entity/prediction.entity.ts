@@ -3,7 +3,6 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
-  BeforeInsert,
 } from 'typeorm';
 
 @Entity()
@@ -12,14 +11,14 @@ export class Prediction {
   id: string;
 
   @Column({ unique: true })
-  prediction_number: number; 
+  prediction_number: number;
 
   @Column()
   modelName: string;
 
   @Column('jsonb')
-  dfColumns: string[]
-  
+  dfColumns: string[];
+
   @Column({ type: 'decimal', precision: 10, scale: 4, default: 0.5 })
   threshold: number;
 

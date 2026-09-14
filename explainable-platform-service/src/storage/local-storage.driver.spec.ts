@@ -52,7 +52,9 @@ describe('LocalStorageDriver', () => {
     await expect(
       driver.save('../../etc/passwd', Buffer.from('no')),
     ).rejects.toThrow(/outside/);
-    expect(() => driver.createReadStream('../../etc/passwd')).toThrow(/outside/);
+    expect(() => driver.createReadStream('../../etc/passwd')).toThrow(
+      /outside/,
+    );
   });
 
   it('reports a missing key as a rejection, not a hang', async () => {

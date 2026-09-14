@@ -1,4 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  CreateDateColumn,
+} from 'typeorm';
 import { Prediction } from './prediction.entity';
 import { PredictionStatus } from 'src/interface/prediction-class.enum';
 @Entity()
@@ -37,7 +43,11 @@ export class PredictionRecord {
   @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;
 
-  @Column({ type: 'enum', enum: PredictionStatus, default: PredictionStatus.PENDING })
+  @Column({
+    type: 'enum',
+    enum: PredictionStatus,
+    default: PredictionStatus.PENDING,
+  })
   status: PredictionStatus;
 
   @Column({ type: 'text', nullable: true })

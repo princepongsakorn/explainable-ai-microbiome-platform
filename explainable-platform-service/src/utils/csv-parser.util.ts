@@ -1,4 +1,3 @@
-import { Multer } from 'multer';
 import { Readable } from 'stream';
 import * as Papa from 'papaparse';
 
@@ -10,18 +9,19 @@ export class InvalidCsvError extends Error {
   }
 }
 
-export async function parseCsv(
-  file: Multer.File,
-): Promise<{ dfColumns: string[]; dfDataRows: any[][] }> {
+/** Only the bytes are read; an uploaded Multer file satisfies this. */
+export async function parseCsv(file: {
+  buffer: Buffer;
+}): Promise<{ dfColumns: string[]; dfDataRows: string[][] }> {
   return new Promise((resolve, reject) => {
     const stream = Readable.from(file.buffer);
-    Papa.parse(stream, {
+    Papa.parse<string[]>(stream, {
       // Without this, a file ending in a newline yields a trailing [''] row,
       // which becomes an empty PredictionRecord and then an unexplainable
       // all-missing Sample.
       skipEmptyLines: true,
       complete: (result) => {
-        const csvData = result?.data as any[][];
+        const csvData = result?.data;
         if (!csvData?.length) {
           reject(new InvalidCsvError('The file has no rows.'));
           return;
@@ -29,7 +29,9 @@ export async function parseCsv(
         resolve({ dfColumns: csvData[0], dfDataRows: csvData.slice(1) });
       },
       error: (error: Error) =>
-        reject(new InvalidCsvError(`The file could not be read: ${error.message}`)),
+        reject(
+          new InvalidCsvError(`The file could not be read: ${error.message}`),
+        ),
     });
   });
 }
@@ -52,7 +54,7 @@ export async function parseCsv(
  */
 export function toNumericRows(
   columns: string[],
-  rows: any[][],
+  rows: unknown[][],
 ): (string | number)[][] {
   return rows.map((row, rowIndex) => {
     if (row.length > columns.length) {
@@ -65,26 +67,27 @@ export function toNumericRows(
     // A row that stops early has left its trailing cells empty, and an empty
     // cell is an absent taxon. Sent on short, pandas would fill those cells with
     // NaN and the runtime would reject the whole chunk as non-numeric.
-    const given = row as unknown[];
     const cells: unknown[] =
-      given.length < columns.length
-        ? [
-            ...given,
-            ...new Array<string>(columns.length - given.length).fill(''),
-          ]
-        : given;
+      row.length < columns.length
+        ? [...row, ...new Array<string>(columns.length - row.length).fill('')]
+        : row;
 
     return cells.map((cell, columnIndex) => {
       if (columnIndex === 0) return cell as string | number;
 
-      const text = String(cell ?? '').trim();
+      const text =
+        typeof cell === 'number'
+          ? String(cell)
+          : typeof cell === 'string'
+            ? cell.trim()
+            : '';
       if (text === '') return 0;
 
       const value = Number(text);
       if (!Number.isFinite(value)) {
         throw new InvalidCsvError(
           `Row ${rowIndex + 2}, column "${columns[columnIndex] ?? columnIndex}" ` +
-            `is "${cell}", which is not a number.`,
+            `is "${text}", which is not a number.`,
         );
       }
       return value;

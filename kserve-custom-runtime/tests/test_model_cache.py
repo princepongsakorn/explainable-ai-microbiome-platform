@@ -126,6 +126,65 @@ def test_an_empty_production_stage_is_an_answer_not_an_outage(clean, monkeypatch
         clean._resolve_production_version("m")
 
 
+def test_concurrent_first_requests_share_one_registry_lookup(clean, monkeypatch):
+    import threading
+    import time
+
+    calls = []
+
+    class SlowClient:
+        def get_latest_versions(self, name, stages):
+            calls.append(name)
+            time.sleep(0.05)
+            return [_Version()]
+
+    monkeypatch.setattr(clean.mlflow.tracking, "MlflowClient", SlowClient)
+    results = []
+    threads = [
+        threading.Thread(target=lambda: results.append(clean._resolve_production_version("m")))
+        for _ in range(5)
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert results == [("3", "run-abc")] * 5
+    assert len(calls) == 1
+
+
+def test_concurrent_cold_loads_unpickle_the_model_once(clean, monkeypatch):
+    import threading
+    import time
+
+    class Impl(clean.ExplainableModel):
+        def predict(self, *a, **k):  # pragma: no cover - never called
+            raise NotImplementedError
+
+        def shap_explain(self, *a, **k):  # pragma: no cover - never called
+            raise NotImplementedError
+
+    loaded = type("Loaded", (), {"_model_impl": type("M", (), {"python_model": Impl()})()})()
+    loads = []
+
+    def slow_disk_load(model_uri):
+        loads.append(model_uri)
+        time.sleep(0.05)
+        return loaded
+
+    monkeypatch.setattr(clean, "_load_pyfunc_cached", slow_disk_load)
+    _stub_client(monkeypatch, clean, [_Version()])
+    clean._resolve_production_version("m")
+
+    threads = [threading.Thread(target=clean.load_explainable_model, args=("m",)) for _ in range(5)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert len(loads) == 1
+
+
 def test_the_model_is_unpickled_once_for_repeated_requests(clean, monkeypatch):
     loads = []
 

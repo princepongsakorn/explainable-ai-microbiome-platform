@@ -2,12 +2,17 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindManyOptions, In, Repository } from 'typeorm';
 import { Prediction } from '../entity/prediction.entity';
 import { PredictionRecord } from '../entity/prediction-record.entity';
-import { InvalidCsvError, parseCsv, toNumericRows } from '../utils/csv-parser.util';
+import {
+  InvalidCsvError,
+  parseCsv,
+  toNumericRows,
+} from '../utils/csv-parser.util';
 import { QueueService } from '../queue/queue.service';
 import { Multer } from 'multer';
 import { v4 as uuidv4 } from 'uuid';
@@ -25,8 +30,17 @@ import {
   sliceSample,
 } from './explain.builder';
 
+/**
+ * Parsed payloads kept for the per-Sample route. Each is the whole matrix — up
+ * to 500 x ~900 values twice over, tens of MB once parsed — so only a couple.
+ */
+const PARSED_PAYLOAD_CACHE_SIZE = 2;
+
 @Injectable()
 export class PredictionsService {
+  /** Keyed by object key and ETag, least recently used first. */
+  private readonly parsedPayloads = new Map<string, Promise<ExplainPayload>>();
+
   constructor(
     @InjectRepository(Prediction)
     private predictionsRepository: Repository<Prediction>,
@@ -282,12 +296,15 @@ export class PredictionsService {
     if (!prediction) {
       throw new NotFoundException(`Prediction ${predictionId} not found`);
     }
-    if (!prediction.explainKey || !prediction.explainEtag) {
-      throw new NotFoundException(
-        prediction.explainError
-          ? `Explanation failed: ${prediction.explainError}`
-          : 'Explanation is not ready yet',
+    if (prediction.explainError) {
+      // Distinct from "not ready": the job ran and failed, and the reason is
+      // what the person looking at the drawer needs to see.
+      throw new UnprocessableEntityException(
+        `Explanation failed: ${prediction.explainError}`,
       );
+    }
+    if (!prediction.explainKey || !prediction.explainEtag) {
+      throw new NotFoundException('Explanation is not ready yet');
     }
     return { key: prediction.explainKey, etag: prediction.explainEtag };
   }
@@ -306,17 +323,47 @@ export class PredictionsService {
    * Prediction.
    */
   async sliceExplanationForRecord(predictionId: string, recordId: string) {
-    const { key } = await this.getExplanationRef(predictionId);
-    const compressed = await this.storageService.download(key);
-    const payload = JSON.parse(
-      gunzipSync(compressed).toString('utf8'),
-    ) as ExplainPayload;
+    const { key, etag } = await this.getExplanationRef(predictionId);
+    const payload = await this.parsedPayload(key, etag);
 
     try {
       return sliceSample(payload, recordId);
     } catch (error) {
       throw new NotFoundException((error as Error).message);
     }
+  }
+
+  /**
+   * The stored payload, downloaded and parsed once per version.
+   *
+   * Without this every record opened read and gunzipped the whole matrix again.
+   * The ETag in the key means a rebuilt explanation is never served from here
+   * stale, and concurrent requests for the same one share a single download.
+   */
+  private parsedPayload(key: string, etag: string): Promise<ExplainPayload> {
+    const cacheKey = `${key}#${etag}`;
+    const cached = this.parsedPayloads.get(cacheKey);
+    if (cached) {
+      this.parsedPayloads.delete(cacheKey);
+      this.parsedPayloads.set(cacheKey, cached);
+      return cached;
+    }
+
+    const loading = this.storageService
+      .download(key)
+      .then(
+        (compressed) =>
+          JSON.parse(gunzipSync(compressed).toString('utf8')) as ExplainPayload,
+      );
+    // A failed read is not remembered; the next request tries again.
+    loading.catch(() => this.parsedPayloads.delete(cacheKey));
+    this.parsedPayloads.set(cacheKey, loading);
+
+    for (const oldest of this.parsedPayloads.keys()) {
+      if (this.parsedPayloads.size <= PARSED_PAYLOAD_CACHE_SIZE) break;
+      this.parsedPayloads.delete(oldest);
+    }
+    return loading;
   }
 
   /**
@@ -333,10 +380,22 @@ export class PredictionsService {
       throw new NotFoundException(`Prediction ${predictionId} not found`);
     }
 
-    prediction.explainKey = null;
-    prediction.explainEtag = null;
-    prediction.explainError = null;
-    await this.predictionsRepository.save(prediction);
+    // Every explain field, the versions included: they describe the artifact
+    // being thrown away, and a rebuild that fails must not inherit them.
+    await this.predictionsRepository.update(predictionId, {
+      explainKey: null,
+      explainEtag: null,
+      explainError: null,
+      explainModelVersion: null,
+      explainContractVersion: null,
+    });
+    // An open drawer is still drawing the old explanation. Tell it now, not
+    // when the rebuild finishes minutes from now.
+    this.eventsHub.publishPrediction(predictionId, 'prediction:explanation', {
+      ready: false,
+      etag: null,
+      error: null,
+    });
 
     await this.queueService.addRegenExplanationJob(predictionId);
     return { message: `Explanation rebuild queued for ${predictionId}.` };

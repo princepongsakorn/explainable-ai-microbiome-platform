@@ -20,6 +20,7 @@
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
+    "@google-cloud/storage": "^7.13.0",
     "@nestjs/axios": "^4.0.0",
     "@nestjs/bull": "^11.0.2",
     "@nestjs/common": "^11.0.8",
@@ -29,7 +30,6 @@
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.8",
     "@nestjs/typeorm": "^11.0.0",
-    "@google-cloud/storage": "^7.13.0",
     "axios": "^1.7.9",
     "bcryptjs": "^3.0.2",
     "bull": "^4.16.5",
@@ -57,6 +57,7 @@
     "@types/express": "^5.0.0",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.10.7",
+    "@types/papaparse": "5.3.15",
     "@types/passport-jwt": "^4.0.1",
     "@types/supertest": "^6.0.2",
     "@types/uuid": "^10.0.0",

@@ -20,6 +20,7 @@ import { useRouter } from "next/router";
 import { queryToString } from "@/lib/queryToString";
 import {
   invalidateExplanation,
+  revalidateExplanation,
   setExplanationProgress,
 } from "@/lib/useExplanation";
 import {
@@ -64,6 +65,8 @@ export function History() {
             return data.items.find((it) => it.id === prev.id) ?? prev;
           });
         });
+        // An explanation finished or rebuilt while the socket was down.
+        if (selectPrediction?.id) revalidateExplanation(selectPrediction.id);
       },
       onMessage(ev) {
         if (!ev.data) return;

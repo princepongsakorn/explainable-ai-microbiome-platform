@@ -55,7 +55,9 @@ async function main() {
     logger: ['error'],
   });
 
-  const predictions = app.get<Repository<Prediction>>(getRepositoryToken(Prediction));
+  const predictions = app.get<Repository<Prediction>>(
+    getRepositoryToken(Prediction),
+  );
   const records = app.get<Repository<PredictionRecord>>(
     getRepositoryToken(PredictionRecord),
   );
@@ -63,7 +65,13 @@ async function main() {
 
   const candidates = await predictions.find({
     where: { explainKey: Not(IsNull()) },
-    select: ['id', 'prediction_number', 'dfColumns', 'explainKey', 'explainEtag'],
+    select: [
+      'id',
+      'prediction_number',
+      'dfColumns',
+      'explainKey',
+      'explainEtag',
+    ],
     order: { prediction_number: 'ASC' },
   });
 
@@ -72,13 +80,19 @@ async function main() {
     const tag = `#${prediction.prediction_number}`;
     try {
       const original = await storage.download(prediction.explainKey!);
-      const payload = JSON.parse(gunzipSync(original).toString('utf8')) as ExplainPayload;
+      const payload = JSON.parse(
+        gunzipSync(original).toString('utf8'),
+      ) as ExplainPayload;
       const rows = await records.find({
         where: { prediction: { id: prediction.id } },
         select: ['id', 'record_number', 'dfData'],
       });
 
-      const result = backfillSampleLabels(payload, rows, prediction.dfColumns ?? []);
+      const result = backfillSampleLabels(
+        payload,
+        rows,
+        prediction.dfColumns ?? [],
+      );
       if (result.status === 'skipped') {
         tally.skipped++;
         console.log(`skip          ${tag}: ${result.reason}`);
@@ -90,23 +104,38 @@ async function main() {
       const example = `${column ? `${column}: ` : ''}${labels.slice(0, 2).join(', ')}`;
       if (dryRun) {
         tally.updated++;
-        console.log(`would update  ${tag}: ${labels.length} labels, e.g. ${example}`);
+        console.log(
+          `would update  ${tag}: ${labels.length} labels, e.g. ${example}`,
+        );
         continue;
       }
 
       // Keep the original beside the rewritten file before touching it.
-      await storage.uploadJsonGzip(original, prediction.id, 'explain.pre-labels.json.gz');
+      await storage.uploadJsonGzip(
+        original,
+        prediction.id,
+        'explain.pre-labels.json.gz',
+      );
 
       // Same serialisation and hash as PredictionProcessor.buildExplanation, so the
       // ETag means the same thing whichever path wrote the file. A new ETag is what
       // makes a browser holding the old one fetch the labelled payload.
       const raw = Buffer.from(JSON.stringify(result.payload), 'utf8');
       const etag = createHash('sha256').update(raw).digest('hex');
-      const key = await storage.uploadJsonGzip(gzipSync(raw), prediction.id, 'explain.json.gz');
-      await predictions.update({ id: prediction.id }, { explainKey: key, explainEtag: etag });
+      const key = await storage.uploadJsonGzip(
+        gzipSync(raw),
+        prediction.id,
+        'explain.json.gz',
+      );
+      await predictions.update(
+        { id: prediction.id },
+        { explainKey: key, explainEtag: etag },
+      );
 
       tally.updated++;
-      console.log(`updated       ${tag}: ${labels.length} labels, e.g. ${example}`);
+      console.log(
+        `updated       ${tag}: ${labels.length} labels, e.g. ${example}`,
+      );
     } catch (error) {
       tally.failed++;
       console.error(`failed        ${tag}: ${(error as Error).message}`);
