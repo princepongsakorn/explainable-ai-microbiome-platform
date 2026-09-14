@@ -239,4 +239,5 @@ explanation = impl.shap_explain(X)
 }
 
 Tokens.Layout = Layout;
+Tokens.title = "MLflow and Deployment";
 export default Tokens;

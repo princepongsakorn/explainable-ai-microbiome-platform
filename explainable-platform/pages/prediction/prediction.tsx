@@ -267,4 +267,5 @@ export function History() {
 }
 
 History.Layout = Layout;
+History.title = "Prediction List";
 export default History;

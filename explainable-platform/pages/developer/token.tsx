@@ -105,4 +105,5 @@ mlflow.set_tracking_uri("${mlflowUrl}")
 }
 
 Tokens.Layout = Layout;
+Tokens.title = "Personal Access Tokens";
 export default Tokens;
