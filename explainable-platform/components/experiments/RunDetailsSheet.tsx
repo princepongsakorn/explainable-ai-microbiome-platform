@@ -41,7 +41,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { displayValue, formatDateTime, formatDuration } from "@/lib/format";
+import { EMPTY_VALUE, displayValue, formatDateTime, formatDuration } from "@/lib/format";
+import { isProductionStage } from "@/lib/models";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import {
   getRunById,
@@ -49,8 +50,6 @@ import {
   putUnPublicModelByRunId,
 } from "@/pages/api/experiments";
 import { getModelsType } from "@/pages/api/model";
-
-const isPublished = (run?: IRunDetail) => run?.models?.[0]?.current_stage === "Production";
 
 /**
  * Publish stores the model type and description as JSON in the model version's
@@ -220,8 +219,15 @@ export function RunDetailsSheet({
   onChanged,
   unavailable,
   readOnly = false,
+  version,
 }: {
   runId?: string;
+  /**
+   * The registry version to show. A run can be registered more than once, so
+   * a caller that knows the exact version passes it; otherwise the run's
+   * first version is shown.
+   */
+  version?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onChanged?: () => void;
@@ -280,9 +286,13 @@ export function RunDetailsSheet({
     notifySuccess("Model Unpublished");
   };
 
-  const model = run?.models?.[0];
-  const published = parsePublishDescription(model?.description);
-  const modelType = modelTypes?.find((type) => type.id === published.typeId);
+  // With a version asked for, only that version: never another one of the run's.
+  const model = version
+    ? run?.models?.find((candidate) => candidate.version === version)
+    : run?.models?.[0];
+  const inProduction = isProductionStage(model?.current_stage);
+  const publishNote = parsePublishDescription(model?.description);
+  const modelType = modelTypes?.find((type) => type.id === publishNote.typeId);
 
   return (
     <>
@@ -294,8 +304,8 @@ export function RunDetailsSheet({
                 {unavailable?.title ?? run?.info.run_name ?? "Loading run…"}
               </SheetTitle>
               {run && !unavailable && (
-                <Badge variant={isPublished(run) ? "default" : "secondary"}>
-                  {isPublished(run) ? "Published" : "Not Published"}
+                <Badge variant={inProduction ? "default" : "secondary"}>
+                  {inProduction ? "Published" : "Not Published"}
                 </Badge>
               )}
             </div>
@@ -333,7 +343,7 @@ export function RunDetailsSheet({
               <>
                 {!readOnly && (
                   <div>
-                    {isPublished(run) ? (
+                    {inProduction ? (
                       <Button variant="outline" onClick={() => setUnpublishOpen(true)}>
                         Unpublish Model…
                       </Button>
@@ -353,14 +363,14 @@ export function RunDetailsSheet({
                         ? [
                             ["Name", model.name],
                             ["Version", model.version],
-                            ["Stage", isPublished(run) ? "Production" : model.current_stage || "None"],
+                            ["Stage", model.current_stage || "None"],
                             [
                               "Type",
                               modelType
                                 ? `${modelType.name} (${modelType.description})`
-                                : published.typeId ?? "—",
+                                : publishNote.typeId ?? EMPTY_VALUE,
                             ],
-                            ["Description", published.text || "—"],
+                            ["Description", publishNote.text || EMPTY_VALUE],
                           ]
                         : []
                     }
@@ -396,23 +406,27 @@ export function RunDetailsSheet({
         </SheetContent>
       </Sheet>
 
-      <PublishDialog
-        open={publishOpen}
-        modelTypes={modelTypes}
-        onOpenChange={setPublishOpen}
-        onPublish={publish}
-      />
-      <ConfirmDialog
-        open={unpublishOpen}
-        onOpenChange={setUnpublishOpen}
-        destructive
-        title="Unpublish This Model?"
-        description="It will no longer be offered when uploading files. You can publish it again later."
-        confirmLabel="Unpublish"
-        pendingLabel="Unpublishing…"
-        errorTitle="Couldn’t Unpublish Model"
-        onConfirm={unpublish}
-      />
+      {!readOnly && (
+        <>
+          <PublishDialog
+            open={publishOpen}
+            modelTypes={modelTypes}
+            onOpenChange={setPublishOpen}
+            onPublish={publish}
+          />
+          <ConfirmDialog
+            open={unpublishOpen}
+            onOpenChange={setUnpublishOpen}
+            destructive
+            title="Unpublish This Model?"
+            description="It will no longer be offered when uploading files. You can publish it again later."
+            confirmLabel="Unpublish"
+            pendingLabel="Unpublishing…"
+            errorTitle="Couldn’t Unpublish Model"
+            onConfirm={unpublish}
+          />
+        </>
+      )}
     </>
   );
 }
