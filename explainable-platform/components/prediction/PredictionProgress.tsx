@@ -1,0 +1,56 @@
+import { IRecordCounts, PredictionStatus } from "@/components/model/model.interface";
+import { STATUS_STYLE } from "@/components/prediction/StatusBadge";
+
+const BAR_ORDER = [
+  PredictionStatus.SUCCESS,
+  PredictionStatus.ERROR,
+  PredictionStatus.CANCELED,
+  PredictionStatus.IN_PROGRESS,
+  PredictionStatus.PENDING,
+] as const;
+
+/** How far a prediction's samples have got, as a bar and in words. */
+export function PredictionProgress({ records }: { records: IRecordCounts }) {
+  const { byStatus, total } = records;
+
+  // A backend without per-status counts still says how many succeeded or failed.
+  if (!byStatus) {
+    return (
+      <span className="text-xs tabular-nums text-muted-foreground">
+        {records.success + records.error} / {total} done
+      </span>
+    );
+  }
+
+  const done = byStatus.SUCCESS + byStatus.ERROR + byStatus.CANCELED;
+  const breakdown = BAR_ORDER.filter((status) => byStatus[status] > 0)
+    .map((status) => `${byStatus[status]} ${STATUS_STYLE[status].label.toLowerCase()}`)
+    .join(", ");
+
+  return (
+    <div className="flex min-w-[10rem] flex-col gap-1.5" title={breakdown || "No samples"}>
+      <div aria-hidden="true" className="flex h-1.5 w-full overflow-hidden rounded-full bg-muted">
+        {total > 0 &&
+          BAR_ORDER.map(
+            (status) =>
+              byStatus[status] > 0 && (
+                <div
+                  key={status}
+                  className={STATUS_STYLE[status].dot}
+                  style={{ width: `${(byStatus[status] / total) * 100}%` }}
+                />
+              )
+          )}
+      </div>
+      <span className="text-xs tabular-nums text-muted-foreground">
+        {done} / {total} done
+        {byStatus.ERROR > 0 && (
+          <span className="text-destructive">
+            {" "}
+            · {byStatus.ERROR} {byStatus.ERROR === 1 ? "error" : "errors"}
+          </span>
+        )}
+      </span>
+    </div>
+  );
+}

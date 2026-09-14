@@ -5,7 +5,7 @@ import { ChevronRightIcon, TableCellsIcon } from "@heroicons/react/24/outline";
 
 import Layout from "@/components/common/Layout";
 import { PageHeader } from "@/components/common/PageHeader";
-import { IPredictions } from "@/components/model/model.interface";
+import { IPredictionSummary, IPredictions } from "@/components/model/model.interface";
 import { IPagination } from "@/components/model/pagination.interface";
 import { Pagination } from "@/components/ui/Pagination";
 import {
@@ -14,6 +14,9 @@ import {
   GlobalImportanceChart,
 } from "@/components/shap/ExplanationCharts";
 import { ChartSection } from "@/components/shap/ChartSection";
+import { PredictionProgress } from "@/components/prediction/PredictionProgress";
+import { PredictionResults } from "@/components/prediction/PredictionResults";
+import { PredictionSummary } from "@/components/prediction/PredictionSummary";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -48,13 +51,18 @@ import {
   revalidateExplanation,
   setExplanationProgress,
 } from "@/lib/useExplanation";
-import { getPredictions } from "../api/predict";
+import { getPredictionSummary, getPredictions } from "../api/predict";
+
+// While a prediction on the page is still running, look again this often.
+const LIST_POLL_INTERVAL_MS = 15_000;
 
 export function PredictionListPage() {
   const router = useRouter();
   const [predictions, setPredictions] = useState<IPagination<IPredictions>>();
   const [isOpen, setIsOpen] = useState(false);
   const [selectPrediction, setSelectPrediction] = useState<IPredictions>();
+  // undefined while loading, null if it failed.
+  const [summary, setSummary] = useState<IPredictionSummary | null>();
 
   const currentPage = Number(router.query.page) || 1;
 
@@ -63,6 +71,11 @@ export function PredictionListPage() {
     setPredictions(data);
     return data;
   };
+
+  const loadSummary = () =>
+    getPredictionSummary()
+      .then(setSummary)
+      .catch(() => setSummary(null));
 
   // Live heatmap/beeswarm updates while the drawer is open on a prediction.
   useSse(
@@ -122,6 +135,28 @@ export function PredictionListPage() {
     getPredictionsRecordList();
   }, [currentPage]);
 
+  useEffect(() => {
+    loadSummary();
+  }, []);
+
+  const hasActiveWork =
+    predictions?.items.some(
+      (item) =>
+        (item.records.byStatus?.PENDING ?? 0) + (item.records.byStatus?.IN_PROGRESS ?? 0) > 0
+    ) ?? false;
+
+  // Poll only while something on this page is still running, and not while
+  // the tab is hidden.
+  useEffect(() => {
+    if (!hasActiveWork) return;
+    const intervalId = setInterval(() => {
+      if (document.hidden) return;
+      getPredictionsRecordList();
+      loadSummary();
+    }, LIST_POLL_INTERVAL_MS);
+    return () => clearInterval(intervalId);
+  }, [hasActiveWork, currentPage]);
+
   const items = predictions?.items;
 
   return (
@@ -131,6 +166,8 @@ export function PredictionListPage() {
         description="Every uploaded file and the model that predicted it. Open one to see what drove its predictions."
       />
 
+      <PredictionSummary summary={summary} />
+
       <div className="flex flex-col gap-4">
         <div className="rounded-lg border">
           <Table>
@@ -138,7 +175,8 @@ export function PredictionListPage() {
               <TableRow>
                 <TableHead>Prediction</TableHead>
                 <TableHead>Model</TableHead>
-                <TableHead className="text-right">Samples</TableHead>
+                <TableHead>Progress</TableHead>
+                <TableHead>Results</TableHead>
                 <TableHead>Created</TableHead>
               </TableRow>
             </TableHeader>
@@ -146,7 +184,7 @@ export function PredictionListPage() {
               {!items ? (
                 Array.from({ length: 5 }, (_, row) => (
                   <TableRow key={row}>
-                    {Array.from({ length: 4 }, (_, cell) => (
+                    {Array.from({ length: 5 }, (_, cell) => (
                       <TableCell key={cell}>
                         <Skeleton className="h-4 w-24" />
                       </TableCell>
@@ -155,7 +193,7 @@ export function PredictionListPage() {
                 ))
               ) : items.length === 0 ? (
                 <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={4} className="p-0">
+                  <TableCell colSpan={5} className="p-0">
                     <Empty className="py-16">
                       <EmptyHeader>
                         <EmptyMedia variant="icon">
@@ -197,11 +235,14 @@ export function PredictionListPage() {
                         {prediction.predictionNumber}
                       </button>
                     </TableCell>
-                    <TableCell className="max-w-[20rem] truncate">
+                    <TableCell className="max-w-[16rem] truncate">
                       {prediction.modelName}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {prediction.records.total}
+                    <TableCell>
+                      <PredictionProgress records={prediction.records} />
+                    </TableCell>
+                    <TableCell>
+                      <PredictionResults byClass={prediction.records.byClass} />
                     </TableCell>
                     <TableCell className="whitespace-nowrap tabular-nums">
                       {formatDateTime(prediction.createdAt)}

@@ -63,6 +63,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { classLabel } from "@/lib/classes";
 import { displayValue, formatPercent } from "@/lib/format";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { queryToString } from "@/lib/queryToString";
@@ -125,7 +126,7 @@ function usePredictionStatus(): PredictionStatus {
 /** One wording for the predicted class, in the table and the drawer alike. */
 function classificationLabel(value?: number | null): string {
   if (value === null || value === undefined) return "—";
-  return value === 0 ? "Probable negative" : "Probable positive";
+  return `Probable ${classLabel(value).toLowerCase()}`;
 }
 
 function FilterGroup<T extends string>({
