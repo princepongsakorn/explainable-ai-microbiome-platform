@@ -4,6 +4,7 @@ import { ArrowPathIcon, CubeIcon } from "@heroicons/react/24/outline";
 
 import Layout from "@/components/common/Layout";
 import { PageHeader } from "@/components/common/PageHeader";
+import { RunDetailsSheet } from "@/components/experiments/RunDetailsSheet";
 import { getExperimentsModelList } from "../api/experiments";
 import { IRegisteredModelLatestVersions } from "@/components/model/experiments.interface";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,8 @@ import { notifyError } from "@/lib/notify";
 export function RegisteredModelsPage() {
   const [models, setModels] = useState<IRegisteredModelLatestVersions[]>();
   const [refreshing, setRefreshing] = useState(false);
+  const [openRunId, setOpenRunId] = useState<string>();
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   // Only each model's production version is listed: that is the one the
   // upload page offers.
@@ -58,6 +61,11 @@ export function RegisteredModelsPage() {
     }
   };
 
+  const openModel = (runId: string) => {
+    setOpenRunId(runId);
+    setSheetOpen(true);
+  };
+
   useEffect(() => {
     getModels().catch(() => setModels([]));
   }, []);
@@ -66,7 +74,7 @@ export function RegisteredModelsPage() {
     <div className="flex flex-col gap-6 p-8">
       <PageHeader
         title="Registered Models"
-        description="Models published to production, with the version the upload page offers."
+        description="Models published to production, with the version the upload page offers. Open one to see its details or unpublish it."
         actions={
           <Button variant="outline" size="sm" onClick={refresh} disabled={refreshing}>
             {refreshing ? <Spinner /> : <ArrowPathIcon aria-hidden="true" />}
@@ -120,8 +128,25 @@ export function RegisteredModelsPage() {
               </TableRow>
             ) : (
               models.map((model) => (
-                <TableRow key={`${model.name}-${model.version}`}>
-                  <TableCell className="font-medium">{model.name}</TableCell>
+                // The row is a large click target for the mouse; the button
+                // in its first cell is the same action for the keyboard.
+                <TableRow
+                  key={`${model.name}-${model.version}`}
+                  className="cursor-pointer"
+                  onClick={() => openModel(model.run_id)}
+                >
+                  <TableCell>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openModel(model.run_id);
+                      }}
+                      className="rounded-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      {model.name}
+                    </button>
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">{model.version}</TableCell>
                   <TableCell className="whitespace-nowrap tabular-nums">
                     {formatDateTime(model.creation_timestamp)}
@@ -132,6 +157,17 @@ export function RegisteredModelsPage() {
           </TableBody>
         </Table>
       </div>
+
+      <RunDetailsSheet
+        runId={openRunId}
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        onChanged={() => {
+          // An unpublished model leaves this list, so its sheet closes with it.
+          setSheetOpen(false);
+          getModels().catch(() => undefined);
+        }}
+      />
     </div>
   );
 }
