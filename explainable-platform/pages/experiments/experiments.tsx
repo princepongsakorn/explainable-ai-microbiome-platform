@@ -10,55 +10,24 @@ import {
 
 import Layout from "@/components/common/Layout";
 import { PageHeader } from "@/components/common/PageHeader";
-import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import { RunDetailsSheet } from "@/components/experiments/RunDetailsSheet";
 import {
   getExperimentsList,
   getExperimentsById,
-  getRunById,
-  putPublicModelByRunId,
-  putUnPublicModelByRunId,
+  getExperimentsModelList,
   postDescriptionExperiments,
 } from "../api/experiments";
-import { getModelsType } from "../api/model";
 import {
   IExperiment,
   IExperimentsRunResponse,
   IRun,
-  IRunDetail,
 } from "@/components/model/experiments.interface";
-import { IModelType } from "@/components/model/model.interface";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
-import { Textarea } from "@/components/ui/textarea";
-import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import {
   Table,
   TableBody,
@@ -90,149 +59,6 @@ type SortOrder = "ASC" | "DESC";
 // over SSE — a lightweight poll is the pragmatic choice here.
 const RUNS_POLL_INTERVAL_MS = 15_000;
 
-const isPublished = (run?: IRunDetail) => run?.models?.[0]?.current_stage === "Production";
-
-const PublishDialog = (props: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onPublish: (data: { model: IModelType; description: string }) => Promise<void>;
-}) => {
-  const [modelTypes, setModelTypes] = useState<IModelType[]>();
-  const [typeId, setTypeId] = useState<string>();
-  const [description, setDescription] = useState("");
-  const [errors, setErrors] = useState<{ type?: string; description?: string }>({});
-  const [pending, setPending] = useState(false);
-
-  useEffect(() => {
-    if (!props.open) return;
-    setTypeId(undefined);
-    setDescription("");
-    setErrors({});
-    if (!modelTypes) {
-      getModelsType()
-        .then(setModelTypes)
-        .catch(() => setModelTypes([]));
-    }
-  }, [props.open]);
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    const model = modelTypes?.find((type) => type.id === typeId);
-    const next = {
-      type: model ? undefined : "Choose what this model predicts.",
-      description: description.trim()
-        ? undefined
-        : "Describe the model so others know when to use it.",
-    };
-    setErrors(next);
-    if (!model || next.description) return;
-
-    setPending(true);
-    try {
-      await props.onPublish({ model, description: description.trim() });
-      props.onOpenChange(false);
-    } catch {
-      notifyError("Couldn’t Publish Model", "Nothing was changed. Try again in a moment.");
-    } finally {
-      setPending(false);
-    }
-  };
-
-  return (
-    <Dialog open={props.open} onOpenChange={(open) => !pending && props.onOpenChange(open)}>
-      <DialogContent className="sm:max-w-xl">
-        <form noValidate onSubmit={submit} className="flex flex-col gap-6">
-          <DialogHeader>
-            <DialogTitle>Publish Model to Production</DialogTitle>
-            <DialogDescription>
-              Published models are offered to everyone uploading files for prediction.
-            </DialogDescription>
-          </DialogHeader>
-          <FieldGroup className="gap-5">
-            <Field data-invalid={errors.type ? true : undefined}>
-              <FieldLabel htmlFor="publish-model-type">Model type</FieldLabel>
-              <Select
-                value={typeId}
-                onValueChange={(value) => {
-                  setTypeId(value);
-                  setErrors((prev) => ({ ...prev, type: undefined }));
-                }}
-                disabled={!modelTypes}
-              >
-                <SelectTrigger
-                  id="publish-model-type"
-                  aria-invalid={errors.type ? true : undefined}
-                >
-                  <SelectValue
-                    placeholder={modelTypes ? "Choose what the model predicts…" : "Loading types…"}
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {modelTypes?.map((type) => (
-                      <SelectItem key={type.id} value={type.id}>
-                        {type.name} ({type.description})
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              {errors.type && <FieldError>{errors.type}</FieldError>}
-            </Field>
-            <Field data-invalid={errors.description ? true : undefined}>
-              <FieldLabel htmlFor="publish-description">Description</FieldLabel>
-              <Textarea
-                id="publish-description"
-                rows={4}
-                className="resize-y"
-                placeholder="Its purpose, training data, or when to use it…"
-                aria-invalid={errors.description ? true : undefined}
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-              />
-              {errors.description && <FieldError>{errors.description}</FieldError>}
-            </Field>
-          </FieldGroup>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={pending}
-              onClick={() => props.onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={pending}>
-              {pending && <Spinner />}
-              {pending ? "Publishing…" : "Publish Model"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-};
-
-/** A two-column list of names and values, for the run drawer. */
-function DetailList({ entries }: { entries: [string, string][] }) {
-  if (entries.length === 0) {
-    return <p className="text-sm text-muted-foreground">None recorded.</p>;
-  }
-  return (
-    <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-6 text-sm">
-      {entries.map(([name, value]) => (
-        <div
-          key={name}
-          className="col-span-2 -mx-2 grid grid-cols-subgrid rounded-md border-b px-2 py-2 transition-colors last:border-b-0 hover:bg-muted"
-        >
-          <dt className="min-w-0 break-words text-muted-foreground">{name}</dt>
-          <dd className="max-w-[20rem] break-all text-right tabular-nums">{value}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
 export function Experiments() {
   const [experiments, setExperiments] = useState<IExperiment[]>();
   const [experimentsLoading, setExperimentsLoading] = useState<boolean>(true);
@@ -243,9 +69,9 @@ export function Experiments() {
   const [refreshing, setRefreshing] = useState(false);
   const [sort, setSort] = useState<{ key: string; order: SortOrder }>();
   const [isOpen, setIsOpen] = useState(false);
-  const [runInfo, setRunInfo] = useState<IRunDetail>();
-  const [publishOpen, setPublishOpen] = useState(false);
-  const [unpublishOpen, setUnpublishOpen] = useState(false);
+  const [openRunId, setOpenRunId] = useState<string>();
+  // run_id → version, for runs whose model version is in Production.
+  const [publishedRuns, setPublishedRuns] = useState<Map<string, string>>(new Map());
 
   // Description
   const [experimentsDescription, setExperimentsDescription] = useState<string>();
@@ -255,9 +81,25 @@ export function Experiments() {
   // Set once the user clicks "Load more": polling would otherwise collapse
   // the expanded view back to page 1. Reset when the scope changes.
   const loadedMoreRef = useRef(false);
-  // The run the drawer was last asked to show, so a slow response for an
-  // earlier click cannot replace a later one.
-  const requestedRunRef = useRef<string>();
+
+  // Which runs are published comes from the registered-models list: MLflow
+  // reports each model's latest version per stage, with its run.
+  const loadPublishedRuns = async () => {
+    try {
+      const { registered_models } = await getExperimentsModelList();
+      setPublishedRuns(
+        new Map(
+          registered_models.flatMap((registered) =>
+            (registered.latest_versions ?? [])
+              .filter((version) => version.current_stage === "Production")
+              .map((version) => [version.run_id, version.version] as [string, string])
+          )
+        )
+      );
+    } catch {
+      // Keep the last known state; the column is secondary to the runs.
+    }
+  };
 
   useEffect(() => {
     const getExperiments = async () => {
@@ -270,6 +112,7 @@ export function Experiments() {
       setSelectedExperiments(experiments[0]);
     };
     getExperiments();
+    loadPublishedRuns();
   }, []);
 
   useEffect(() => {
@@ -317,6 +160,7 @@ export function Experiments() {
           { pageToken: "", orderBy }
         );
         setRuns(data);
+        loadPublishedRuns();
       } catch (err) {
         // Transient failures are fine — the next tick retries.
         // eslint-disable-next-line no-console
@@ -336,6 +180,7 @@ export function Experiments() {
       );
       setRunLoading(false);
       setRuns(data);
+      await loadPublishedRuns();
     }
   };
 
@@ -411,50 +256,9 @@ export function Experiments() {
     }
   };
 
-  // Opens straight away and fills in when the run arrives, so the click is
-  // answered even on a slow MLflow.
-  const loadRunInfo = async (id: string) => {
-    requestedRunRef.current = id;
-    setRunInfo(undefined);
+  const openRun = (runId: string) => {
+    setOpenRunId(runId);
     setIsOpen(true);
-    try {
-      const run = await getRunById(id);
-      if (requestedRunRef.current === id && run.run) {
-        setRunInfo(run.run);
-      }
-    } catch {
-      if (requestedRunRef.current === id) {
-        setIsOpen(false);
-        notifyError("Couldn’t Open Run", "MLflow didn’t answer. Try again in a moment.");
-      }
-    }
-  };
-
-  // Refresh the drawer's run info in place, without forcing the drawer open.
-  // Used after publish/unpublish so the button state reflects the new stage.
-  const refreshRunInfo = async (id: string) => {
-    const run = await getRunById(id);
-    if (run.run) {
-      setRunInfo(run.run);
-    }
-  };
-
-  const publishModel = async (data: { model: IModelType; description: string }) => {
-    const id = runInfo?.info.run_id;
-    if (!id) return;
-    await putPublicModelByRunId(id, data);
-    // Refresh the drawer (so the button flips to "Unpublish")
-    // and the runs table (so the stage column updates).
-    await Promise.all([refreshRunInfo(id), getExperiment()]);
-    notifySuccess("Model Published", "It is now offered when uploading files.");
-  };
-
-  const unPublishModel = async () => {
-    const id = runInfo?.info.run_id;
-    if (!id) return;
-    await putUnPublicModelByRunId(id);
-    await Promise.all([refreshRunInfo(id), getExperiment()]);
-    notifySuccess("Model Unpublished");
   };
 
   const collectKeys = (runs: IRun[] | undefined, field: "metrics" | "parameters") => {
@@ -500,8 +304,7 @@ export function Experiments() {
     }
   };
 
-  const model = runInfo?.models?.[0];
-  const columnCount = 4 + metricsHeaders.length + parametersHeaders.length;
+  const columnCount = 5 + metricsHeaders.length + parametersHeaders.length;
 
   return (
     <div className="flex flex-col gap-6 p-8">
@@ -625,7 +428,7 @@ export function Experiments() {
               {(metricsHeaders.length > 0 || parametersHeaders.length > 0) && (
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="sticky left-0 z-20 bg-muted" />
-                  <TableHead colSpan={3} className="bg-muted" />
+                  <TableHead colSpan={4} className="bg-muted" />
                   {metricsHeaders.length > 0 && (
                     <TableHead colSpan={metricsHeaders.length} className="border-l bg-muted text-center">
                       Metrics
@@ -645,6 +448,7 @@ export function Experiments() {
                 <TableHead className="sticky left-0 z-20 whitespace-nowrap border-r bg-muted">
                   Run Name
                 </TableHead>
+                <TableHead className="whitespace-nowrap bg-muted">Model</TableHead>
                 <TableHead className="whitespace-nowrap bg-muted">Created</TableHead>
                 <TableHead className="whitespace-nowrap bg-muted text-right">Duration</TableHead>
                 <TableHead className="whitespace-nowrap bg-muted">User</TableHead>
@@ -656,7 +460,7 @@ export function Experiments() {
               {runLoading ? (
                 Array.from({ length: 8 }, (_, row) => (
                   <TableRow key={row}>
-                    {Array.from({ length: 4 }, (_, cell) => (
+                    {Array.from({ length: 5 }, (_, cell) => (
                       <TableCell key={cell}>
                         <Skeleton className="h-4 w-24" />
                       </TableCell>
@@ -686,19 +490,26 @@ export function Experiments() {
                   <TableRow
                     key={run.info.run_id}
                     className="group cursor-pointer hover:bg-muted"
-                    onClick={() => loadRunInfo(run.info.run_id)}
+                    onClick={() => openRun(run.info.run_id)}
                   >
                     <TableCell className="sticky left-0 z-[1] whitespace-nowrap border-r bg-background group-hover:bg-muted">
                       <button
                         type="button"
                         onClick={(event) => {
                           event.stopPropagation();
-                          loadRunInfo(run.info.run_id);
+                          openRun(run.info.run_id);
                         }}
                         className="rounded-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         {run.info.run_name}
                       </button>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {publishedRuns.has(run.info.run_id) ? (
+                        <Badge>Published · v{publishedRuns.get(run.info.run_id)}</Badge>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell
                       className="whitespace-nowrap"
@@ -746,110 +557,13 @@ export function Experiments() {
         </div>
       </div>
 
-      <Sheet open={isOpen} onOpenChange={setIsOpen}>
-        <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-2xl">
-          <SheetHeader className="space-y-1 border-b px-6 py-4 pr-14 text-left">
-            <div className="flex flex-wrap items-center gap-2">
-              <SheetTitle className="break-all">
-                {runInfo?.info.run_name ?? "Loading run…"}
-              </SheetTitle>
-              {runInfo && (
-                <Badge variant={isPublished(runInfo) ? "default" : "secondary"}>
-                  {isPublished(runInfo) ? "Published" : "Not Published"}
-                </Badge>
-              )}
-            </div>
-            <SheetDescription>
-              {runInfo
-                ? `${runInfo.info.user_name} · ${formatDateTime(runInfo.info.start_time)} · ${formatDuration(
-                    runInfo.info.start_time,
-                    runInfo.info.end_time
-                  )}`
-                : "Fetching the run from MLflow."}
-            </SheetDescription>
-          </SheetHeader>
-
-          <div className="flex flex-1 flex-col gap-8 overflow-y-auto overscroll-contain px-6 py-6">
-            {!runInfo ? (
-              <div className="flex flex-col gap-3">
-                <Skeleton className="h-9 w-40" />
-                {Array.from({ length: 6 }, (_, index) => (
-                  <Skeleton key={index} className="h-5" />
-                ))}
-              </div>
-            ) : (
-              <>
-                <div>
-                  {isPublished(runInfo) ? (
-                    <Button variant="outline" onClick={() => setUnpublishOpen(true)}>
-                      Unpublish Model…
-                    </Button>
-                  ) : (
-                    <Button onClick={() => setPublishOpen(true)}>Publish Model…</Button>
-                  )}
-                </div>
-
-                <section aria-labelledby="run-model-heading" className="flex flex-col gap-2">
-                  <h3 id="run-model-heading" className="text-sm font-semibold">
-                    Model
-                  </h3>
-                  <DetailList
-                    entries={
-                      model
-                        ? [
-                            ["Name", model.name],
-                            ["Version", model.version],
-                            ["Stage", isPublished(runInfo) ? "Production" : model.current_stage || "None"],
-                          ]
-                        : []
-                    }
-                  />
-                </section>
-                <Separator />
-                <section aria-labelledby="run-metrics-heading" className="flex flex-col gap-2">
-                  <h3 id="run-metrics-heading" className="text-sm font-semibold">
-                    Metrics
-                  </h3>
-                  <DetailList
-                    entries={Object.entries(runInfo.data.metrics ?? {}).map(([name, value]) => [
-                      name,
-                      displayValue(value),
-                    ])}
-                  />
-                </section>
-                <Separator />
-                <section aria-labelledby="run-parameters-heading" className="flex flex-col gap-2">
-                  <h3 id="run-parameters-heading" className="text-sm font-semibold">
-                    Parameters
-                  </h3>
-                  <DetailList
-                    entries={Object.entries(runInfo.data.parameters ?? {}).map(([name, value]) => [
-                      name,
-                      displayValue(value),
-                    ])}
-                  />
-                </section>
-              </>
-            )}
-          </div>
-        </SheetContent>
-      </Sheet>
-
-      <PublishDialog
-        open={publishOpen}
-        onOpenChange={setPublishOpen}
-        onPublish={publishModel}
-      />
-      <ConfirmDialog
-        open={unpublishOpen}
-        onOpenChange={setUnpublishOpen}
-        destructive
-        title="Unpublish This Model?"
-        description="It will no longer be offered when uploading files. You can publish it again later."
-        confirmLabel="Unpublish"
-        pendingLabel="Unpublishing…"
-        errorTitle="Couldn’t Unpublish Model"
-        onConfirm={unPublishModel}
+      <RunDetailsSheet
+        runId={openRunId}
+        open={isOpen}
+        onOpenChange={setIsOpen}
+        onChanged={() => {
+          getExperiment();
+        }}
       />
     </div>
   );
