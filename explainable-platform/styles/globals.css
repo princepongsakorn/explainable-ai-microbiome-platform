@@ -16,7 +16,7 @@ html {
  * the one behind it.
  */
 body > .app-overlay[data-state="open"] ~ .app-overlay {
-  background-color: rgb(0 0 0 / 0.2);
+  background-color: rgb(0 0 0 / 0.3);
 }
 
 a,
