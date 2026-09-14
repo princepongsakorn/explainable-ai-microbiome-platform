@@ -7,4 +7,11 @@ module.exports = {
   publicRuntimeConfig: {
     api: process.env.API,
   },
+  // There is no home page: sign-in lands on "/", which used to render empty.
+  // The prediction list is where a signed-in visitor is sent from login too.
+  async redirects() {
+    return [
+      { source: '/', destination: '/prediction/prediction', permanent: false },
+    ];
+  },
 };
