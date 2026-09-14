@@ -481,10 +481,7 @@ export function History() {
       try {
         const payload = JSON.parse(ev.data);
         if (ev.event === "record:update") {
-          // Patches the table row and the open drawer together. The waterfall
-          // spinner clears on its own here: once the event carries a
-          // waterfall URL or a waterfallError, the derived in-progress flag
-          // becomes false.
+          // Patches the table row and the open drawer together.
           patchRecord(payload.id, payload);
         }
         // The waterfall reads the explanation over HTTP, so these two events

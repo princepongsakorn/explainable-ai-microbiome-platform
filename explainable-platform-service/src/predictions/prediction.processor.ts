@@ -63,6 +63,15 @@ interface ImageResult {
 @Processor('predictionQueue')
 export class PredictionProcessor {
   private inferenceServiceURL: string;
+  /**
+   * Whether to render the matplotlib PNGs (heatmap, beeswarm, waterfall).
+   *
+   * Off by default: the charts are drawn in the browser from the explanation
+   * payload, and every PNG recomputed SHAP for Samples already explained. The
+   * code is kept so they can be switched back on without a revert. The regen
+   * endpoints still render one when asked explicitly.
+   */
+  private readonly generatePngPlots: boolean;
 
   constructor(
     private httpService: HttpService,
@@ -76,6 +85,8 @@ export class PredictionProcessor {
   ) {
     this.inferenceServiceURL =
       this.configService.get<string>('INFERENCE_SERVICE_URL') ?? '';
+    this.generatePngPlots =
+      this.configService.get<string>('GENERATE_PNG_PLOTS') === 'true';
   }
 
   // Build the FE-friendly payload once so every event emits the same shape.
@@ -188,10 +199,11 @@ export class PredictionProcessor {
     );
 
     // The Explanation payload and the PNGs are independent: a failure in one must
-    // not cost the other. The PNGs stay until every chart has shipped, because
-    // they are the visual reference the new charts are checked against.
+    // not cost the other.
     await this.buildExplanation(prediction);
-    await this.generatePredictionPlots(prediction);
+    if (this.generatePngPlots) {
+      await this.generatePredictionPlots(prediction);
+    }
   }
 
   // ------------------------------------------------------------------
@@ -485,11 +497,11 @@ export class PredictionProcessor {
         );
       }
 
-      // --- Waterfall plot (only attempted when the prediction succeeded) ---
+      // --- Waterfall plot (only when PNGs are on and the prediction succeeded) ---
       // A waterfall failure does NOT fail the record: the prediction itself
       // is valid, the user just needs to re-generate the plot. The failure
       // is recorded in `waterfallError` so the UI can show a re-gen button.
-      if (!predictionFailed) {
+      if (this.generatePngPlots && !predictionFailed) {
         const waterfall = await this.runExplain(
           'waterfall',
           prediction.modelName,
