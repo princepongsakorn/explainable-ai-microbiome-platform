@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 // The theme has no success or info tokens, so the status colours live here,
 // in the one place that decides them.
-const STATUS_STYLE: Record<string, { label: string; className: string; dot: string }> = {
+export const STATUS_STYLE: Record<string, { label: string; className: string; dot: string }> = {
   [PredictionStatus.SUCCESS]: {
     label: "Success",
     className: "bg-green-50 text-green-800",
