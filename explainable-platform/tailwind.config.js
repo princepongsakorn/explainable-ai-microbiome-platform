@@ -1,12 +1,5 @@
-const flowbite = require("flowbite-react/tailwind");
-
 module.exports = {
-  mode: "jit",
-  content: [
-    // ...
-    flowbite.content(),
-  ],
-  purge: ["./pages/**/*.{js,ts,jsx,tsx}", "./components/**/*.{js,ts,jsx,tsx}"],
+  content: ["./pages/**/*.{js,ts,jsx,tsx}", "./components/**/*.{js,ts,jsx,tsx}"],
   // The app has no dark theme; "class" keeps dark: styles off until a .dark class is set.
   darkMode: ["class"],
   theme: {
@@ -73,12 +66,8 @@ module.exports = {
   		}
   	}
   },
-  variants: {
-    extend: {},
-  },
   // container-queries backs the @container variants shadcn's Field uses.
   plugins: [
-    flowbite.plugin(),
     require("tailwindcss-animate"),
     require("@tailwindcss/container-queries"),
   ],
