@@ -1,210 +1,152 @@
-"use client";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { CubeIcon } from "@heroicons/react/24/outline";
 
 import Layout from "@/components/common/Layout";
-import { ArrowPathIcon } from "@heroicons/react/24/outline";
-import { useEffect, useState } from "react";
-import { IModelInfo, IPredictions } from "@/components/model/model.interface";
-import Drawer from "react-modern-drawer";
-import { getPredictions } from "../api/predict";
-import dayjs from "dayjs";
-import utc from "dayjs/plugin/utc";
-import timezone from "dayjs/plugin/timezone";
-import "react-modern-drawer/dist/index.css";
-import { Pagination } from "@/components/ui/Pagination";
+import { PageHeader } from "@/components/common/PageHeader";
+import { RefreshButton } from "@/components/common/RefreshButton";
+import { RowOpenButton } from "@/components/common/RowOpenButton";
+import { RunDetailsSheet } from "@/components/experiments/RunDetailsSheet";
+import { getExperimentsModelList } from "../api/experiments";
+import { IRegisteredModelLatestVersions } from "@/components/model/experiments.interface";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
-  IPagination,
-  IPaginationRequestParams,
-} from "@/components/model/pagination.interface";
-import { useRouter } from "next/router";
-import { queryToString } from "@/lib/queryToString";
-import { Dropdown } from "@/components/ui/Dropdown/Dropdown";
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
-  getExperimentsList,
-  getExperimentsById,
-  putUnPublicModelByRunId,
-  getExperimentsModelList,
-} from "../api/experiments";
-import {
-  IExperiment,
-  IExperimentsRunResponse,
-  IRegisteredModelLatestVersions,
-  IRun,
-  RegisteredModel,
-} from "@/components/model/experiments.interface";
-import relativeTime from "dayjs/plugin/relativeTime";
-import { getModelsList } from "../api/model";
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { formatDateTime } from "@/lib/format";
+import { isProductionStage } from "@/lib/models";
 
-dayjs.extend(relativeTime);
-dayjs.extend(utc);
-dayjs.extend(timezone);
-
-export function History() {
+export function RegisteredModelsPage() {
   const [models, setModels] = useState<IRegisteredModelLatestVersions[]>();
+  const [openRunId, setOpenRunId] = useState<string>();
+  const [sheetOpen, setSheetOpen] = useState(false);
+
+  // Only each model's production version is listed: that is the one the
+  // upload page offers.
   const getModels = async () => {
     const resp = await getExperimentsModelList();
-    const model = resp.registered_models
-      .map((model) => {
-        const productionVersion = Array.isArray(model.latest_versions)
-          ? model.latest_versions.find((v) => v.current_stage === "Production")
-          : null;
-        return productionVersion || null;
-      })
-      .filter((v): v is IRegisteredModelLatestVersions => v !== null);
-    console.log(model);
-    setModels(model);
+    setModels(
+      resp.registered_models
+        .map((model) =>
+          Array.isArray(model.latest_versions)
+            ? model.latest_versions.find((v) => isProductionStage(v.current_stage))
+            : undefined
+        )
+        .filter((v): v is IRegisteredModelLatestVersions => v !== undefined)
+    );
+  };
+
+  const openModel = (runId: string) => {
+    setOpenRunId(runId);
+    setSheetOpen(true);
   };
 
   useEffect(() => {
-    getModels();
+    getModels().catch(() => setModels([]));
   }, []);
 
-  // const getAllMetricsKeys = (models?: RegisteredModel[]) => {
-  //   if (models) {
-  //     const keys = new Set<string>();
-  //     models.forEach((model) => {
-  //       Object.keys(model.metrics).forEach((key) => keys.add(key));
-  //     });
-  //     return Array.from(keys);
-  //   }
-  //   return [];
-  // };
-
-  const unPublishModel = async (id?: string) => {
-    if (id) {
-      await putUnPublicModelByRunId(id);
-    }
-  };
-
-  // const metricsHeaders = getAllMetricsKeys(models);
-
   return (
-    <>
-      <div className="p-8 bg-white h-full">
-        <div className="flex flex-row justify-between items-center">
-          <div className="text-xl font-medium">Registered Models</div>
-          <div className="flex flex-row gap-3">
-            <div
-              className="flex flex-row gap-2 text-sm cursor-pointer px-4 py-2 rounded-full hover:text-gray-900 hover:bg-gray-100 border-[1px] border-[#EAEAEA]"
-              onClick={getModels}
-            >
-              Refresh <ArrowPathIcon className="w-5" />
-            </div>
-          </div>
-        </div>
-        <div
-          style={{ height: "calc(100vh - 180px)" }}
-          className="mt-4 pt-8 border-solid bg-white border-t-[1px] border-[#EAEAEA] w-full flex flex-row gap-6 overflow-hidden"
-        >
-          <div className="w-full hide-scrollbar overflow-scroll border-b-[1px] border-gray-200">
-            <table
-              style={{ maxHeight: "calc(100vh - 280px)" }}
-              className="w-full text-sm text-left rtl:text-right text-gray-500 border-separate border-spacing-0"
-            >
-              <thead className="text-gray-700 bg-gray-50 z-[1] sticky top-[0]">
-                {/* {metricsHeaders.length > 0 ? (
-                  <tr className="border-solid border-y-[1px] border-gray-200">
-                    <th
-                      className="px-6 py-3 bg-gray-50 border-y-[1px] border-gray-200"
-                      colSpan={3}
-                    ></th>
-                    {metricsHeaders.length > 0 && (
-                      <th
-                        className="px-6 py-3 border-y-[1px] border-gray-200"
-                        colSpan={metricsHeaders.length}
-                      >
-                        Metrics
-                      </th>
-                    )}
-                    <th className="px-6 py-3 bg-gray-50 border-y-[1px] border-gray-200"></th>
-                  </tr>
-                ) : (
-                  <></>
-                )} */}
-                <tr className="">
-                  <th
-                    scope="col"
-                    className="px-6 py-3 font-medium bg-gray-50 border-b-[1px] border-gray-200"
-                  >
-                    Model Name
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 font-medium border-b-[1px] border-gray-200"
-                  >
-                    Production
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 font-medium border-b-[1px] border-gray-200"
-                  >
-                    Created
-                  </th>
-                  {/* {metricsHeaders.map((header) => (
-                    <th
-                      key={header}
-                      className="font-medium whitespace-nowrap px-6 py-3 border-b-[1px] border-gray-200"
-                    >
-                      <div className="flex flex-row gap-2">{header}</div>
-                    </th>
-                  ))} */}
-                  <th
-                    scope="col"
-                    className="px-6 py-3 font-medium border-b-[1px] border-gray-200"
-                  ></th>
-                </tr>
-              </thead>
-              <tbody>
-                {models?.map((model) => (
-                  <tr className="bg-white hover:bg-gray-50 text-black cursor-pointer border-b-[1px] border-gray-200">
-                    <td
-                      scope="row"
-                      className="font-medium whitespace-nowrap border-b-[1px] border-gray-200"
-                    >
-                      <div className="px-4 py-4 border-r border-gray-300">
-                        {model.name}
-                      </div>
-                    </td>
-                    <td
-                      scope="col"
-                      className="px-4 py-2 font-normal whitespace-nowrap border-b-[1px] border-gray-200"
-                    >
-                      Version {model.version}
-                    </td>
-                    <td
-                      scope="col"
-                      className="px-4 py-2 font-normal whitespace-nowrap border-b-[1px] border-gray-200"
-                    >
-                      {dayjs(model.creation_timestamp)
-                        .tz("Asia/Bangkok")
-                        .format("DD-MM-YYYY HH:mm")}
-                    </td>
-                    {/* {metricsHeaders.map((header) => (
-                      <td
-                        key={header}
-                        className={`px-4 py-2 border-b-[1px] border-gray-200`}
-                      >
-                        {model.metrics[header] || "-"}
-                      </td>
-                    ))} */}
-                    <td className={`px-4 py-2 border-b-[1px] border-gray-200`}>
-                      {/* <button
-                        type="button"
-                        className="focus:outline-none text-white bg-yellow-400 hover:bg-yellow-500 focus:ring-4 focus:ring-yellow-300 font-medium rounded-lg text-sm px-5 py-2.5"
-                        onClick={() => unPublishModel(model.run_id)}
-                      >
-                        Unpublish Model
-                      </button> */}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+    <div className="flex flex-col gap-6 p-8">
+      <PageHeader
+        title="Registered Models"
+        description="Models published to production, with the version the upload page offers. Open one to see its details or unpublish it."
+        actions={<RefreshButton onRefresh={getModels} errorTitle="Couldn’t Refresh Models" />}
+      />
+
+      <div className="rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Model</TableHead>
+              <TableHead className="text-right">Version</TableHead>
+              <TableHead>Created</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {!models ? (
+              Array.from({ length: 5 }, (_, row) => (
+                <TableRow key={row}>
+                  {Array.from({ length: 3 }, (_, cell) => (
+                    <TableCell key={cell}>
+                      <Skeleton className="h-4 w-28" />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : models.length === 0 ? (
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={3} className="p-0">
+                  <Empty className="py-16">
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <CubeIcon aria-hidden="true" />
+                      </EmptyMedia>
+                      <EmptyTitle>No Published Models</EmptyTitle>
+                      <EmptyDescription>
+                        Publish a run from Experiments to list its model here.
+                      </EmptyDescription>
+                    </EmptyHeader>
+                    <EmptyContent>
+                      <Link href="/experiments/experiments" passHref>
+                        <Button asChild size="sm" variant="outline">
+                          <a>Go to Experiments</a>
+                        </Button>
+                      </Link>
+                    </EmptyContent>
+                  </Empty>
+                </TableCell>
+              </TableRow>
+            ) : (
+              models.map((model) => (
+                <TableRow
+                  key={`${model.name}-${model.version}`}
+                  className="cursor-pointer"
+                  onClick={() => openModel(model.run_id)}
+                >
+                  <TableCell>
+                    <RowOpenButton onOpen={() => openModel(model.run_id)}>
+                      {model.name}
+                    </RowOpenButton>
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{model.version}</TableCell>
+                  <TableCell className="whitespace-nowrap tabular-nums">
+                    {formatDateTime(model.creation_timestamp)}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
       </div>
-    </>
+
+      <RunDetailsSheet
+        runId={openRunId}
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        onChanged={() => {
+          // An unpublished model leaves this list, so its sheet closes with it.
+          setSheetOpen(false);
+          getModels().catch(() => undefined);
+        }}
+      />
+    </div>
   );
 }
 
-History.Layout = Layout;
-export default History;
+RegisteredModelsPage.Layout = Layout;
+RegisteredModelsPage.title = "Registered Models";
+export default RegisteredModelsPage;

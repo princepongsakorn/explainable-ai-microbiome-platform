@@ -987,6 +987,29 @@ def get_mlflow_run(run_id):
     return jsonify({"run": result})
 
 
+@app.route("/v1/mlflow/model/<model_name>/version/<version>", methods=["GET"])
+def get_model_version(model_name, version):
+    """One registered model version, with the run that produced it.
+
+    A prediction records the model name and version that made it; this is how
+    the platform finds that version's run, whatever stage it is in now.
+    """
+    mlflow_url = os.environ.get("MLFLOW_URL", None)
+    mlflow.set_tracking_uri(mlflow_url)
+    client = mlflow.tracking.MlflowClient()
+    try:
+        mv = client.get_model_version(name=model_name, version=version)
+    except MlflowException as e:
+        status = 404 if e.error_code == "RESOURCE_DOES_NOT_EXIST" else 500
+        return jsonify({"status": "error", "message": str(e)}), status
+    return jsonify({
+        "name": mv.name,
+        "version": mv.version,
+        "run_id": mv.run_id,
+        "current_stage": mv.current_stage,
+    })
+
+
 @app.route("/v1/mlflow/run/<run_id>/stage", methods=["PUT"])
 def update_model_stage_by_run_id(run_id):
     data = request.get_json()
@@ -1001,9 +1024,11 @@ def update_model_stage_by_run_id(run_id):
     mlflow.set_tracking_uri(mlflow_url)
     client = mlflow.tracking.MlflowClient()
 
+    # Failures carry real status codes: the Nest service treats any 2xx as
+    # success, so a 200 with "status": "error" reached the page as published.
     models = client.search_model_versions(f"run_id='{run_id}'")
     if not models:
-        return {"status": "error", "message": f"No model found for Run ID: {run_id}"}
+        return jsonify({"status": "error", "message": f"No model found for Run ID: {run_id}"}), 404
     try:
         model_name = models[0].name
         version = models[0].version
@@ -1022,7 +1047,7 @@ def update_model_stage_by_run_id(run_id):
             "message": f"Model '{model_name}' version '{version}' transitioned to '{stage}'.",
         })
     except MlflowException as e:
-        return {"status": "error", "message": str(e)}
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
 @app.route("/v1/mlflow/model/<model_name>/version/<version>/description", methods=["PUT"])

@@ -1,113 +1,99 @@
-import { useUser } from "@/contexts/auth/auth-context";
-import { Logo } from "../../components/common/Logo";
-import { useRouter } from "next/router";
-
 import * as yup from "yup";
-import { AxiosError } from "axios";
 import { useForm } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
-import { useEffect, useState } from "react";
-import Cookies from "js-cookie";
-import { dialog, dialogError } from "@/lib/dialog";
-import { MainButton } from "@/components/ui/Button/Button";
 
-const registorValidateSchema = yup.object({
-  username: yup.string().required("Required"),
-  password: yup.string().required("Required"),
+import { useUser } from "@/contexts/auth/auth-context";
+import { AuthLayout, TextLink } from "@/components/auth/AuthLayout";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Spinner } from "@/components/ui/spinner";
+import { notifySuccess } from "@/lib/notify";
+
+const signUpSchema = yup.object({
+  username: yup
+    .string()
+    .trim()
+    .required("Enter your email.")
+    .email("Enter an email address, like name@example.com."),
+  password: yup.string().required("Choose a password."),
 });
 
-interface RegistorForm {
-  username: string;
-  password: string;
-}
+type SignUpForm = yup.InferType<typeof signUpSchema>;
 
-export default function App() {
-  const router = useRouter();
+export default function SignUpPage() {
   const { signUp } = useUser();
-  const [isLoading, setIsLoading] = useState(false);
 
   const {
     register,
     handleSubmit,
-    formState: { errors },
-  } = useForm<RegistorForm>({ resolver: yupResolver(registorValidateSchema) });
+    setError,
+    formState: { errors, isSubmitting },
+  } = useForm<SignUpForm>({ resolver: yupResolver(signUpSchema) });
 
-  const onSubmit = async (form: RegistorForm) => {
+  const onSubmit = async (form: SignUpForm) => {
     try {
-      setIsLoading(true);
+      // On success the auth context takes the visitor to the sign-in page.
       await signUp(form);
-      await dialog(
-        "Your account has been successfully created!",
-        "Your registration is complete. You can now log in and start using our services."
+      notifySuccess(
+        "Account Created",
+        "Sign in with the email and password you just set."
       );
-      router.replace("login");
-    } catch (error) {
-      await dialogError(
-        "Registration unsuccessful.",
-        "We encountered an issue while creating your account. Please try again later."
-      );
-    } finally {
-      setIsLoading(false);
+    } catch {
+      setError("root", {
+        message:
+          "We couldn’t create your account. The email may already be registered: try signing in, or try again in a moment.",
+      });
     }
   };
 
   return (
-    <div className="flex items-center h-screen w-full">
-      <div className="flex flex-rows h-full w-full ">
-        <div className="flex w-3/5 bg-black">
-          <img
-            className="w-full h-full object-cover"
-            src={"/assets/login-bg.png"}
-          />
-          <div>
-            <div className="flex flex-rows absolute left-0 top-0 ml-4 mt-4 items-center gap-2">
-              <Logo />
-              <div className="text-white">Explainable</div>
-            </div>
-          </div>
-        </div>
-        <div className="flex w-2/5 justify-center items-center">
-          <form className="w-3/4" onSubmit={handleSubmit(onSubmit)}>
-            <div className="mb-8 text-xl font-medium mb-4 text-center">
-              Create an account
-            </div>
-            <div className="mb-5">
-              <input
-                type="email"
-                id="email"
-                className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
-                placeholder="Email"
-                {...register("username")}
-                required
-              />
-            </div>
-            <div className="mb-5">
-              <input
-                type="password"
-                id="password"
-                className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
-                placeholder="Password"
-                {...register("password")}
-                required
-              />
-            </div>
-            <MainButton className="w-full" type="submit" loading={isLoading}>
-              Create account
-            </MainButton>
-            <div className="mt-6 pt-6 border-t border-gray-300">
-              <div className="flex flex-row gap-1 justify-center">
-                <div className="text-gray-500">Already have an account?</div>
-                <div
-                  className="text-blue-700 cursor-pointer font-semibold hover:text-blue-800"
-                  onClick={() => router.push("login")}
-                >
-                  Sign in
-                </div>
-              </div>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
+    <AuthLayout
+      title="Create an Account"
+      description="Register with your email to upload samples and review predictions."
+      footer={
+        <>
+          Already have an account? <TextLink href="/auth/login">Sign In</TextLink>
+        </>
+      }
+    >
+      <form noValidate onSubmit={handleSubmit(onSubmit)}>
+        <FieldGroup className="gap-5">
+          <Field data-invalid={errors.username ? true : undefined}>
+            <FieldLabel htmlFor="username">Email</FieldLabel>
+            <Input
+              id="username"
+              type="email"
+              inputMode="email"
+              autoComplete="username"
+              autoCapitalize="none"
+              spellCheck={false}
+              placeholder="name@example.com"
+              aria-invalid={errors.username ? true : undefined}
+              {...register("username")}
+            />
+            <FieldError errors={[errors.username]} />
+          </Field>
+          <Field data-invalid={errors.password ? true : undefined}>
+            <FieldLabel htmlFor="password">Password</FieldLabel>
+            <Input
+              id="password"
+              type="password"
+              autoComplete="new-password"
+              aria-invalid={errors.password ? true : undefined}
+              {...register("password")}
+            />
+            <FieldError errors={[errors.password]} />
+          </Field>
+          {errors.root && <FieldError>{errors.root.message}</FieldError>}
+          <Button type="submit" className="w-full" disabled={isSubmitting}>
+            {isSubmitting && <Spinner />}
+            {isSubmitting ? "Creating Account…" : "Create Account"}
+          </Button>
+        </FieldGroup>
+      </form>
+    </AuthLayout>
   );
 }
+
+SignUpPage.title = "Create Account";

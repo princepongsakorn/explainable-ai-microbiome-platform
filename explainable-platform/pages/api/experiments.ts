@@ -33,6 +33,19 @@ export const getExperimentsModelList = async () => {
   return data;
 };
 
+/** One version of a registered model, with the run that produced it. */
+export const getModelVersionRun = async (name: string, version: string) => {
+  const { data } = await httpClient.get<{
+    name: string;
+    version: string;
+    run_id: string;
+    current_stage: string;
+  }>(
+    `/experiments/models/${encodeURIComponent(name)}/versions/${encodeURIComponent(version)}`
+  );
+  return data;
+};
+
 export const postDescriptionExperiments = async (
   experimentId: string,
   description?: string

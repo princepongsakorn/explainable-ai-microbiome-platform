@@ -68,16 +68,33 @@ export interface IPredictions {
   id: string;
   predictionNumber: number;
   modelName: string;
-  records: {
-    total: number;
-    success: number;
-    error: number;
-  };
+  /**
+   * The registry version of `modelName` that made this prediction. Recorded
+   * since explanations started carrying it; null for older predictions.
+   */
+  modelVersion?: string | null;
+  records: IRecordCounts;
   createdAt: string;
   heatmap?: string;
   heatmapError?: ImageGenStatus | string | null;
   beeswarm?: string;
   beeswarmError?: ImageGenStatus | string | null;
+}
+
+export interface IRecordCounts {
+  total: number;
+  success: number;
+  error: number;
+  /** Absent from a backend older than the counts; treat as unknown. */
+  byStatus?: Record<Exclude<PredictionStatus, PredictionStatus.ALL>, number>;
+  /** Samples per class value, e.g. { "0": 26, "1": 12 }. */
+  byClass?: Record<string, number>;
+}
+
+export interface IPredictionSummary {
+  inProgress: number;
+  needsAttention: number;
+  uploadedLast7Days: number;
 }
 
 export interface IPredictionsPagination {

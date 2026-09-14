@@ -1,9 +1,45 @@
-import Layout from "@/components/common/Layout";
-import { useEffect, useState } from "react";
-import { getMLFlowToken, getMLFlowTrackingUri } from "../api/mlflow";
-import { EXCodeBlock } from "@/components/ui/CodeBlock/CodeBlock";
+import { ReactNode, useEffect, useState } from "react";
 
-export function Tokens() {
+import Layout from "@/components/common/Layout";
+import { PageHeader } from "@/components/common/PageHeader";
+import { EXCodeBlock } from "@/components/ui/CodeBlock/CodeBlock";
+import { Separator } from "@/components/ui/separator";
+import { getMLFlowToken, getMLFlowTrackingUri } from "../api/mlflow";
+
+/** An identifier inside running text. */
+const Code = ({ children }: { children: ReactNode }) => (
+  <code
+    translate="no"
+    className="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em] text-foreground"
+  >
+    {children}
+  </code>
+);
+
+const GuideSection = ({
+  id,
+  title,
+  children,
+}: {
+  id: string;
+  title: string;
+  children: ReactNode;
+}) => (
+  <section aria-labelledby={id} className="flex flex-col gap-4">
+    <h2 id={id} className="text-lg font-semibold">
+      {title}
+    </h2>
+    {children}
+  </section>
+);
+
+const Prose = ({ children }: { children: ReactNode }) => (
+  <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground [text-wrap:pretty]">
+    {children}
+  </p>
+);
+
+export function MlflowGuidePage() {
   const [token, setToken] = useState<{ user: string; token?: string }>();
   const [mlflowUrl, setMlflowUrl] = useState<string>();
 
@@ -110,133 +146,88 @@ explanation = impl.shap_explain(X)
 # explanation["data"]        shape (n, n_features)`;
 
   return (
-    <>
-      <div className="p-8 bg-white h-full">
-        <div className="mb-8">
-          <div className="mt-8 text-xl font-medium">
-            Deploying Your Model with MLflow Explainable
-          </div>
-          <div className="mt-4 pt-4 border-solid border-t-[1px] border-[#EAEAEA] w-full gap-6">
-            <div className="text-gray-500">
-              Use the <code className="font-mono text-gray-700">mlflow-explainable</code>{" "}
-              package to log a predictor and its SHAP explainer as a single{" "}
-              <code className="font-mono text-gray-700">mlflow.pyfunc</code>{" "}
-              artifact. The serving runtime never needs to know whether the
-              underlying model is a scikit-learn estimator, an XGBoost booster,
-              or a custom torch network — every artifact exposes the same{" "}
-              <code className="font-mono text-gray-700">predict</code> /{" "}
-              <code className="font-mono text-gray-700">shap_explain</code>{" "}
-              contract.
-            </div>
-          </div>
+    <div className="flex flex-col gap-8 p-8">
+      <PageHeader
+        title="Deploying Your Model with MLflow Explainable"
+        description={
+          <>
+            Use the <Code>mlflow-explainable</Code> package to log a predictor and its SHAP
+            explainer as a single <Code>mlflow.pyfunc</Code> artifact. The serving runtime never
+            needs to know whether the underlying model is a scikit-learn estimator, an XGBoost
+            booster, or a custom torch network — every artifact exposes the same{" "}
+            <Code>predict</Code> / <Code>shap_explain</Code> contract.
+          </>
+        }
+      />
 
-          <div className="mt-8 text-lg font-medium">Installation</div>
-          <div className="mt-4 pt-4 border-solid border-t-[1px] border-[#EAEAEA] w-full">
-            <EXCodeBlock code={installCode} language={"bash"} />
-          </div>
+      <GuideSection id="installation" title="Installation">
+        <EXCodeBlock code={installCode} language={"bash"} />
+      </GuideSection>
 
-          <div className="mt-8 text-lg font-medium">
-            Authenticate and load training data
-          </div>
-          <div className="mt-4 pt-4 border-solid border-t-[1px] border-[#EAEAEA] w-full">
-            <div className="text-gray-500 mb-4">
-              Authenticate with your access token and point MLflow at your
-              tracking URI before any training run. The snippets below assume
-              this block has already executed.
-            </div>
-            <EXCodeBlock
-              lines={["7:9"]}
-              code={setupCode}
-              language={"python"}
-            />
-          </div>
+      <Separator />
 
-          <div className="mt-8 text-lg font-medium">
-            sklearn-style model (RandomForest)
-          </div>
-          <div className="mt-4 pt-4 border-solid border-t-[1px] border-[#EAEAEA] w-full">
-            <div className="text-gray-500 mb-4">
-              The simplest case: any scikit-learn estimator that exposes{" "}
-              <code className="font-mono text-gray-700">predict_proba</code>.
-              <code className="font-mono text-gray-700"> log_explainable_model</code>{" "}
-              fits a SHAP explainer on{" "}
-              <code className="font-mono text-gray-700">X_train</code> and
-              registers the bundle under the given name.
-            </div>
-            <EXCodeBlock
-              lines={["7:11"]}
-              code={rfCode}
-              language={"python"}
-            />
-          </div>
+      <GuideSection id="authenticate" title="Authenticate and Load Training Data">
+        <Prose>
+          Authenticate with your access token and point MLflow at your tracking URI before any
+          training run. The snippets below assume this block has already run.
+        </Prose>
+        <EXCodeBlock lines={["7:9"]} code={setupCode} language={"python"} />
+      </GuideSection>
 
-          <div className="mt-8 text-lg font-medium">
-            Gradient Boosting (sklearn)
-          </div>
-          <div className="mt-4 pt-4 border-solid border-t-[1px] border-[#EAEAEA] w-full">
-            <EXCodeBlock
-              lines={["6:10"]}
-              code={gbCode}
-              language={"python"}
-            />
-          </div>
+      <Separator />
 
-          <div className="mt-8 text-lg font-medium">XGBoost</div>
-          <div className="mt-4 pt-4 border-solid border-t-[1px] border-[#EAEAEA] w-full">
-            <div className="text-gray-500 mb-4">
-              As of <code className="font-mono text-gray-700">shap</code> 0.49
-              the meta-Explainer no longer auto-detects{" "}
-              <code className="font-mono text-gray-700">XGBClassifier</code>.{" "}
-              <code className="font-mono text-gray-700">log_explainable_model</code>{" "}
-              transparently retries with{" "}
-              <code className="font-mono text-gray-700">model.predict_proba</code>{" "}
-              when this happens, so the user-facing API stays the same. Pass{" "}
-              <code className="font-mono text-gray-700">extra_pip_requirements</code>{" "}
-              so kserve installs xgboost at load time.
-            </div>
-            <EXCodeBlock
-              lines={["6:12"]}
-              code={xgbCode}
-              language={"python"}
-            />
-          </div>
+      <GuideSection id="random-forest" title="sklearn-Style Model (RandomForest)">
+        <Prose>
+          The simplest case: any scikit-learn estimator that exposes <Code>predict_proba</Code>.{" "}
+          <Code>log_explainable_model</Code> fits a SHAP explainer on <Code>X_train</Code> and
+          registers the bundle under the given name.
+        </Prose>
+        <EXCodeBlock lines={["7:11"]} code={rfCode} language={"python"} />
+      </GuideSection>
 
-          <div className="mt-8 text-lg font-medium">
-            Custom torch model (or any callable wrapper)
-          </div>
-          <div className="mt-4 pt-4 border-solid border-t-[1px] border-[#EAEAEA] w-full">
-            <div className="text-gray-500 mb-4">
-              The library walks the predictor's object graph, collects source
-              files of any user-defined classes (skipping stdlib and well-known
-              third-party prefixes), and packs them into the artifact via
-              MLflow's <code className="font-mono text-gray-700">code_path</code>.
-              The serving runtime never needs to import those classes from its
-              own codebase.
-            </div>
-            <EXCodeBlock
-              lines={["6:13"]}
-              code={torchCode}
-              language={"python"}
-            />
-          </div>
+      <Separator />
 
-          <div className="mt-8 text-lg font-medium">Loading at serving time</div>
-          <div className="mt-4 pt-4 border-solid border-t-[1px] border-[#EAEAEA] w-full">
-            <div className="text-gray-500 mb-4">
-              Every registered model — regardless of framework — exposes the
-              same two-method runtime contract.
-            </div>
-            <EXCodeBlock
-              lines={[7, 10]}
-              code={loadCode}
-              language={"python"}
-            />
-          </div>
-        </div>
-      </div>
-    </>
+      <GuideSection id="gradient-boosting" title="Gradient Boosting (sklearn)">
+        <EXCodeBlock lines={["6:10"]} code={gbCode} language={"python"} />
+      </GuideSection>
+
+      <Separator />
+
+      <GuideSection id="xgboost" title="XGBoost">
+        <Prose>
+          As of <Code>shap</Code> 0.49 the meta-Explainer no longer auto-detects{" "}
+          <Code>XGBClassifier</Code>. <Code>log_explainable_model</Code> transparently retries
+          with <Code>model.predict_proba</Code> when this happens, so the user-facing API stays the
+          same. Pass <Code>extra_pip_requirements</Code> so kserve installs xgboost at load time.
+        </Prose>
+        <EXCodeBlock lines={["6:12"]} code={xgbCode} language={"python"} />
+      </GuideSection>
+
+      <Separator />
+
+      <GuideSection id="torch" title="Custom Torch Model (or Any Callable Wrapper)">
+        <Prose>
+          The library walks the predictor’s object graph, collects source files of any
+          user-defined classes (skipping stdlib and well-known third-party prefixes), and packs
+          them into the artifact via MLflow’s <Code>code_path</Code>. The serving runtime never
+          needs to import those classes from its own codebase.
+        </Prose>
+        <EXCodeBlock lines={["6:13"]} code={torchCode} language={"python"} />
+      </GuideSection>
+
+      <Separator />
+
+      <GuideSection id="serving" title="Loading at Serving Time">
+        <Prose>
+          Every registered model — regardless of framework — exposes the same two-method runtime
+          contract.
+        </Prose>
+        <EXCodeBlock lines={[7, 10]} code={loadCode} language={"python"} />
+      </GuideSection>
+    </div>
   );
 }
 
-Tokens.Layout = Layout;
-export default Tokens;
+MlflowGuidePage.Layout = Layout;
+MlflowGuidePage.title = "MLflow and Deployment";
+export default MlflowGuidePage;
