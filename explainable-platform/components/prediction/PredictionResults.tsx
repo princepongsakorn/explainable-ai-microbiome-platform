@@ -1,4 +1,5 @@
 import { classLabel } from "@/lib/classes";
+import { EMPTY_VALUE } from "@/lib/format";
 
 /** How a prediction's classified samples split across classes, in words. */
 export function PredictionResults({ byClass }: { byClass?: Record<string, number> }) {
@@ -7,7 +8,7 @@ export function PredictionResults({ byClass }: { byClass?: Record<string, number
     .sort(([a], [b]) => Number(b) - Number(a));
 
   if (classes.length === 0) {
-    return <span className="text-muted-foreground">—</span>;
+    return <span className="text-muted-foreground">{EMPTY_VALUE}</span>;
   }
 
   return (

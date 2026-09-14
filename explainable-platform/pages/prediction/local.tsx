@@ -2,7 +2,6 @@ import Link from "next/link";
 import { useEffect, useId, useState } from "react";
 import { useRouter } from "next/router";
 import {
-  ArrowPathIcon,
   ChevronLeftIcon,
   EllipsisHorizontalIcon,
   ExclamationTriangleIcon,
@@ -12,6 +11,8 @@ import {
 import Layout from "@/components/common/Layout";
 import { PageHeader } from "@/components/common/PageHeader";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import { RefreshButton } from "@/components/common/RefreshButton";
+import { RowOpenButton } from "@/components/common/RowOpenButton";
 import { ModelLink } from "@/components/experiments/ModelLink";
 import { StatusBadge } from "@/components/prediction/StatusBadge";
 import {
@@ -65,7 +66,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { classLabel } from "@/lib/classes";
-import { displayValue, formatPercent } from "@/lib/format";
+import { EMPTY_VALUE, displayValue, formatPercent } from "@/lib/format";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { queryToString } from "@/lib/queryToString";
 import { useSse } from "@/lib/useSse";
@@ -126,7 +127,7 @@ function usePredictionStatus(): PredictionStatus {
 
 /** One wording for the predicted class, in the table and the drawer alike. */
 function classificationLabel(value?: number | null): string {
-  if (value === null || value === undefined) return "—";
+  if (value === null || value === undefined) return EMPTY_VALUE;
   return `Probable ${classLabel(value).toLowerCase()}`;
 }
 
@@ -242,7 +243,6 @@ export function PredictionRecordsPage() {
   const [selectPrediction, setSelectPrediction] = useState<IPredictionRecords>();
   const [diagnosisComment, setDiagnosisComment] = useState<string>();
   const [saveCommentLoading, setSaveCommentLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const predictionClass = usePredictionClass();
   const predictionStatus = usePredictionStatus();
 
@@ -276,15 +276,6 @@ export function PredictionRecordsPage() {
     const data = await getPredictionRecords(predictionId, params);
     setPredictions(data);
     return data;
-  };
-
-  const refresh = async () => {
-    setRefreshing(true);
-    try {
-      await getPredictionsList();
-    } finally {
-      setRefreshing(false);
-    }
   };
 
   // Patch one record in both the open drawer and its table row, so the two
@@ -441,10 +432,7 @@ export function PredictionRecordsPage() {
         }
         actions={
           <>
-            <Button variant="outline" size="sm" onClick={refresh} disabled={refreshing}>
-              {refreshing ? <Spinner /> : <ArrowPathIcon aria-hidden="true" />}
-              Refresh
-            </Button>
+            <RefreshButton onRefresh={getPredictionsList} />
             {/* Not modal: a modal menu would still hold focus as the
                 confirmation it opens tries to take it. */}
             <DropdownMenu modal={false}>
@@ -545,24 +533,15 @@ export function PredictionRecordsPage() {
                 </TableRow>
               ) : (
                 items.map((item) => (
-                  // The row is a large click target for the mouse; the button
-                  // in its first cell is the same action for the keyboard.
                   <TableRow
                     key={item.id}
                     className="cursor-pointer"
                     onClick={() => onOpenPrediction(item)}
                   >
                     <TableCell>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onOpenPrediction(item);
-                        }}
-                        className="rounded-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
+                      <RowOpenButton onOpen={() => onOpenPrediction(item)}>
                         {item.record_number}
-                      </button>
+                      </RowOpenButton>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {formatPercent(item.proba)}

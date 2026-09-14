@@ -5,6 +5,7 @@ import { ChevronRightIcon, TableCellsIcon } from "@heroicons/react/24/outline";
 
 import Layout from "@/components/common/Layout";
 import { PageHeader } from "@/components/common/PageHeader";
+import { RowOpenButton } from "@/components/common/RowOpenButton";
 import { ModelLink } from "@/components/experiments/ModelLink";
 import { IPredictionSummary, IPredictions } from "@/components/model/model.interface";
 import { IPagination } from "@/components/model/pagination.interface";
@@ -217,24 +218,15 @@ export function PredictionListPage() {
                 </TableRow>
               ) : (
                 items.map((prediction) => (
-                  // The row is a large click target for the mouse; the button
-                  // in its first cell is the same action for the keyboard.
                   <TableRow
                     key={prediction.id}
                     className="cursor-pointer"
                     onClick={() => openPrediction(prediction)}
                   >
                     <TableCell>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          openPrediction(prediction);
-                        }}
-                        className="rounded-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
+                      <RowOpenButton onOpen={() => openPrediction(prediction)}>
                         {prediction.predictionNumber}
-                      </button>
+                      </RowOpenButton>
                     </TableCell>
                     <TableCell className="max-w-[16rem] truncate">
                       {prediction.modelName}

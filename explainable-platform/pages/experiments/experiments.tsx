@@ -1,6 +1,5 @@
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import {
-  ArrowPathIcon,
   BeakerIcon,
   ChevronDownIcon,
   ChevronUpDownIcon,
@@ -10,6 +9,9 @@ import {
 
 import Layout from "@/components/common/Layout";
 import { PageHeader } from "@/components/common/PageHeader";
+import { RefreshButton } from "@/components/common/RefreshButton";
+import { RowOpenButton } from "@/components/common/RowOpenButton";
+import { isProductionStage } from "@/lib/models";
 import { RunDetailsSheet } from "@/components/experiments/RunDetailsSheet";
 import {
   getExperimentsList,
@@ -44,6 +46,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import {
+  EMPTY_VALUE,
   displayValue,
   formatDateTime,
   formatDuration,
@@ -66,7 +69,6 @@ export function Experiments() {
   const [runs, setRuns] = useState<IExperimentsRunResponse>();
   const [runLoading, setRunLoading] = useState<boolean>(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const [sort, setSort] = useState<{ key: string; order: SortOrder }>();
   const [isOpen, setIsOpen] = useState(false);
   const [openRunId, setOpenRunId] = useState<string>();
@@ -91,7 +93,7 @@ export function Experiments() {
         new Map(
           registered_models.flatMap((registered) =>
             (registered.latest_versions ?? [])
-              .filter((version) => version.current_stage === "Production")
+              .filter((version) => isProductionStage(version.current_stage))
               .map((version) => [version.run_id, version.version] as [string, string])
           )
         )
@@ -181,15 +183,6 @@ export function Experiments() {
       setRunLoading(false);
       setRuns(data);
       await loadPublishedRuns();
-    }
-  };
-
-  const refresh = async () => {
-    setRefreshing(true);
-    try {
-      await getExperiment();
-    } finally {
-      setRefreshing(false);
     }
   };
 
@@ -312,15 +305,7 @@ export function Experiments() {
         title="Experiments"
         description="Training runs logged to MLflow. Open a run to review it and publish its model."
         actions={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={refresh}
-            disabled={refreshing || !selectedExperiments}
-          >
-            {refreshing ? <Spinner /> : <ArrowPathIcon aria-hidden="true" />}
-            Refresh
-          </Button>
+          <RefreshButton onRefresh={getExperiment} disabled={!selectedExperiments} />
         }
       />
 
@@ -485,30 +470,21 @@ export function Experiments() {
                 </TableRow>
               ) : (
                 runs?.runs.map((run) => (
-                  // The row is a large click target for the mouse; the button
-                  // in its first cell is the same action for the keyboard.
                   <TableRow
                     key={run.info.run_id}
                     className="group cursor-pointer hover:bg-muted"
                     onClick={() => openRun(run.info.run_id)}
                   >
                     <TableCell className="sticky left-0 z-[1] whitespace-nowrap border-r bg-background group-hover:bg-muted">
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          openRun(run.info.run_id);
-                        }}
-                        className="rounded-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
+                      <RowOpenButton onOpen={() => openRun(run.info.run_id)}>
                         {run.info.run_name}
-                      </button>
+                      </RowOpenButton>
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
                       {publishedRuns.has(run.info.run_id) ? (
                         <Badge>Published · v{publishedRuns.get(run.info.run_id)}</Badge>
                       ) : (
-                        <span className="text-muted-foreground">—</span>
+                        <span className="text-muted-foreground">{EMPTY_VALUE}</span>
                       )}
                     </TableCell>
                     <TableCell

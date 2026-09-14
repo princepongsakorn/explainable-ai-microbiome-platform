@@ -1,5 +1,6 @@
 import { IPredictionSummary } from "@/components/model/model.interface";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EMPTY_VALUE } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 /**
@@ -40,7 +41,11 @@ export function PredictionSummary({ summary }: { summary?: IPredictionSummary | 
               figure.alert && (figure.value ?? 0) > 0 && "text-destructive"
             )}
           >
-            {summary === undefined ? <Skeleton className="h-8 w-12" /> : figure.value ?? "—"}
+            {summary === undefined ? (
+              <Skeleton className="h-8 w-12" />
+            ) : (
+              figure.value ?? EMPTY_VALUE
+            )}
           </dd>
           <p className="mt-1 text-xs text-muted-foreground">{figure.hint}</p>
         </div>
