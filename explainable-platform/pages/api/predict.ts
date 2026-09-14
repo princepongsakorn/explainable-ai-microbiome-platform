@@ -5,6 +5,7 @@ import {
   IPredictions,
   ICreatePredictions,
   IPredictionsPagination,
+  IPredictionSummary,
 } from "@/components/model/model.interface";
 import {
   IPagination,
@@ -48,6 +49,11 @@ export const getPredictions = async (params: IPaginationRequestParams) => {
   const { data } = await httpClient.get<IPagination<IPredictions>>(`/predict`, {
     params: { page: params.page },
   });
+  return data;
+};
+
+export const getPredictionSummary = async () => {
+  const { data } = await httpClient.get<IPredictionSummary>(`/predict/summary`);
   return data;
 };
 

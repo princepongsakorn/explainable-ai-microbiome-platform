@@ -1,18 +1,19 @@
-import {
-  ReactNode,
-  RefObject,
-  useCallback,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-} from "react";
-import { createPortal } from "react-dom";
-import { ArrowsPointingOutIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { ReactNode, useEffect, useId, useState } from "react";
+import { ArrowsPointingOutIcon } from "@heroicons/react/24/outline";
 import { genusOf } from "shap-svg";
 import type { Explanation, PlotLabels, RowSort, ValuePrecision } from "shap-svg";
 import { Plots } from "shap-svg/react";
 import { useExplanation, sampleIndexOf } from "@/lib/useExplanation";
+import { useElementWidth } from "@/lib/useElementWidth";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 const MIN_DISPLAY = 5;
 const MAX_DISPLAY = 50;
@@ -52,13 +53,23 @@ const RESEARCH_LABELS: Partial<PlotLabels> = {
   otherFeatures: (count) => `${count} other taxa`,
 };
 
+/** Inline width before the chart's box has been measured. */
 const INLINE_WIDTH = 720;
-/** Room for the overlay's own padding, so the chart does not sit under its edge. */
+/**
+ * The narrowest an inline chart is drawn. shap-svg keeps a fixed 260px column
+ * for taxon names, so below this the bars get too little room; the box
+ * scrolls sideways instead.
+ */
+const MIN_INLINE_WIDTH = 560;
+/** Room for the expanded view's own padding, so the chart does not sit under its edge. */
 const EXPANDED_CHROME = 96;
 /** Below this, expanding is no more readable than the inline view. */
 const MIN_EXPANDED_WIDTH = 900;
 /** Rows get taller when expanded — reading them is the point of expanding. */
 const EXPANDED_ROW_SCALE = 1.35;
+
+const nativeControl =
+  "rounded-md border border-input bg-background px-2 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 /** Everything a chart needs to draw itself at the size the frame decided on. */
 type ChartView = {
@@ -84,66 +95,6 @@ function useViewportWidth(active: boolean) {
   }, [active]);
 
   return width;
-}
-
-const FOCUSABLE =
-  'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
-
-/**
- * What aria-modal promises: focus moves into the dialog, Tab cannot leave it,
- * Escape closes it, and focus returns to whatever opened it. Also no scrolling
- * the page behind the overlay.
- */
-function useOverlayBehaviour(
-  open: boolean,
-  close: () => void,
-  dialogRef: RefObject<HTMLDivElement>
-) {
-  useEffect(() => {
-    if (!open) return;
-
-    const opener =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    dialogRef.current?.focus();
-
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        close();
-        return;
-      }
-      const dialog = dialogRef.current;
-      if (event.key !== "Tab" || !dialog) return;
-
-      const focusable = Array.from(
-        dialog.querySelectorAll<HTMLElement>(FOCUSABLE)
-      ).filter((element) => !element.hasAttribute("disabled"));
-      if (focusable.length === 0) {
-        event.preventDefault();
-        return;
-      }
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const active = document.activeElement;
-      const outside = !dialog.contains(active);
-      if (event.shiftKey && (active === first || active === dialog || outside)) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && (active === last || outside)) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = previousOverflow;
-      opener?.focus();
-    };
-  }, [open, close, dialogRef]);
 }
 
 /**
@@ -179,27 +130,26 @@ function ChartFrame({
   const [groupByGenus, setGroupByGenus] = useState(false);
   const [rowSort, setRowSort] = useState<RowSort>("importance");
   const [expanded, setExpanded] = useState(false);
-  // A portal needs a document, which the server render does not have.
-  const [mounted, setMounted] = useState(false);
 
   // Three frames can share a drawer, and the expanded view repeats the
-  // controls, so the slider's id cannot come from the prediction alone.
-  const sliderId = useId();
-  const dialogRef = useRef<HTMLDivElement>(null);
-  // Stable, or the overlay effect would re-run — and re-focus — every render.
-  const closeExpanded = useCallback(() => setExpanded(false), []);
-
-  useEffect(() => setMounted(true), []);
-  useOverlayBehaviour(expanded, closeExpanded, dialogRef);
+  // controls, so the controls' ids cannot come from the prediction alone.
+  const controlId = useId();
   const viewportWidth = useViewportWidth(expanded);
+  // Inline, the chart fills whatever holds it, a drawer or a page, rather
+  // than a fixed width that left the rest of a wide drawer empty.
+  const [chartBoxRef, chartBoxWidth] = useElementWidth<HTMLDivElement>();
 
   // Only while there is nothing to show: a revalidation keeps the chart up.
   if (loading && !explanation) {
-    return <div className="text-sm text-gray-400 py-4">Loading explanation…</div>;
+    return (
+      <div role="status" className="py-4 text-sm text-muted-foreground">
+        Loading explanation…
+      </div>
+    );
   }
   if (error || !explanation) {
     return (
-      <div className="text-sm text-gray-500 py-4">
+      <div role="status" className="py-4 text-sm text-muted-foreground">
         {/* The job reports its progress over SSE, and takes about a minute for
             a few hundred Samples — long enough that "not computed yet" on its
             own reads as a failure rather than as a wait. */}
@@ -218,10 +168,10 @@ function ChartFrame({
   const shown = Math.min(maxDisplay, sliderMax);
 
   const controls = (placement: "inline" | "expanded") => (
-    <div className="flex items-center gap-3 text-sm text-gray-600">
-      <label htmlFor={`${sliderId}-${placement}`}>Features shown</label>
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
+      <label htmlFor={`${controlId}-${placement}-shown`}>Features shown</label>
       <input
-        id={`${sliderId}-${placement}`}
+        id={`${controlId}-${placement}-shown`}
         type="range"
         // A chart with fewer rows than the usual minimum still gets a slider
         // whose range is valid.
@@ -229,26 +179,27 @@ function ChartFrame({
         max={sliderMax}
         value={shown}
         onChange={(event) => setMaxDisplay(Number(event.target.value))}
-        className="flex-1"
+        className="min-w-[8rem] flex-1 accent-primary"
       />
-      <span className="tabular-nums w-16 text-right">
+      <span className="w-16 text-right tabular-nums text-foreground">
         {shown} / {featureCount}
       </span>
-      <label className="flex items-center gap-1 pl-3 border-l border-gray-200 whitespace-nowrap">
+      <label className="flex items-center gap-1.5 whitespace-nowrap border-l pl-3">
         <input
           type="checkbox"
           checked={groupByGenus}
           onChange={(event) => setGroupByGenus(event.target.checked)}
+          className="accent-primary"
         />
         Group by genus
       </label>
       {showRowSort && (
-        <label className="flex items-center gap-1 pl-3 border-l border-gray-200 whitespace-nowrap">
+        <label className="flex items-center gap-1.5 whitespace-nowrap border-l pl-3">
           Sort
           <select
             value={rowSort}
             onChange={(event) => setRowSort(event.target.value as RowSort)}
-            className="border border-gray-200 rounded px-1 py-0.5 text-sm"
+            className={nativeControl}
           >
             {ROW_SORTS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -259,24 +210,31 @@ function ChartFrame({
         </label>
       )}
       {showPrecision && (
-        <span className="flex items-center gap-1 pl-3 border-l border-gray-200">
-          <span>Values</span>
-          {PRECISIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              title={option.hint}
-              aria-pressed={option.value === decimals}
-              onClick={() => setDecimals(option.value)}
-              className={`px-2 py-0.5 rounded tabular-nums ${
-                option.value === decimals
-                  ? "bg-gray-800 text-white"
-                  : "bg-gray-100 hover:bg-gray-200"
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
+        <span className="flex items-center gap-1.5 border-l pl-3">
+          <span id={`${controlId}-${placement}-precision`}>Values</span>
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            size="sm"
+            aria-labelledby={`${controlId}-${placement}-precision`}
+            value={String(decimals)}
+            onValueChange={(value) => {
+              const option = PRECISIONS.find((item) => String(item.value) === value);
+              if (option) setDecimals(option.value);
+            }}
+          >
+            {PRECISIONS.map((option) => (
+              <ToggleGroupItem
+                key={option.value}
+                value={String(option.value)}
+                title={option.hint}
+                aria-label={option.hint}
+                className="h-7 min-w-7 px-2 tabular-nums"
+              >
+                {option.label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
         </span>
       )}
     </div>
@@ -284,83 +242,62 @@ function ChartFrame({
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-2">
-        <div className="flex-1">{controls("inline")}</div>
-        <button
+      <div className="mb-2 flex items-center gap-3">
+        <div className="min-w-0 flex-1">{controls("inline")}</div>
+        <Button
           type="button"
+          variant="secondary"
+          size="sm"
           onClick={() => setExpanded(true)}
-          title="Expand to full screen"
           aria-label={`Expand ${title} to full screen`}
-          className="flex items-center gap-1 px-2 py-1 rounded text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 whitespace-nowrap"
         >
-          <ArrowsPointingOutIcon className="w-4 h-4" />
+          <ArrowsPointingOutIcon aria-hidden="true" />
           Expand
-        </button>
+        </Button>
       </div>
 
-      <div className="overflow-x-auto">
+      <div ref={chartBoxRef} className="overflow-x-auto">
         {children({
           explanation,
           maxDisplay: shown,
           decimals,
           groupByGenus,
           rowSort,
-          width: INLINE_WIDTH,
+          width: Math.max(MIN_INLINE_WIDTH, chartBoxWidth ?? INLINE_WIDTH),
           rowHeight,
         })}
       </div>
 
-      {expanded &&
-        mounted &&
-        createPortal(
-          // This sits inside a transformed drawer, which would otherwise become
-          // the containing block for a fixed overlay and trap it there.
-          // Portalling to body is what keeps "full screen" meaning full screen.
-          <div
-            ref={dialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-label={title}
-            tabIndex={-1}
-            className="fixed inset-0 z-[9999] bg-black/60 flex items-center justify-center p-4 outline-none"
-            onClick={() => setExpanded(false)}
-          >
-            <div
-              className="bg-white rounded-lg shadow-xl w-full h-full flex flex-col overflow-hidden"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-                <div className="font-medium">{title}</div>
-                <button
-                  type="button"
-                  onClick={() => setExpanded(false)}
-                  aria-label="Close"
-                  className="p-1 rounded hover:bg-gray-100"
-                >
-                  <XMarkIcon className="w-5 h-5 text-gray-600" />
-                </button>
-              </div>
-              <div className="px-4 py-3 border-b border-gray-200">
-                {controls("expanded")}
-              </div>
-              <div className="flex-1 overflow-auto p-4">
-                {children({
-                  explanation,
-                  maxDisplay: shown,
-                  decimals,
-                  groupByGenus,
-                  rowSort,
-                  width: Math.max(
-                    MIN_EXPANDED_WIDTH,
-                    viewportWidth - EXPANDED_CHROME
-                  ),
-                  rowHeight: Math.round(rowHeight * EXPANDED_ROW_SCALE),
-                })}
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
+      {/* A Radix Dialog rather than an overlay portalled by hand: these charts
+          sit inside a modal Sheet, which makes everything outside it inert,
+          and only a nested Radix layer is let through. Radix also brings the
+          focus trap, Escape and scroll lock the hand-built overlay had to. */}
+      <Dialog open={expanded} onOpenChange={setExpanded}>
+        <DialogContent
+          className="flex h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)] flex-col gap-0 p-0"
+          // Centred on the py-3 header's text-base title rather than a p-6 one.
+          closeClassName="top-3"
+        >
+          <DialogHeader className="border-b px-4 py-3 pr-12 text-left">
+            <DialogTitle className="text-base">{title}</DialogTitle>
+            <DialogDescription className="sr-only">
+              The {title} chart at full size, with the same controls.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="border-b px-4 py-3">{controls("expanded")}</div>
+          <div className="flex-1 overflow-auto overscroll-contain p-4">
+            {children({
+              explanation,
+              maxDisplay: shown,
+              decimals,
+              groupByGenus,
+              rowSort,
+              width: Math.max(MIN_EXPANDED_WIDTH, viewportWidth - EXPANDED_CHROME),
+              rowHeight: Math.round(rowHeight * EXPANDED_ROW_SCALE),
+            })}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -477,7 +414,7 @@ export function LocalWaterfallChart({
         const sampleIndex = sampleIndexOf(explanation, recordId);
         if (sampleIndex < 0) {
           return (
-            <div className="text-sm text-gray-500 py-2">
+            <div className="py-2 text-sm text-muted-foreground">
               This record is not in the prediction&apos;s explanation.
             </div>
           );

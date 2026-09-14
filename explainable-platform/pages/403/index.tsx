@@ -1,11 +1,12 @@
 import { useUser } from "@/contexts/auth/auth-context";
+import { Button } from "@/components/ui/button";
 
-export default function App() {
+export default function SessionExpiredPage() {
   const { signOut } = useUser();
 
   return (
-    <div className="flex items-center h-screen w-full">
-      <div className="flex flex-col h-full w-full justify-center items-center">
+    <main className="flex min-h-screen w-full items-center justify-center px-6 py-12">
+      <div className="flex max-w-md flex-col items-center text-center">
         <div className="mb-10">
           <svg
             width="267"
@@ -13,6 +14,7 @@ export default function App() {
             viewBox="0 0 267 198"
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
           >
             <path
               d="M77.5562 32.886C77.5562 32.886 107.58 55.67 153.224 13.068C193.76 -24.7657 226.859 34.9275 227.09 63.5135C227.39 100.544 186.554 130.173 206.372 154.495C226.189 178.817 167.07 218.981 135.208 184.222C95.5722 140.983 84.8345 176.115 62.2424 176.115C46.0278 176.115 12.7376 135.825 35.2181 105.851C54.1352 80.6288 43.8181 72.2579 38.822 63.5135C31.6149 50.9022 48.7303 16.6715 77.5562 32.886Z"
@@ -92,24 +94,19 @@ export default function App() {
             />
           </svg>
         </div>
-        <div className="text-xl font-medium mb-4">
-          Your session has expired.
-        </div>
-        <div className="w-1/3 text-center text-gray-500">
-          You have been logged out due to inactivity. For security reasons,
-          sessions automatically expire after a period of inactivity. Please log
-          in again to continue.
-        </div>
-        <div className="mt-4">
-          <button
-            type="button"
-            className="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5"
-            onClick={signOut}
-          >
-            Re-login
-          </button>
-        </div>
+        <h1 className="mb-3 text-2xl font-semibold tracking-tight">
+          Your Session Has Expired
+        </h1>
+        <p className="text-muted-foreground [text-wrap:pretty]">
+          For security, sessions end after a period of inactivity. Sign in again
+          to pick up where you left off.
+        </p>
+        <Button className="mt-6" onClick={signOut}>
+          Sign In Again
+        </Button>
       </div>
-    </div>
+    </main>
   );
 }
+
+SessionExpiredPage.title = "Session Expired";

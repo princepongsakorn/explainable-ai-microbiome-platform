@@ -1,39 +1,45 @@
 import { useRouter } from "next/router";
 import { jwtDecode } from "jwt-decode";
 import Cookies from "js-cookie";
-import { useEffect, useState } from "react";
+import { ComponentType, useEffect, useState } from "react";
 
-interface Props {
-  pageProps: {};
+/** Where a visitor without a usable session belongs, or null to let them in. */
+function redirectFor(accessToken?: string): string | null {
+  if (!accessToken) return "/auth/login";
+  try {
+    const { exp } = jwtDecode<{ exp: number }>(accessToken);
+    return Date.now() >= exp * 1000 ? "/403" : null;
+  } catch {
+    return "/auth/login";
+  }
 }
 
-const AuthenticationCheck = (WrappedComponent: any) => {
-  return (props: Props) => {
+const AuthenticationCheck = <P extends object>(
+  WrappedComponent: ComponentType<P>
+) => {
+  function Authenticated(props: P) {
     const router = useRouter();
-    const [isClient, setIsClient] = useState(false);
+    const [allowed, setAllowed] = useState(false);
 
+    // Checked after mount (the cookie is not readable during the server
+    // render) and again on every navigation, so an expired session is caught
+    // on the next page rather than only on a full reload. Redirecting belongs
+    // in an effect: calling the router while rendering is a side effect React
+    // may repeat.
     useEffect(() => {
-      setIsClient(true);
-    }, []);
+      const destination = redirectFor(Cookies.get("act"));
+      if (destination) {
+        setAllowed(false);
+        router.replace(destination);
+      } else {
+        setAllowed(true);
+      }
+    }, [router.asPath]);
 
-    if (!isClient) {
-      return null;
-    }
+    return allowed ? <WrappedComponent {...props} /> : null;
+  }
 
-    const accessToken = Cookies.get("act");
-    if (!accessToken) {
-      router.push("/auth/login");
-      return null;
-    }
-
-    const actDecode: { exp: number } = jwtDecode(accessToken);
-    if (Date.now() >= actDecode.exp * 1000) {
-      router.push("/403");
-      return null;
-    }
-
-    return <WrappedComponent {...props} />;
-  };
+  return Authenticated;
 };
 
 export default AuthenticationCheck;

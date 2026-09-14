@@ -1,146 +1,96 @@
 "use client";
 
-import React, { FC, ReactNode, useEffect, useState } from "react";
+import React, { FC } from "react";
 import { useRouter } from "next/router";
 import AuthenticationCheck from "@/hoc/AuthenticationCheck";
 import Sidebar from "@/components/common/Sidebar";
-import { ArrowUpTrayIcon, TableCellsIcon, CodeBracketIcon, BeakerIcon } from "@heroicons/react/24/outline";
+import {
+  ArrowUpTrayIcon,
+  TableCellsIcon,
+  CodeBracketIcon,
+  BeakerIcon,
+} from "@heroicons/react/24/outline";
 import Topbar from "../Topbar";
 
 interface Props {
   children: JSX.Element;
-  pageProps: {
-    mainPage: boolean;
-    permission: string[];
-  };
 }
 
-export interface NavigatorProps {
-  icon?: ReactNode;
+export interface NavPage {
+  name: string;
+  href: string;
+  /** The last path segments that count as being on this page. */
+  matches: string[];
+}
+
+export interface NavSection {
+  icon: typeof ArrowUpTrayIcon;
+  name: string;
+  /** The first path segment every page of the section shares. */
   pathName: string;
-  name: string;
-  slug: string;
-  subMenu: SubNavigatorProps[];
+  pages: NavPage[];
 }
 
-export interface SubNavigatorProps {
-  slug: string;
-  pathName: string | string[];
-  name: string;
-}
-
-const navigatorList: NavigatorProps[] = [
+export const sections: NavSection[] = [
   {
-    icon: <ArrowUpTrayIcon className="w-5" />,
+    icon: ArrowUpTrayIcon,
     pathName: "upload",
-    slug: "/upload",
     name: "Upload",
-    subMenu: [
-      {
-        slug: "/predict",
-        pathName: "predict",
-        name: "Upload file",
-      },
-    ],
+    pages: [{ name: "Upload File", href: "/upload/predict", matches: ["predict"] }],
   },
   {
-    icon: <TableCellsIcon className="w-5" />,
+    icon: TableCellsIcon,
     pathName: "prediction",
-    slug: "/prediction",
-    name: "Prediction List",
-    subMenu: [
+    name: "Predictions",
+    pages: [
       {
-        slug: "/prediction",
-        pathName: ["prediction", "local"],
         name: "Prediction List",
+        href: "/prediction/prediction",
+        matches: ["prediction", "local"],
       },
     ],
   },
   {
-    icon: <BeakerIcon className="w-5" />,
+    icon: BeakerIcon,
     pathName: "experiments",
-    slug: "/experiments",
     name: "Experiments and Models",
-    subMenu: [
-      {
-        slug: "/experiments",
-        pathName: "experiments",
-        name: "Experiments",
-      },
-      {
-        slug: "/models",
-        pathName: "models",
-        name: "Models",
-      },
+    pages: [
+      { name: "Experiments", href: "/experiments/experiments", matches: ["experiments"] },
+      { name: "Models", href: "/experiments/models", matches: ["models"] },
     ],
   },
   {
-    icon: <CodeBracketIcon className="w-5" />,
+    icon: CodeBracketIcon,
     pathName: "developer",
-    slug: "/developer",
     name: "Developer",
-    subMenu: [
-      {
-        slug: "/token",
-        pathName: "token",
-        name: "Personal Access Tokens",
-      },
-      {
-        slug: "/mlflow",
-        pathName: "mlflow",
-        name: "MLflow and Deployment",
-      },
+    pages: [
+      { name: "Personal Access Tokens", href: "/developer/token", matches: ["token"] },
+      { name: "MLflow and Deployment", href: "/developer/mlflow", matches: ["mlflow"] },
     ],
   },
 ];
 
-const Layout: FC<Props> = ({ children, pageProps }: Props) => {
+const Layout: FC<Props> = ({ children }: Props) => {
   const router = useRouter();
-  const [mainNavigate, SetMainNavigate] = useState<NavigatorProps[]>([]);
-  const [subNavigator, setSubNavigator] = useState<NavigatorProps>();
-  const splitPathUrl = router.pathname.split("/");
-  
-  useEffect(() => {
-    SetMainNavigate(
-      navigatorList
-        .map((main) => {
-          const subMenu = main.subMenu;
-          return {
-            ...main,
-            subMenu,
-            slug: `${main.slug}${subMenu[0]?.slug}`,
-          };
-        })
-        .filter((main) => main.subMenu.length > 0)
-    );
-  }, []);
-
-  useEffect(() => {
-    const navigator = mainNavigate
-      .filter((item: { pathName: string }) => item.pathName === splitPathUrl[1])
-      .map((item: any) => {
-        return { ...item, slug: item.slug.split("/").slice(0, -1).join("/") };
-      });
-
-    setSubNavigator(navigator[0]);
-
-    if (pageProps.mainPage && navigator[0]) {
-      router.push(`${navigator[0]?.slug}${navigator[0]?.subMenu[0].slug}`);
-    }
-  }, [router, mainNavigate]);
+  const [, sectionPath, pagePath] = router.pathname.split("/");
+  const section = sections.find((item) => item.pathName === sectionPath);
 
   return (
-    <div>
-      <Sidebar
-        currentPage={splitPathUrl[1]}
-        navigatorList={mainNavigate}
-        asPath={router.asPath}
-      />
-      <Topbar navigatorList={subNavigator} currentSubMenu={splitPathUrl[2]} />
-      <div className="ml-sidebar">
-        <div className="ml-[54px]">{children}</div>
+    <>
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-[70px] focus:top-3 focus:z-50 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:shadow-lg"
+      >
+        Skip to content
+      </a>
+      <Sidebar sections={sections} currentSection={sectionPath} />
+      <div className="ml-[54px]">
+        <Topbar section={section} currentPage={pagePath} />
+        <main id="main" tabIndex={-1} className="focus:outline-none">
+          {children}
+        </main>
       </div>
-    </div>
+    </>
   );
 };
 
