@@ -231,7 +231,7 @@ function ChartFrame({
 
   return (
     <div>
-      <div className="mb-2 flex items-start gap-3">
+      <div className="mb-2 flex items-center gap-3">
         <div className="min-w-0 flex-1">{controls("inline")}</div>
         <Button
           type="button"
@@ -262,7 +262,11 @@ function ChartFrame({
           and only a nested Radix layer is let through. Radix also brings the
           focus trap, Escape and scroll lock the hand-built overlay had to. */}
       <Dialog open={expanded} onOpenChange={setExpanded}>
-        <DialogContent className="flex h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)] flex-col gap-0 p-0">
+        <DialogContent
+          className="flex h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)] flex-col gap-0 p-0"
+          // Centred on the py-3 header's text-base title rather than a p-6 one.
+          closeClassName="top-3"
+        >
           <DialogHeader className="border-b px-4 py-3 pr-12 text-left">
             <DialogTitle className="text-base">{title}</DialogTitle>
             <DialogDescription className="sr-only">
