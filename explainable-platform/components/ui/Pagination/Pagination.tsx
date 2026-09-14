@@ -1,15 +1,19 @@
-import { Listbox, Transition } from "@headlessui/react";
-import {
-  ChevronUpIcon,
-  ChevronRightIcon,
-  ChevronLeftIcon,
-} from "@heroicons/react/24/outline";
-import { Fragment, useCallback, useEffect, useState } from "react";
-interface ClassNameProps {
-  className?: string;
-}
+import { useId } from "react";
+import { ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
 
-interface PaginationProps extends ClassNameProps {
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
+
+interface PaginationProps {
+  className?: string;
   currentPage: number;
   totalPages: number;
   totalItems: number;
@@ -27,141 +31,65 @@ export const Pagination = ({
   className,
   onChange,
 }: PaginationProps) => {
-  const numberOfPage: any = Array.from({ length: totalPages }).map(
-    (_, index) => index + 1
-  );
-  const [selected, setSelected] = useState<number>(currentPage);
+  const pageLabelId = useId();
 
-  useEffect(() => {
-    setSelected(currentPage);
-  }, [currentPage]);
+  // Nothing to page through, or the first response has not arrived yet.
+  if (totalPages < 1 || totalItems < 1) return null;
 
-  const numberOfDataPerPage = () => {
-    const numeral = currentPage * itemsPerPage;
-    const frontNumber = currentPage === 1 ? 1 : numeral - itemsPerPage + 1;
-    const lastNumber = frontNumber + itemCount - 1;
-
-    if (lastNumber === frontNumber) {
-      return lastNumber;
-    } else if (frontNumber > totalItems) {
-      return 0;
-    } else {
-      return frontNumber + "-" + lastNumber;
-    }
-  };
-
-  const handelOnChange = useCallback(
-    (value: any) => {
-      setSelected(value);
-      onChange(value);
-    },
-    [currentPage]
-  );
-
-  const handleClickPrev = () => {
-    let numberSelected = +selected;
-    if (totalPages > 0 && numberSelected !== 1) {
-      const page = numberSelected === 1 ? 1 : numberSelected - 1;
-      handelOnChange(page);
-    }
-  };
-
-  const handleClickNext = () => {
-    let numberSelected = +selected;
-    if (totalPages > 0 && totalPages !== numberSelected) {
-      const page =
-        +numberSelected === totalPages ? totalPages : numberSelected + 1;
-      handelOnChange(page);
-    }
-  };
-
-  const isFirstPage = () => {
-    return currentPage === 1;
-  };
-
-  const isLastPage = () => {
-    return currentPage === totalPages || totalPages === 0;
-  };
+  const first = (currentPage - 1) * itemsPerPage + 1;
+  const last = first + itemCount - 1;
+  const range = itemCount <= 1 ? `${first}` : `${first}–${last}`;
+  const pages = Array.from({ length: totalPages }, (_, index) => index + 1);
 
   return (
-    <div className={`flex w-full justify-between items-center ${className}`}>
-      <div className="flex flex-row text-sm  text-grey-2">
-        <div>{numberOfDataPerPage()}</div>
-        <div className="ml-1">
-          of <span>{totalItems}</span>
-        </div>
+    <nav
+      aria-label="Pagination"
+      className={cn(
+        "flex w-full flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground",
+        className
+      )}
+    >
+      <p className="tabular-nums">
+        {range} of {totalItems}
+      </p>
+      <div className="flex items-center gap-2">
+        <span id={pageLabelId}>Page</span>
+        <Select value={String(currentPage)} onValueChange={(value) => onChange(Number(value))}>
+          <SelectTrigger aria-labelledby={pageLabelId} className="h-8 w-[4.5rem] tabular-nums">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="max-h-60">
+            <SelectGroup>
+              {pages.map((page) => (
+                <SelectItem key={page} value={String(page)} className="tabular-nums">
+                  {page}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        <span className="tabular-nums">of {totalPages}</span>
+        <Button
+          variant="outline"
+          size="icon"
+          className="ml-2 size-8"
+          aria-label="Previous page"
+          disabled={currentPage <= 1}
+          onClick={() => onChange(currentPage - 1)}
+        >
+          <ChevronLeftIcon aria-hidden="true" />
+        </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          className="size-8"
+          aria-label="Next page"
+          disabled={currentPage >= totalPages}
+          onClick={() => onChange(currentPage + 1)}
+        >
+          <ChevronRightIcon aria-hidden="true" />
+        </Button>
       </div>
-      <div className="flex flex-row justify-center items-center text-sm  text-grey-2">
-        <div className="mr-2">The page you’re on</div>
-        <div className="">
-          <Listbox value={selected} onChange={handelOnChange}>
-            {({ open }) => (
-              <div className="relative ">
-                <Listbox.Button className="relative w-full border-[1px] border-[#EEEEEE] h-6 px-2 rounded-lg">
-                  <Listbox.Button className="relative w-full  pr-5 text-left bg-white border-opacity-25 rounded-lg cursor-pointer">
-                    <span className="block truncat text-black font-normal text-xs">
-                      {currentPage}
-                    </span>
-                    <span className="absolute inset-y-0 right-0 flex items-center pointer-events-none">
-                      <ChevronUpIcon
-                        className={`${
-                          open ? "transform rotate-180" : ""
-                        } w-3 h-3 text-black`}
-                        aria-hidden="true"
-                      />
-                    </span>
-                  </Listbox.Button>
-                </Listbox.Button>
-                <Listbox.Options className="hide-scrollbar absolute flex flex-col bottom-7 items-center z-20 translate-x-[-4px] min-w-[50px] py-1 mt-1 overflow-y-auto text-base bg-white border-[1px] border-[#EEEEEE] rounded-lg shadow-sm max-h-60 ">
-                  {numberOfPage.map(
-                    (item: any, idx: number) =>
-                      item !== selected && (
-                        <Listbox.Option
-                          key={idx}
-                          className={() =>
-                            `cursor-pointer select-none relative py-2 pl-4 pr-4 hover:text-black hover:bg-gray-100 rounded-lg`
-                          }
-                          value={item}
-                        >
-                          {({ selected }) => (
-                            <span
-                              className={`${
-                                selected ? "font-medium" : "font-normal"
-                              } block truncate text-xs`}
-                            >
-                              {item}
-                            </span>
-                          )}
-                        </Listbox.Option>
-                      )
-                  )}
-                </Listbox.Options>
-              </div>
-            )}
-          </Listbox>
-        </div>
-        <div className="flex bg-[#dfdfdf] w-[1px] h-6 mx-4" />
-        <div className="flex">
-          <button
-            disabled={isFirstPage()}
-            className={`text-base text-black mr-4 ${
-              isFirstPage() ? "opacity-20" : ""
-            }`}
-            onClick={() => handleClickPrev()}
-          >
-            <ChevronLeftIcon className="w-4" />
-          </button>
-          <button
-            disabled={isLastPage()}
-            className={`text-base text-black ${
-              isLastPage() ? "opacity-20" : ""
-            }`}
-            onClick={() => handleClickNext()}
-          >
-            <ChevronRightIcon className="w-4" />
-          </button>
-        </div>
-      </div>
-    </div>
+    </nav>
   );
 };
