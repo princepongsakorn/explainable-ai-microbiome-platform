@@ -23,18 +23,6 @@ body {
   color: #1d2939;
 }
 
-.popover-left {
-  left: -24px !important;
-}
-
-.hide-scrollbar {
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none;  /* Internet Explorer 10+ */
-}
-.hide-scrollbar::-webkit-scrollbar { /* WebKit */
-  width: 0;
-  height: 0;
-}
 /*
  * shadcn/ui theme. tailwind.config.js wraps these as hsl(var(--x)), so they
  * must stay bare HSL channels, not the oklch() colours newer registries emit.
