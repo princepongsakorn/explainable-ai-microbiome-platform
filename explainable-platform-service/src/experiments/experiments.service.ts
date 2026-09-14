@@ -174,6 +174,21 @@ export class ExperimentsService {
     }
   }
 
+  /** One version of a registered model, with the run that produced it. */
+  async getModelVersion(name: string, version: string) {
+    const response = await lastValueFrom(
+      this.httpService.get<{
+        name: string;
+        version: string;
+        run_id: string;
+        current_stage: string;
+      }>(
+        `${this.inferenceServiceURL}/v1/mlflow/model/${encodeURIComponent(name)}/version/${encodeURIComponent(version)}`,
+      ),
+    );
+    return response.data;
+  }
+
   async getRegisteredModel() {
     try {
       const response = await lastValueFrom(

@@ -417,6 +417,7 @@ export class PredictionsService {
         'beeswarmError',
         'createdAt',
         'prediction_number',
+        'explainModelVersion',
       ],
       take: limit,
       skip: (page - 1) * limit,
@@ -450,6 +451,7 @@ export class PredictionsService {
           id: prediction.id,
           predictionNumber: prediction.prediction_number,
           modelName: prediction.modelName,
+          modelVersion: prediction.explainModelVersion ?? null,
           records: countsById.get(predictionId) ?? emptyRecordCounts(),
           createdAt: prediction.createdAt,
           heatmap: prediction.heatmap
@@ -508,7 +510,13 @@ export class PredictionsService {
   ) {
     const prediction = await this.predictionsRepository.findOne({
       where: { id: predictionId },
-      select: ['id', 'prediction_number', 'modelName', 'dfColumns'],
+      select: [
+        'id',
+        'prediction_number',
+        'modelName',
+        'dfColumns',
+        'explainModelVersion',
+      ],
     });
 
     if (!prediction)
@@ -594,6 +602,8 @@ export class PredictionsService {
       prediction: {
         predictionNumber: prediction.prediction_number,
         ...prediction,
+        // The version that made it, so the page can open that model's run.
+        modelVersion: prediction.explainModelVersion ?? null,
       },
       meta,
     };
