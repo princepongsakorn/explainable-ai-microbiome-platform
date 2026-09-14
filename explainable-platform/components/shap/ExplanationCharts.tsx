@@ -4,6 +4,7 @@ import { genusOf } from "shap-svg";
 import type { Explanation, PlotLabels, RowSort, ValuePrecision } from "shap-svg";
 import { Plots } from "shap-svg/react";
 import { useExplanation, sampleIndexOf } from "@/lib/useExplanation";
+import { useElementWidth } from "@/lib/useElementWidth";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -52,7 +53,14 @@ const RESEARCH_LABELS: Partial<PlotLabels> = {
   otherFeatures: (count) => `${count} other taxa`,
 };
 
+/** Inline width before the chart's box has been measured. */
 const INLINE_WIDTH = 720;
+/**
+ * The narrowest an inline chart is drawn. shap-svg keeps a fixed 260px column
+ * for taxon names, so below this the bars get too little room; the box
+ * scrolls sideways instead.
+ */
+const MIN_INLINE_WIDTH = 560;
 /** Room for the expanded view's own padding, so the chart does not sit under its edge. */
 const EXPANDED_CHROME = 96;
 /** Below this, expanding is no more readable than the inline view. */
@@ -127,6 +135,9 @@ function ChartFrame({
   // controls, so the controls' ids cannot come from the prediction alone.
   const controlId = useId();
   const viewportWidth = useViewportWidth(expanded);
+  // Inline, the chart fills whatever holds it, a drawer or a page, rather
+  // than a fixed width that left the rest of a wide drawer empty.
+  const [chartBoxRef, chartBoxWidth] = useElementWidth<HTMLDivElement>();
 
   // Only while there is nothing to show: a revalidation keeps the chart up.
   if (loading && !explanation) {
@@ -245,14 +256,14 @@ function ChartFrame({
         </Button>
       </div>
 
-      <div className="overflow-x-auto">
+      <div ref={chartBoxRef} className="overflow-x-auto">
         {children({
           explanation,
           maxDisplay: shown,
           decimals,
           groupByGenus,
           rowSort,
-          width: INLINE_WIDTH,
+          width: Math.max(MIN_INLINE_WIDTH, chartBoxWidth ?? INLINE_WIDTH),
           rowHeight,
         })}
       </div>
