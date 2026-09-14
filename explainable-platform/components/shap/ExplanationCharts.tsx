@@ -10,7 +10,7 @@ import {
 import { createPortal } from "react-dom";
 import { ArrowsPointingOutIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { genusOf } from "shap-svg";
-import type { Explanation, RowSort, ValuePrecision } from "shap-svg";
+import type { Explanation, PlotLabels, RowSort, ValuePrecision } from "shap-svg";
 import { Plots } from "shap-svg/react";
 import { useExplanation, sampleIndexOf } from "@/lib/useExplanation";
 
@@ -33,6 +33,24 @@ const ROW_SORTS: { value: RowSort; label: string }[] = [
   { value: "name", label: "Name" },
   { value: "featureValue", label: "Feature value" },
 ];
+
+/**
+ * The charts' text in the terms a microbiome researcher reads results in. The
+ * numbers are SHAP's, unchanged; only what they are called differs from SHAP's
+ * figures. Every model this platform serves explains a predicted probability.
+ */
+const RESEARCH_LABELS: Partial<PlotLabels> = {
+  shapValue: "Contribution",
+  shapValueAxis: "Contribution to predicted probability",
+  meanAbsShapValue: "Mean absolute contribution",
+  featureValue: "Relative abundance",
+  missingFeatureValue: "not measured",
+  samples: "Samples",
+  sampleTotal: "Total contribution",
+  baseValue: "Average prediction",
+  modelOutput: "Prediction",
+  otherFeatures: (count) => `${count} other taxa`,
+};
 
 const INLINE_WIDTH = 720;
 /** Room for the overlay's own padding, so the chart does not sit under its edge. */
@@ -359,6 +377,7 @@ export function GlobalImportanceChart({ predictionId }: { predictionId?: string 
       {({ explanation, maxDisplay, groupByGenus, width, rowHeight }) => (
         <Plots.bar
           explanation={explanation}
+          labels={RESEARCH_LABELS}
           groupByGenus={groupByGenus}
           maxDisplay={maxDisplay}
           width={width}
@@ -382,6 +401,7 @@ export function GlobalBeeswarmChart({ predictionId }: { predictionId?: string })
       {({ explanation, maxDisplay, groupByGenus, rowSort, width, rowHeight }) => (
         <Plots.beeswarm
           explanation={explanation}
+          labels={RESEARCH_LABELS}
           groupByGenus={groupByGenus}
           rowSort={rowSort}
           maxDisplay={maxDisplay}
@@ -419,6 +439,7 @@ export function GlobalHeatmapChart({
       {({ explanation, maxDisplay, groupByGenus, rowSort, width, rowHeight }) => (
         <Plots.heatmap
           explanation={explanation}
+          labels={RESEARCH_LABELS}
           groupByGenus={groupByGenus}
           rowSort={rowSort}
           maxDisplay={maxDisplay}
@@ -464,6 +485,7 @@ export function LocalWaterfallChart({
         return (
           <Plots.waterfall
             explanation={explanation}
+            labels={RESEARCH_LABELS}
             groupByGenus={groupByGenus}
             sampleIndex={sampleIndex}
             maxDisplay={maxDisplay}
