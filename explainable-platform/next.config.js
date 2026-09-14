@@ -1,6 +1,9 @@
 module.exports = {
   /* config options here */
   reactStrictMode: true,
+  // Next 12's Terser cannot parse class static blocks, which Radix ships
+  // (@radix-ui/react-collection); the SWC minifier can.
+  swcMinify: true,
   // Next 12 standalone build: produces .next/standalone/server.js with minimal node_modules.
   // Enables a tiny runtime Docker image (no source, no devDeps).
   output: 'standalone',
