@@ -39,8 +39,6 @@ export function History() {
 
   const currentPage = Number(router.query.page) || 1;
 
-
-
   const getPredictionsRecordList = async () => {
     const params: IPaginationRequestParams = {
       page: currentPage,

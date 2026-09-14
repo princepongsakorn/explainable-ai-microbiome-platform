@@ -21,6 +21,8 @@ type Entry = {
   error?: string;
   loading: boolean;
   progress?: ExplanationProgress;
+  /** Invalidated while a request was in flight; its answer is discarded. */
+  stale?: boolean;
   listeners: Set<() => void>;
 };
 
@@ -66,23 +68,36 @@ function load(predictionId: string) {
   if (entry.loading) return;
 
   entry.loading = true;
+  entry.stale = false;
   entry.error = undefined;
   notify(entry);
 
   getExplanation(predictionId)
     .then(
       (data) => {
+        if (entry.stale) return;
         entry.data = data;
         entry.error = undefined;
         entry.progress = undefined;
       },
       (requestError) => {
+        if (entry.stale) return;
         entry.data = undefined;
         entry.error = messageFor(requestError);
       }
     )
     .then(() => {
       entry.loading = false;
+      // Every chart unmounted while the request was in flight. The effect
+      // cleanup left the entry for this moment rather than drop a live request.
+      if (entry.listeners.size === 0) {
+        if (store.get(predictionId) === entry) store.delete(predictionId);
+        return;
+      }
+      if (entry.stale) {
+        load(predictionId);
+        return;
+      }
       notify(entry);
     });
 }
@@ -104,6 +119,13 @@ export function invalidateExplanation(predictionId: string) {
     return;
   }
   entry.data = undefined;
+  if (entry.loading) {
+    // The request in flight may have left before the change it is being told
+    // about — a 404 sent just before the job finished — so fetch again once it
+    // lands instead of trusting its answer.
+    entry.stale = true;
+    return;
+  }
   load(predictionId);
 }
 

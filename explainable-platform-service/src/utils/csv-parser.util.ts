@@ -62,8 +62,20 @@ export function toNumericRows(
       );
     }
 
-    return row.map((cell, columnIndex) => {
-      if (columnIndex === 0) return cell;
+    // A row that stops early has left its trailing cells empty, and an empty
+    // cell is an absent taxon. Sent on short, pandas would fill those cells with
+    // NaN and the runtime would reject the whole chunk as non-numeric.
+    const given = row as unknown[];
+    const cells: unknown[] =
+      given.length < columns.length
+        ? [
+            ...given,
+            ...new Array<string>(columns.length - given.length).fill(''),
+          ]
+        : given;
+
+    return cells.map((cell, columnIndex) => {
+      if (columnIndex === 0) return cell as string | number;
 
       const text = String(cell ?? '').trim();
       if (text === '') return 0;

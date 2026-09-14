@@ -1,4 +1,5 @@
 import { lastValueFrom } from 'rxjs';
+import { isAxiosError } from 'axios';
 import { Processor, Process } from '@nestjs/bull';
 import { Job } from 'bull';
 import { HttpService } from '@nestjs/axios';
@@ -36,6 +37,21 @@ const MIN_PNG_BASE64_LEN = 8000;
 /** Attempts per explain chunk before the whole Explanation is abandoned. */
 const EXPLAIN_CHUNK_ATTEMPTS = 3;
 const EXPLAIN_RETRY_BASE_MS = 1000;
+/**
+ * The PNG endpoints receive every Sample in one call, so they can outlast the
+ * module's 120 s timeout, which is sized for one explain chunk.
+ */
+const PLOT_TIMEOUT_MS = 900_000;
+
+/** The runtime's own message when it sent one, rather than axios's "status code 400". */
+function inferenceErrorMessage(error: unknown): string {
+  if (isAxiosError(error)) {
+    const detail = (error.response?.data as { error?: unknown } | undefined)
+      ?.error;
+    if (typeof detail === 'string' && detail) return detail;
+  }
+  return (error as Error)?.message ?? String(error);
+}
 
 type ExplainEndpoint = 'waterfall' | 'heatmap' | 'beeswarm';
 
@@ -113,6 +129,7 @@ export class PredictionProcessor {
       const observable = this.httpService.post(
         `${this.inferenceServiceURL}/v1/explain/${endpoint}/${modelName}`,
         dataframeSplit,
+        { timeout: PLOT_TIMEOUT_MS },
       );
       const response = await lastValueFrom(observable);
       base64 = extractBase64(response?.data);
@@ -249,14 +266,23 @@ export class PredictionProcessor {
     } catch (error) {
       prediction.explainKey = null;
       prediction.explainEtag = null;
-      prediction.explainError = (error as Error).message;
+      prediction.explainError = inferenceErrorMessage(error);
       console.error(
         `[PredictionProcessor] explanation for ${prediction.id} failed`,
         error,
       );
     }
 
-    await this.predictionsRepository.save(prediction);
+    // Only the explanation's own columns. This runs for minutes, and saving the
+    // whole entity loaded at the start would put back plot fields that another
+    // job has written in the meantime.
+    await this.predictionsRepository.update(prediction.id, {
+      explainKey: prediction.explainKey,
+      explainEtag: prediction.explainEtag,
+      explainError: prediction.explainError,
+      explainModelVersion: prediction.explainModelVersion,
+      explainContractVersion: prediction.explainContractVersion,
+    });
     this.eventsHub.publishPrediction(prediction.id, 'prediction:explanation', {
       ready: Boolean(prediction.explainKey),
       etag: prediction.explainEtag ?? null,
@@ -285,17 +311,22 @@ export class PredictionProcessor {
         return response.data as ExplainPayload;
       } catch (error) {
         lastError = error;
-        const isLast = attempt === EXPLAIN_CHUNK_ATTEMPTS - 1;
+        const status = isAxiosError(error) ? error.response?.status : undefined;
+        // A 4xx is the runtime's verdict on the request itself, and the same body
+        // gets the same verdict, so only server and network failures are retried.
+        const retryable = status === undefined || status >= 500;
+        const isLast = !retryable || attempt === EXPLAIN_CHUNK_ATTEMPTS - 1;
         console.warn(
           `[PredictionProcessor] explain chunk of ${records.length} failed ` +
-            `(attempt ${attempt + 1}/${EXPLAIN_CHUNK_ATTEMPTS})` +
+            `(attempt ${attempt + 1}/${EXPLAIN_CHUNK_ATTEMPTS}` +
+            (status ? `, HTTP ${status}` : '') +
+            ')' +
             (isLast ? '' : ', retrying'),
         );
-        if (!isLast) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, EXPLAIN_RETRY_BASE_MS * 2 ** attempt),
-          );
-        }
+        if (isLast) break;
+        await new Promise((resolve) =>
+          setTimeout(resolve, EXPLAIN_RETRY_BASE_MS * 2 ** attempt),
+        );
       }
     }
     throw lastError;

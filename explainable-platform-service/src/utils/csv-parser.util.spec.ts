@@ -57,6 +57,10 @@ describe('toNumericRows', () => {
     );
   });
 
+  it('fills the missing trailing cells of a short row with zeros', () => {
+    expect(toNumericRows(columns, [['s1', '1']])).toEqual([['s1', 1, 0]]);
+  });
+
   it('accepts an empty set of rows', () => {
     expect(toNumericRows(columns, [])).toEqual([]);
   });

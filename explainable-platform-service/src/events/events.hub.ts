@@ -23,6 +23,7 @@ export interface EventsRedis {
     listener: (channel: string, message: string) => void,
   ): unknown;
   quit(): Promise<unknown>;
+  disconnect(): void;
 }
 
 const CHANNEL_PREFIX = 'events:';
@@ -159,10 +160,11 @@ export class EventsHub implements OnModuleDestroy {
       stream.complete();
     }
     this.streams.clear();
+    // disconnect(), not quit(), for the subscriber: quit is itself a command, and
+    // with Redis down it would sit in the offline queue — as would any subscribe
+    // still pending — so shutdown would hang until Redis came back.
+    this.subscriber.disconnect();
     await this.flush();
-    await Promise.all([
-      this.publisher.quit().catch(() => undefined),
-      this.subscriber.quit().catch(() => undefined),
-    ]);
+    await this.publisher.quit().catch(() => undefined);
   }
 }
