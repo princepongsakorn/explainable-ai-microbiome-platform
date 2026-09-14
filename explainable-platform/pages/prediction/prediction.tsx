@@ -1,38 +1,56 @@
-"use client";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
+import { ChevronRightIcon, TableCellsIcon } from "@heroicons/react/24/outline";
 
 import Layout from "@/components/common/Layout";
-import { ChevronRightIcon } from "@heroicons/react/24/outline";
-import { useEffect, useState } from "react";
+import { PageHeader } from "@/components/common/PageHeader";
 import { IPredictions } from "@/components/model/model.interface";
-import Drawer from "react-modern-drawer";
-import { getPredictions } from "../api/predict";
-import { useSse } from "@/lib/useSse";
-import dayjs from "dayjs";
-import utc from "dayjs/plugin/utc";
-import timezone from "dayjs/plugin/timezone";
-import "react-modern-drawer/dist/index.css";
+import { IPagination } from "@/components/model/pagination.interface";
 import { Pagination } from "@/components/ui/Pagination";
-import {
-  IPagination,
-  IPaginationRequestParams,
-} from "@/components/model/pagination.interface";
-import { useRouter } from "next/router";
-import { queryToString } from "@/lib/queryToString";
-import {
-  invalidateExplanation,
-  revalidateExplanation,
-  setExplanationProgress,
-} from "@/lib/useExplanation";
 import {
   GlobalBeeswarmChart,
   GlobalHeatmapChart,
   GlobalImportanceChart,
 } from "@/components/shap/ExplanationCharts";
+import { ChartSection } from "@/components/shap/ChartSection";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { formatDateTime } from "@/lib/format";
+import { queryToString } from "@/lib/queryToString";
+import { useSse } from "@/lib/useSse";
+import {
+  invalidateExplanation,
+  revalidateExplanation,
+  setExplanationProgress,
+} from "@/lib/useExplanation";
+import { getPredictions } from "../api/predict";
 
-dayjs.extend(utc);
-dayjs.extend(timezone);
-
-export function History() {
+export function PredictionListPage() {
   const router = useRouter();
   const [predictions, setPredictions] = useState<IPagination<IPredictions>>();
   const [isOpen, setIsOpen] = useState(false);
@@ -41,10 +59,7 @@ export function History() {
   const currentPage = Number(router.query.page) || 1;
 
   const getPredictionsRecordList = async () => {
-    const params: IPaginationRequestParams = {
-      page: currentPage,
-    };
-    const data = await getPredictions(params);
+    const data = await getPredictions({ page: currentPage });
     setPredictions(data);
     return data;
   };
@@ -93,19 +108,12 @@ export function History() {
   );
 
   const onHandleChangePage = (page: number) => {
-    router.query.page = page?.toString();
-    const queryString = queryToString(router.query);
-    router.push(`?${queryString}`, undefined, { shallow: true });
+    router.push({ query: { ...router.query, page } }, undefined, { shallow: true });
   };
 
-  const onViewAll = (id?: string) => {
-    if (id) {
-      const params = { id };
-      const queryString = queryToString(params);
-      router.push(`local/?${queryString}`, undefined, {
-        shallow: true,
-      });
-    }
+  const openPrediction = (prediction: IPredictions) => {
+    setSelectPrediction(prediction);
+    setIsOpen(true);
   };
 
   // Re-fetch when the page changes. Previously this only ran on mount, so
@@ -114,158 +122,162 @@ export function History() {
     getPredictionsRecordList();
   }, [currentPage]);
 
+  const items = predictions?.items;
+
   return (
-    <>
-      <div className="p-8 bg-white h-full">
-        <div className="text-xl font-medium">Prediction List</div>
-        <div className="mt-4 pt-8 overflow-hidden border-solid bg-white border-t-[1px] border-[#EAEAEA] w-full">
-          <div className="flex flex-col w-full">
-            <table className="w-full text-sm text-left rtl:text-right text-gray-500">
-              <thead className="text-gray-700 bg-gray-50 ">
-                <tr className="">
-                  <th
-                    scope="col"
-                    className="font-medium rounded-l-lg px-6 py-3"
+    <div className="flex flex-col gap-6 p-8">
+      <PageHeader
+        title="Prediction List"
+        description="Every uploaded file and the model that predicted it. Open one to see what drove its predictions."
+      />
+
+      <div className="flex flex-col gap-4">
+        <div className="rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Prediction</TableHead>
+                <TableHead>Model</TableHead>
+                <TableHead className="text-right">Samples</TableHead>
+                <TableHead>Created</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {!items ? (
+                Array.from({ length: 5 }, (_, row) => (
+                  <TableRow key={row}>
+                    {Array.from({ length: 4 }, (_, cell) => (
+                      <TableCell key={cell}>
+                        <Skeleton className="h-4 w-24" />
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : items.length === 0 ? (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={4} className="p-0">
+                    <Empty className="py-16">
+                      <EmptyHeader>
+                        <EmptyMedia variant="icon">
+                          <TableCellsIcon aria-hidden="true" />
+                        </EmptyMedia>
+                        <EmptyTitle>No Predictions Yet</EmptyTitle>
+                        <EmptyDescription>
+                          Upload a CSV of samples to create your first prediction.
+                        </EmptyDescription>
+                      </EmptyHeader>
+                      <EmptyContent>
+                        <Link href="/upload/predict" passHref>
+                          <Button asChild size="sm">
+                            <a>Upload File</a>
+                          </Button>
+                        </Link>
+                      </EmptyContent>
+                    </Empty>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                items.map((prediction) => (
+                  // The row is a large click target for the mouse; the button
+                  // in its first cell is the same action for the keyboard.
+                  <TableRow
+                    key={prediction.id}
+                    className="cursor-pointer"
+                    onClick={() => openPrediction(prediction)}
                   >
-                    Prediction Id
-                  </th>
-                  <th scope="col" className="font-medium px-6 py-3">
-                    Model
-                  </th>
-                  <th scope="col" className="font-medium px-6 py-3">
-                    Record
-                  </th>
-                  <th
-                    scope="col"
-                    className="font-medium rounded-r-lg px-6 py-3"
-                  >
-                    Create At
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {predictions?.items.map((prediction) => (
-                  <tr
-                    className="bg-white hover:bg-gray-50 cursor-pointer"
-                    onClick={() => {
-                      setIsOpen(true), setSelectPrediction(prediction);
-                    }}
-                  >
-                    <th
-                      scope="row"
-                      className="px-6 py-5 font-medium text-black whitespace-nowrap"
-                    >
-                      {prediction.predictionNumber}
-                    </th>
-                    <td className="text-black px-6 py-5">
+                    <TableCell>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openPrediction(prediction);
+                        }}
+                        className="rounded-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        {prediction.predictionNumber}
+                      </button>
+                    </TableCell>
+                    <TableCell className="max-w-[20rem] truncate">
                       {prediction.modelName}
-                    </td>
-                    <td className="text-black px-6 py-5">
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
                       {prediction.records.total}
-                    </td>
-                    <td className="text-black px-6 py-5">
-                      {dayjs(prediction.createdAt)
-                        .tz("Asia/Bangkok")
-                        .format("DD-MM-YYYY HH:mm")}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <Pagination
-            currentPage={currentPage}
-            itemsPerPage={predictions?.meta.itemsPerPage || 0}
-            totalItems={predictions?.meta.totalItems || 0}
-            totalPages={predictions?.meta.totalPages || 0}
-            itemCount={predictions?.meta.itemCount || 0}
-            className="mt-4"
-            onChange={onHandleChangePage}
-          />
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap tabular-nums">
+                      {formatDateTime(prediction.createdAt)}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
         </div>
+        <Pagination
+          currentPage={currentPage}
+          itemsPerPage={predictions?.meta.itemsPerPage || 0}
+          totalItems={predictions?.meta.totalItems || 0}
+          totalPages={predictions?.meta.totalPages || 0}
+          itemCount={predictions?.meta.itemCount || 0}
+          onChange={onHandleChangePage}
+        />
       </div>
-      <Drawer
-        open={isOpen}
-        onClose={() => setIsOpen(false)}
-        direction="right"
-        className="shadow-2xs max-w-4xl overflow-y-auto"
-        duration={150}
-        size={"60vw"}
-      >
-        <div className="p-[40px] pt-[40px] overflow-y-auto">
-          <div className="flex flex-row justify-between items-center">
-            <p className="text-xl font-medium text-gray-800">
-              {selectPrediction?.predictionNumber}
-            </p>
-            <button
-              type="button"
-              className="py-2.5 px-5 text-sm font-medium text-gray-900 focus:outline-none bg-white rounded-lg border border-gray-200 hover:bg-gray-100 hover:text-blue-700 focus:z-10 focus:ring-4 focus:ring-gray-100"
-              onClick={() => onViewAll(selectPrediction?.id)}
+
+      <Sheet open={isOpen} onOpenChange={setIsOpen}>
+        <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-4xl">
+          <SheetHeader className="flex-row flex-wrap items-center justify-between gap-3 space-y-0 border-b px-6 py-4 pr-14 text-left">
+            <div className="min-w-0">
+              <SheetTitle>Prediction {selectPrediction?.predictionNumber}</SheetTitle>
+              <SheetDescription>
+                {selectPrediction?.modelName} · {selectPrediction?.records.total} samples ·{" "}
+                {formatDateTime(selectPrediction?.createdAt)}
+              </SheetDescription>
+            </div>
+            {selectPrediction && (
+              <Link
+                href={`/prediction/local?${queryToString({ id: selectPrediction.id })}`}
+                passHref
+              >
+                <Button asChild variant="outline" size="sm">
+                  <a>
+                    View All Records
+                    <ChevronRightIcon aria-hidden="true" />
+                  </a>
+                </Button>
+              </Link>
+            )}
+          </SheetHeader>
+
+          <div className="flex flex-1 flex-col gap-8 overflow-y-auto overscroll-contain px-6 py-6">
+            <ChartSection
+              id="feature-importance"
+              title="Feature Importance"
+              description="Mean absolute contribution of each taxon across every sample in this prediction: how much it moved the model, whichever the direction. Change how many are shown without recomputing anything."
             >
-              <div className="flex flex-row gap-2">
-                View All <ChevronRightIcon className="w-4" />
-              </div>
-            </button>
+              <GlobalImportanceChart predictionId={selectPrediction?.id} />
+            </ChartSection>
+            <Separator />
+            <ChartSection
+              id="beeswarm"
+              title="Beeswarm"
+              description="One dot per sample per taxon. Horizontal position is that sample’s contribution; colour is its relative abundance, scaled within the row so a single dominant taxon cannot wash out the others. Hover a dot for its values."
+            >
+              <GlobalBeeswarmChart predictionId={selectPrediction?.id} />
+            </ChartSection>
+            <Separator />
+            <ChartSection
+              id="heatmap"
+              title="Heatmap"
+              description="Every sample as a column and every taxon as a row, coloured by contribution: white at zero, red above, blue below. Samples are ordered by total contribution, so similar explanations sit together. Hover a column to see which sample it is."
+            >
+              <GlobalHeatmapChart predictionId={selectPrediction?.id} />
+            </ChartSection>
           </div>
-          <div className="font-bold bg-gray-50 px-4 py-2 rounded-lg my-4">
-            General Information
-          </div>
-          <div className="flex flex-row justify-between mb-3">
-            <p className="font-medium">Model</p>
-            <p>{selectPrediction?.modelName}</p>
-          </div>
-          <div className="flex flex-row justify-between mb-3">
-            <p className="font-medium">Record</p>
-            <p>{selectPrediction?.records.total}</p>
-          </div>
-          <div className="flex flex-row justify-between">
-            <p className="font-medium">Predict at</p>
-            <p>
-              {dayjs(selectPrediction?.createdAt)
-                .tz("Asia/Bangkok")
-                .format("DD-MM-YYYY HH:mm")}
-            </p>
-          </div>
-          <div className="font-bold bg-gray-50 px-4 py-2 rounded-lg my-4">
-            Summary
-          </div>
-          <div className="flex flex-col mb-3 mt-3">
-            <div className="font-medium">Feature importance</div>
-            <div className="text-sm py-2 text-gray-500">
-              Mean absolute SHAP value per feature across every sample in this
-              prediction — how much each taxon moved the model, regardless of
-              direction. Drawn in the browser from the explanation values, so the
-              number of features shown can be changed without recomputing
-              anything.
-            </div>
-            <GlobalImportanceChart predictionId={selectPrediction?.id} />
-          </div>
-          <div className="flex flex-col mb-3 mt-3 border-t-[1px] border-[#EAEAEA] pt-3">
-            <div className="font-medium">Beeswarm</div>
-            <div className="text-sm py-2 text-gray-500">
-              One dot per sample per feature. Horizontal position is that
-              sample&apos;s SHAP value; colour is its relative abundance, scaled
-              within the row so a single dominant taxon cannot wash out the
-              others. Interactive — hover a dot for its values.
-            </div>
-            <GlobalBeeswarmChart predictionId={selectPrediction?.id} />
-          </div>
-          <div className="flex flex-col mb-3 mt-3 border-t-[1px] border-[#EAEAEA] pt-3">
-            <div className="font-medium">Heatmap</div>
-            <div className="text-sm py-2 text-gray-500">
-              Every sample as a column, every feature as a row, coloured by SHAP
-              value — white at zero, red above, blue below. Samples are ordered
-              by total attribution, so groups with similar explanations sit
-              together. Hover a column to see which sample it is.
-            </div>
-            <GlobalHeatmapChart predictionId={selectPrediction?.id} />
-          </div>
-        </div>
-      </Drawer>
-    </>
+        </SheetContent>
+      </Sheet>
+    </div>
   );
 }
 
-History.Layout = Layout;
-History.title = "Prediction List";
-export default History;
+PredictionListPage.Layout = Layout;
+PredictionListPage.title = "Prediction List";
+export default PredictionListPage;
