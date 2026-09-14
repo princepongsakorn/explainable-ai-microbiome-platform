@@ -9,20 +9,27 @@ const BAR_ORDER = [
   PredictionStatus.PENDING,
 ] as const;
 
-/** How far a prediction's samples have got, as a bar and in words. */
+const plural = (count: number, one: string, many: string) =>
+  `${count} ${count === 1 ? one : many}`;
+
+/**
+ * How far a prediction's samples have got, as a bar and in words. The count
+ * is of samples that succeeded: an errored or canceled sample has no result,
+ * so counting it as done read "20 / 20" for a prediction with 3 results.
+ * Those are named beside it instead.
+ */
 export function PredictionProgress({ records }: { records: IRecordCounts }) {
   const { byStatus, total } = records;
 
-  // A backend without per-status counts still says how many succeeded or failed.
+  // A backend without per-status counts still says how many succeeded.
   if (!byStatus) {
     return (
       <span className="text-xs tabular-nums text-muted-foreground">
-        {records.success + records.error} / {total} done
+        {records.success} / {total} succeeded
       </span>
     );
   }
 
-  const done = byStatus.SUCCESS + byStatus.ERROR + byStatus.CANCELED;
   const breakdown = BAR_ORDER.filter((status) => byStatus[status] > 0)
     .map((status) => `${byStatus[status]} ${STATUS_STYLE[status].label.toLowerCase()}`)
     .join(", ");
@@ -43,13 +50,11 @@ export function PredictionProgress({ records }: { records: IRecordCounts }) {
           )}
       </div>
       <span className="text-xs tabular-nums text-muted-foreground">
-        {done} / {total} done
+        {byStatus.SUCCESS} / {total} succeeded
         {byStatus.ERROR > 0 && (
-          <span className="text-destructive">
-            {" "}
-            · {byStatus.ERROR} {byStatus.ERROR === 1 ? "error" : "errors"}
-          </span>
+          <span className="text-destructive"> · {plural(byStatus.ERROR, "error", "errors")}</span>
         )}
+        {byStatus.CANCELED > 0 && <span> · {byStatus.CANCELED} canceled</span>}
       </span>
     </div>
   );
