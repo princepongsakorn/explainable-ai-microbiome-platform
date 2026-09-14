@@ -5,7 +5,12 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindManyOptions, In, Repository } from 'typeorm';
+import { FindManyOptions, In, MoreThanOrEqual, Repository } from 'typeorm';
+import {
+  RecordCountRow,
+  emptyRecordCounts,
+  foldRecordCounts,
+} from './record-counts';
 import { Prediction } from '../entity/prediction.entity';
 import { PredictionRecord } from '../entity/prediction-record.entity';
 import {
@@ -418,34 +423,34 @@ export class PredictionsService {
       order: { prediction_number: 'DESC' },
     });
 
+    // One grouped query for the whole page, where there were three COUNTs per
+    // prediction. The relation column is quoted raw: TypeORM does not map
+    // "predictionId" from a property path.
+    const ids = items.map((prediction) => prediction.id);
+    const countRows: RecordCountRow[] = ids.length
+      ? await this.recordsRepository
+          .createQueryBuilder('record')
+          .select('"record"."predictionId"', 'predictionId')
+          .addSelect('"record"."status"', 'status')
+          .addSelect('"record"."class"', 'class')
+          .addSelect('COUNT(*)', 'count')
+          .where('"record"."predictionId" IN (:...ids)', { ids })
+          .groupBy('"record"."predictionId"')
+          .addGroupBy('"record"."status"')
+          .addGroupBy('"record"."class"')
+          .getRawMany()
+      : [];
+    const countsById = foldRecordCounts(ids, countRows);
+
     const predictions = await Promise.all(
       items.map(async (prediction) => {
         const predictionId = prediction.id;
-        const totalRecords = await this.recordsRepository.count({
-          where: { prediction: { id: predictionId } },
-        });
-        const successRecords = await this.recordsRepository.count({
-          where: {
-            prediction: { id: predictionId },
-            status: PredictionStatus.SUCCESS,
-          },
-        });
-        const errorRecords = await this.recordsRepository.count({
-          where: {
-            prediction: { id: predictionId },
-            status: PredictionStatus.ERROR,
-          },
-        });
 
         return {
           id: prediction.id,
           predictionNumber: prediction.prediction_number,
           modelName: prediction.modelName,
-          records: {
-            total: totalRecords,
-            success: successRecords,
-            error: errorRecords,
-          },
+          records: countsById.get(predictionId) ?? emptyRecordCounts(),
           createdAt: prediction.createdAt,
           heatmap: prediction.heatmap
             ? await this.storageService.getPresignedUrl(prediction.heatmap)
@@ -467,6 +472,31 @@ export class PredictionsService {
       currentPage: page,
     };
     return { items: predictions, meta };
+  }
+
+  /** The prediction list's summary strip, counted across every prediction. */
+  async getPredictionSummary() {
+    const predictionsWithStatus = async (statuses: PredictionStatus[]) => {
+      const row = await this.recordsRepository
+        .createQueryBuilder('record')
+        .select('COUNT(DISTINCT "record"."predictionId")', 'count')
+        .where('"record"."status" IN (:...statuses)', { statuses })
+        .getRawOne();
+      return Number(row?.count ?? 0);
+    };
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    const [inProgress, needsAttention, uploadedLast7Days] = await Promise.all([
+      predictionsWithStatus([
+        PredictionStatus.PENDING,
+        PredictionStatus.IN_PROGRESS,
+      ]),
+      predictionsWithStatus([PredictionStatus.ERROR]),
+      this.predictionsRepository.count({
+        where: { createdAt: MoreThanOrEqual(since) },
+      }),
+    ]);
+    return { inProgress, needsAttention, uploadedLast7Days };
   }
 
   async getPredictionRecords(
