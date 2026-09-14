@@ -1,6 +1,5 @@
 import { CodeBlock } from "react-code-block";
 import { themes } from "prism-react-renderer";
-import { isNil } from "lodash";
 
 import { CopyButton } from "@/components/common/CopyButton";
 
@@ -21,7 +20,8 @@ export const EXCodeBlock = (props: {
           {({ isLineHighlighted }) => (
             <div
               className={`table-row ${
-                isNil(props.lines)
+                // == null covers undefined too; lodash's isNil pulled in all of lodash.
+                props.lines == null
                   ? ""
                   : isLineHighlighted
                   ? "bg-primary/10"
