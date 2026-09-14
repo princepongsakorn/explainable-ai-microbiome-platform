@@ -8,6 +8,17 @@ html {
   -webkit-tap-highlight-color: transparent;
 }
 
+/*
+ * Overlays of stacked dialogs, sheets and alert dialogs. Each one dims the
+ * page, so two at 50% left the screen three-quarters black. Radix portals each
+ * overlay straight onto <body>, in the order they open, so an overlay after an
+ * earlier open one only dims lightly: enough to set the top dialog apart from
+ * the one behind it.
+ */
+body > .app-overlay[data-state="open"] ~ .app-overlay {
+  background-color: rgb(0 0 0 / 0.2);
+}
+
 a,
 button,
 input,
