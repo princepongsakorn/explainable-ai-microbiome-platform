@@ -4,7 +4,12 @@ import { cn } from "@/lib/utils";
 
 // The theme has no success or info tokens, so the status colours live here,
 // in the one place that decides them.
-export const STATUS_STYLE: Record<string, { label: string; className: string; dot: string }> = {
+type SampleStatus = Exclude<PredictionStatus, PredictionStatus.ALL>;
+
+export const STATUS_STYLE: Record<
+  SampleStatus,
+  { label: string; className: string; dot: string }
+> = {
   [PredictionStatus.SUCCESS]: {
     label: "Success",
     className: "bg-green-50 text-green-800",
@@ -33,7 +38,9 @@ export const STATUS_STYLE: Record<string, { label: string; className: string; do
 };
 
 export function StatusBadge({ status }: { status?: PredictionStatus }) {
-  const style = STATUS_STYLE[status ?? PredictionStatus.PENDING] ?? STATUS_STYLE.PENDING;
+  // ALL is a filter, not a sample's status; a sample without one is pending.
+  const style =
+    STATUS_STYLE[status && status !== PredictionStatus.ALL ? status : PredictionStatus.PENDING];
   return (
     <Badge
       variant="outline"

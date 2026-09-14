@@ -18,6 +18,7 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
+import { EMPTY_VALUE } from "@/lib/format";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { generateMLFlowToken, getMLFlowToken, getMLFlowTrackingUri } from "../api/mlflow";
 
@@ -47,7 +48,7 @@ function CredentialField({
             id={id}
             readOnly
             value={value ?? ""}
-            placeholder="—"
+            placeholder={EMPTY_VALUE}
             spellCheck={false}
             translate="no"
             className="font-mono text-sm"

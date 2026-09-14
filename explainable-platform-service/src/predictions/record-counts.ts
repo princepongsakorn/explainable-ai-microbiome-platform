@@ -9,8 +9,9 @@ export interface RecordCountRow {
   count: string | number;
 }
 
+/** Samples per status. ALL is a filter value, never a sample's status. */
 export type StatusCounts = Record<
-  'PENDING' | 'IN_PROGRESS' | 'SUCCESS' | 'ERROR' | 'CANCELED',
+  Exclude<PredictionStatus, PredictionStatus.ALL>,
   number
 >;
 
