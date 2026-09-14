@@ -1,5 +1,11 @@
 module.exports = {
-  content: ["./pages/**/*.{js,ts,jsx,tsx}", "./components/**/*.{js,ts,jsx,tsx}"],
+  // lib/ is scanned too: a class written there and not here is never
+  // generated, which is how the prediction results bar lost its colours.
+  content: [
+    "./pages/**/*.{js,ts,jsx,tsx}",
+    "./components/**/*.{js,ts,jsx,tsx}",
+    "./lib/**/*.{js,ts,jsx,tsx}",
+  ],
   // The app has no dark theme; "class" keeps dark: styles off until a .dark class is set.
   darkMode: ["class"],
   theme: {
