@@ -11,6 +11,9 @@ module.exports = {
   darkMode: ["class"],
   theme: {
   	extend: {
+  		fontFamily: {
+  			sans: ['Prompt', 'ui-sans-serif', 'system-ui', 'sans-serif']
+  		},
   		borderRadius: {
   			lg: 'var(--radius)',
   			md: 'calc(var(--radius) - 2px)',
@@ -73,5 +76,10 @@ module.exports = {
   variants: {
     extend: {},
   },
-  plugins: [flowbite.plugin(), require("tailwindcss-animate")],
+  // container-queries backs the @container variants shadcn's Field uses.
+  plugins: [
+    flowbite.plugin(),
+    require("tailwindcss-animate"),
+    require("@tailwindcss/container-queries"),
+  ],
 };

@@ -207,4 +207,5 @@ export function History() {
 }
 
 History.Layout = Layout;
+History.title = "Registered Models";
 export default History;

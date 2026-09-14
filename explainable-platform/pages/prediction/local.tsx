@@ -908,4 +908,5 @@ export function History() {
 }
 
 History.Layout = Layout;
+History.title = "Prediction Records";
 export default History;

@@ -8,7 +8,7 @@ import { useForm } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import { useEffect, useState } from "react";
 import Cookies from "js-cookie";
-import { dialog, dialogError } from "@/lib/dialog";
+import { notifyError, notifySuccess } from "@/lib/notify";
 import { MainButton } from "@/components/ui/Button/Button";
 
 const registorValidateSchema = yup.object({
@@ -36,13 +36,13 @@ export default function App() {
     try {
       setIsLoading(true);
       await signUp(form);
-      await dialog(
+      notifySuccess(
         "Your account has been successfully created!",
         "Your registration is complete. You can now log in and start using our services."
       );
       router.replace("login");
     } catch (error) {
-      await dialogError(
+      await notifyError(
         "Registration unsuccessful.",
         "We encountered an issue while creating your account. Please try again later."
       );

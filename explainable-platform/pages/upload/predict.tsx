@@ -394,4 +394,5 @@ export function Home() {
 }
 
 Home.Layout = Layout;
+Home.title = "Upload File";
 export default Home;

@@ -8,7 +8,7 @@ import { useForm } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import { useEffect, useState } from "react";
 import Cookies from "js-cookie";
-import { dialogError } from "@/lib/dialog";
+import { notifyError } from "@/lib/notify";
 import { MainButton } from "@/components/ui/Button/Button";
 
 const loginValidateSchema = yup.object({
@@ -47,7 +47,7 @@ export default function App() {
       setIsLoading(true);
       await signIn(form);
     } catch (error) {
-      await dialogError(
+      await notifyError(
         "Invalid email or password",
         "The email or password you entered is incorrect. Please try again."
       );

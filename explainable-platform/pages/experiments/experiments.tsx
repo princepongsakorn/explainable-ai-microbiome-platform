@@ -809,4 +809,5 @@ export function Experiments() {
 }
 
 Experiments.Layout = Layout;
+Experiments.title = "Experiments";
 export default Experiments;
