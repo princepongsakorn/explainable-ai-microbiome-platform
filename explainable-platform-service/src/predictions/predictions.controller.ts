@@ -81,6 +81,12 @@ export class PredictionsController {
     return this.predictionsService.getPredictions(Number(page), Number(limit));
   }
 
+  /** Figures for the prediction list's summary strip, across every prediction. */
+  @Get('summary')
+  async getPredictionSummary() {
+    return this.predictionsService.getPredictionSummary();
+  }
+
   /**
    * The whole Prediction's Explanation, gzipped JSON, with a conditional GET.
    *
