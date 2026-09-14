@@ -219,11 +219,17 @@ export function RunDetailsSheet({
   onOpenChange,
   onChanged,
   unavailable,
+  readOnly = false,
 }: {
   runId?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onChanged?: () => void;
+  /**
+   * Details only, without Publish or Unpublish: for opening a model from a
+   * prediction, where changing what is in Production does not belong.
+   */
+  readOnly?: boolean;
   /** Set when there is nothing to load, e.g. a model version since deleted. */
   unavailable?: { title: string; description: string };
 }) {
@@ -325,15 +331,17 @@ export function RunDetailsSheet({
               </div>
             ) : (
               <>
-                <div>
-                  {isPublished(run) ? (
-                    <Button variant="outline" onClick={() => setUnpublishOpen(true)}>
-                      Unpublish Model…
-                    </Button>
-                  ) : (
-                    <Button onClick={() => setPublishOpen(true)}>Publish Model…</Button>
-                  )}
-                </div>
+                {!readOnly && (
+                  <div>
+                    {isPublished(run) ? (
+                      <Button variant="outline" onClick={() => setUnpublishOpen(true)}>
+                        Unpublish Model…
+                      </Button>
+                    ) : (
+                      <Button onClick={() => setPublishOpen(true)}>Publish Model…</Button>
+                    )}
+                  </div>
+                )}
 
                 <section aria-labelledby="run-model-heading" className="flex flex-col gap-2">
                   <h3 id="run-model-heading" className="text-sm font-semibold">
