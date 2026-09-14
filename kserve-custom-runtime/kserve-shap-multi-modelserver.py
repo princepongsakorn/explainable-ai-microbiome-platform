@@ -1001,9 +1001,11 @@ def update_model_stage_by_run_id(run_id):
     mlflow.set_tracking_uri(mlflow_url)
     client = mlflow.tracking.MlflowClient()
 
+    # Failures carry real status codes: the Nest service treats any 2xx as
+    # success, so a 200 with "status": "error" reached the page as published.
     models = client.search_model_versions(f"run_id='{run_id}'")
     if not models:
-        return {"status": "error", "message": f"No model found for Run ID: {run_id}"}
+        return jsonify({"status": "error", "message": f"No model found for Run ID: {run_id}"}), 404
     try:
         model_name = models[0].name
         version = models[0].version
@@ -1022,7 +1024,7 @@ def update_model_stage_by_run_id(run_id):
             "message": f"Model '{model_name}' version '{version}' transitioned to '{stage}'.",
         })
     except MlflowException as e:
-        return {"status": "error", "message": str(e)}
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
 @app.route("/v1/mlflow/model/<model_name>/version/<version>/description", methods=["PUT"])
