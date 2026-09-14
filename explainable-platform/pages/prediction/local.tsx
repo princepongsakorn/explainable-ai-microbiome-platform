@@ -12,6 +12,7 @@ import {
 import Layout from "@/components/common/Layout";
 import { PageHeader } from "@/components/common/PageHeader";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import { ModelLink } from "@/components/experiments/ModelLink";
 import { StatusBadge } from "@/components/prediction/StatusBadge";
 import {
   IPredictionRecords,
@@ -430,7 +431,10 @@ export function PredictionRecordsPage() {
         title={prediction ? `Prediction ${prediction.predictionNumber}` : "Prediction"}
         description={
           prediction ? (
-            `Model: ${prediction.modelName}`
+            <>
+              Model:{" "}
+              <ModelLink name={prediction.modelName} version={prediction.modelVersion} />
+            </>
           ) : (
             <Skeleton className="mt-1 h-4 w-48" />
           )
