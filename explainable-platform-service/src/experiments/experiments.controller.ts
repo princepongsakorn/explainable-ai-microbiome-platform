@@ -43,6 +43,28 @@ export class ExperimentsController {
     }
   }
 
+  /** The run behind one model version, so a prediction can open its model. */
+  @Get('/models/:name/versions/:version')
+  async getModelVersion(
+    @Param('name') name: string,
+    @Param('version') version: string,
+  ) {
+    try {
+      return await this.experimentsService.getModelVersion(name, version);
+    } catch (error) {
+      if (error?.response?.status === 404) {
+        throw new HttpException(
+          `Version ${version} of ${name} not found`,
+          HttpStatus.NOT_FOUND,
+        );
+      }
+      throw new HttpException(
+        'Failed to fetch model version',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   @Get(':experimentId/')
   async getExperimentById(
     @Param('experimentId') experimentId: string,
