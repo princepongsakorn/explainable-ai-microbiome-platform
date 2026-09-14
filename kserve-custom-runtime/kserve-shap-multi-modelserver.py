@@ -125,6 +125,13 @@ _MODEL_VERSION_TTL_SECONDS = 60
 # model_name -> (fetched_at, version, run_id)
 _version_cache: dict[str, tuple[float, str, str]] = {}
 _version_lock = threading.Lock()
+# Model names whose registry lookup is running in the background right now.
+_refreshing: set[str] = set()
+
+
+def _start_refresh(target):
+    """Run ``target`` off the request thread. Tests replace this to run it inline."""
+    threading.Thread(target=target, daemon=True, name="registry-refresh").start()
 
 
 @lru_cache(maxsize=_MODEL_CACHE_SIZE)
@@ -161,45 +168,19 @@ def _reset_model_caches():
     _feature_names_cached.cache_clear()
     with _version_lock:
         _version_cache.clear()
+        _refreshing.clear()
 
 
-def _resolve_production_version(model_name):
-    """The Production ``(version, run_id)`` for ``model_name``, cached briefly.
+def _fetch_production_version(model_name):
+    """Ask the registry for the Production version and remember the answer.
 
-    Without this the registry is queried on every request: a blocking 10-200 ms
-    round trip that also makes the whole service fail whenever the tracking
-    server is briefly unreachable.
-
-    The two failure modes are deliberately not treated alike.
-
-    *The registry could not be reached.* If we have served this model before,
-    keep serving that version — a promotion we are up to 60 s late in noticing
-    is a far smaller problem than refusing every request while MLflow restarts.
-    With nothing cached there is no answer to give, so the error propagates.
-
-    *The registry replied, and nothing is in Production.* That is an answer, not
-    an outage, and it usually means someone archived the version on purpose.
-    Serving the stale one would quietly override that decision, so the entry is
-    dropped and the caller gets the error.
+    Raises whatever the client raises when the registry cannot be reached. When
+    it replies that nothing is in Production, the cached entry is dropped and
+    ``ValueError`` is raised.
     """
-    now = time.monotonic()
-    with _version_lock:
-        cached = _version_cache.get(model_name)
-    if cached is not None and now - cached[0] < _MODEL_VERSION_TTL_SECONDS:
-        return cached[1], cached[2]
-
-    try:
-        client = mlflow.tracking.MlflowClient()
-        model_versions = client.get_latest_versions(model_name, stages=["Production"])
-    except Exception as exc:
-        if cached is None:
-            raise
-        logger.warning(
-            f"Registry lookup for '{model_name}' failed ({exc}); serving the "
-            f"cached version {cached[1]}."
-        )
-        return cached[1], cached[2]
-
+    fetched_at = time.monotonic()
+    client = mlflow.tracking.MlflowClient()
+    model_versions = client.get_latest_versions(model_name, stages=["Production"])
     if not model_versions:
         with _version_lock:
             _version_cache.pop(model_name, None)
@@ -209,8 +190,64 @@ def _resolve_production_version(model_name):
 
     mv = model_versions[-1]
     with _version_lock:
-        _version_cache[model_name] = (now, mv.version, mv.run_id)
+        _version_cache[model_name] = (fetched_at, mv.version, mv.run_id)
     return mv.version, mv.run_id
+
+
+def _refresh_in_background(model_name):
+    """Re-check the registry for ``model_name`` without making anyone wait."""
+    with _version_lock:
+        if model_name in _refreshing:
+            return
+        _refreshing.add(model_name)
+
+    def refresh():
+        try:
+            _fetch_production_version(model_name)
+        except ValueError as exc:
+            logger.warning(f"{exc} Dropped the cached version.")
+        except Exception as exc:
+            logger.warning(
+                f"Registry lookup for '{model_name}' failed ({exc}); still "
+                f"serving the cached version."
+            )
+        finally:
+            with _version_lock:
+                _refreshing.discard(model_name)
+
+    _start_refresh(refresh)
+
+
+def _resolve_production_version(model_name):
+    """The Production ``(version, run_id)`` for ``model_name``, cached briefly.
+
+    The registry is a remote round trip — the tracking server's /health alone
+    took 0.5-1.0 s from the development machine — so no request that already has
+    an answer waits for it. Only the first request for a model looks the version
+    up inline. After that the cached version is served, and once it is older than
+    the TTL a single background refresh re-checks the registry.
+
+    The two failure modes of that refresh are deliberately not treated alike.
+
+    *The registry could not be reached.* Keep serving the cached version — a
+    promotion noticed late is a far smaller problem than refusing every request
+    while MLflow restarts. With nothing cached there is no answer to give, so
+    the first request's error propagates.
+
+    *The registry replied, and nothing is in Production.* That is an answer, not
+    an outage, and it usually means someone archived the version on purpose.
+    The entry is dropped, so the next request looks it up inline and gets the
+    error. The request that started the refresh is still served the old version,
+    which it would equally have been a moment earlier.
+    """
+    with _version_lock:
+        cached = _version_cache.get(model_name)
+    if cached is None:
+        return _fetch_production_version(model_name)
+
+    if time.monotonic() - cached[0] >= _MODEL_VERSION_TTL_SECONDS:
+        _refresh_in_background(model_name)
+    return cached[1], cached[2]
 
 
 def load_explainable_model(model_name):
