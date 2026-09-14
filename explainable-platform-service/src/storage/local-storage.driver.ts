@@ -1,6 +1,7 @@
 import { createReadStream, mkdirSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve, sep } from 'node:path';
+import type { Readable } from 'node:stream';
 
 /**
  * Filesystem stand-in for the object store, used when no bucket is configured.
@@ -38,7 +39,7 @@ export class LocalStorageDriver {
     return readFile(this.pathFor(key));
   }
 
-  createReadStream(key: string): NodeJS.ReadableStream {
+  createReadStream(key: string): Readable {
     return createReadStream(this.pathFor(key));
   }
 }

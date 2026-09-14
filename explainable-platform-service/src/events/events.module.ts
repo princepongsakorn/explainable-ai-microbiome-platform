@@ -1,6 +1,6 @@
 import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import Redis from 'ioredis';
+import Redis, { RedisOptions } from 'ioredis';
 import { EventsController } from './events.controller';
 import { EVENTS_REDIS_PUB, EVENTS_REDIS_SUB, EventsHub } from './events.hub';
 
@@ -9,17 +9,14 @@ import { EVENTS_REDIS_PUB, EVENTS_REDIS_SUB, EventsHub } from './events.hub';
  * ordinary commands. Both point at the instance Bull already uses, so this costs
  * no new infrastructure.
  */
-const redisProvider = (token: string) => ({
+const redisProvider = (token: string, options: RedisOptions) => ({
   provide: token,
   inject: [ConfigService],
   useFactory: (config: ConfigService) =>
     new Redis({
       host: config.get<string>('REDIS_HOST') ?? 'localhost',
       port: Number(config.get<string>('REDIS_PORT') ?? 6379),
-      // Never give up: an SSE stream that silently stops delivering is worse
-      // than one that reconnects late.
-      maxRetriesPerRequest: null,
-      lazyConnect: false,
+      ...options,
     }),
 });
 
@@ -31,8 +28,14 @@ const redisProvider = (token: string) => ({
 @Module({
   controllers: [EventsController],
   providers: [
-    redisProvider(EVENTS_REDIS_PUB),
-    redisProvider(EVENTS_REDIS_SUB),
+    // Publishing fails at once while Redis is down, which is what lets EventsHub
+    // fall back to this instance's own listeners. With the offline queue a
+    // publish would wait out the whole outage, and nobody would hear it.
+    redisProvider(EVENTS_REDIS_PUB, { enableOfflineQueue: false }),
+    // The subscriber never gives up: an SSE stream that silently stops
+    // delivering is worse than one that reconnects late, and ioredis
+    // resubscribes its channels when it does.
+    redisProvider(EVENTS_REDIS_SUB, { maxRetriesPerRequest: null }),
     EventsHub,
   ],
   exports: [EventsHub],

@@ -10,6 +10,7 @@ import {
   UseGuards,
   Patch,
   Headers,
+  Logger,
   Res,
 } from '@nestjs/common';
 import type { Response } from 'express';
@@ -25,6 +26,8 @@ import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 @Controller('predict')
 @UseGuards(JwtAuthGuard)
 export class PredictionsController {
+  private readonly logger = new Logger(PredictionsController.name);
+
   constructor(private readonly predictionsService: PredictionsService) {}
 
   @Post()
@@ -103,9 +106,29 @@ export class PredictionsController {
       return res.status(304).end();
     }
 
+    const stream = this.predictionsService.streamExplanation(key);
+    // An 'error' with no listener is thrown, which would take the whole service
+    // down over one unreadable object. Before the first byte there is still a
+    // response to send; after it, only the connection is left to close.
+    stream.once('error', (error) => {
+      this.logger.error(`reading explanation ${key} failed: ${error.message}`);
+      if (res.headersSent) {
+        res.destroy(error);
+        return;
+      }
+      res.removeHeader('Content-Encoding');
+      res.removeHeader('ETag');
+      res.status(500).json({
+        statusCode: 500,
+        message: 'The stored explanation could not be read.',
+      });
+    });
+    // Stop reading from storage when the browser goes away mid-download.
+    res.once('close', () => stream.destroy());
+
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Content-Encoding', 'gzip');
-    this.predictionsService.streamExplanation(key).pipe(res);
+    stream.pipe(res);
   }
 
   /** One Sample, sliced out of the same artifact. Never a recomputation. */

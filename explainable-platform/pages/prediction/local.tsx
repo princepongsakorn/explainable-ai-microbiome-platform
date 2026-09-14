@@ -425,7 +425,6 @@ export function History() {
     await getPredictionsList();
   };
 
-
   const onSaveComment = async () => {
     if (selectPrediction?.id) {
       setSaveCommentLoading(true);

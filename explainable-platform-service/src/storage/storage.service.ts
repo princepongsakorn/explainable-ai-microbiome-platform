@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Storage, Bucket } from '@google-cloud/storage';
+import type { Readable } from 'node:stream';
 import { LocalStorageDriver } from './local-storage.driver';
 
 /**
@@ -120,16 +121,24 @@ export class StorageService {
     }
   }
 
-  /** Stream stored bytes straight to the response. */
-  createReadStream(key: string): NodeJS.ReadableStream {
+  /**
+   * Stream stored bytes straight to the response, exactly as stored.
+   *
+   * `decompress: false` matters for the gzipped payloads: the client asks GCS for
+   * gzip and, left to its default, gunzips what comes back — so the response
+   * would carry `Content-Encoding: gzip` over plain JSON.
+   */
+  createReadStream(key: string): Readable {
     if (this.local) return this.local.createReadStream(key);
-    return this.bucket!.file(key).createReadStream();
+    return this.bucket!.file(key).createReadStream({ decompress: false });
   }
 
-  /** Read a stored object into memory — used to slice one Sample out of the matrix. */
+  /** Read a stored object into memory, still compressed if it was stored so. */
   async download(key: string): Promise<Buffer> {
     if (this.local) return this.local.download(key);
-    const [contents] = await this.bucket!.file(key).download();
+    const [contents] = await this.bucket!.file(key).download({
+      decompress: false,
+    });
     return contents;
   }
 

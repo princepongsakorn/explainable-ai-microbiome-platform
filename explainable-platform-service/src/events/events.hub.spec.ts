@@ -26,6 +26,7 @@ function fakeRedisPair() {
       return sub;
     },
     quit: async () => 'OK',
+    disconnect: () => undefined,
   };
 
   const pub: EventsRedis = {
@@ -40,6 +41,7 @@ function fakeRedisPair() {
     unsubscribe: async () => 0,
     on: () => pub,
     quit: async () => 'OK',
+    disconnect: () => undefined,
   };
 
   return {
