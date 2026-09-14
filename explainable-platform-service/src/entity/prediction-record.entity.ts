@@ -1,4 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  CreateDateColumn,
+} from 'typeorm';
 import { Prediction } from './prediction.entity';
 import { PredictionStatus } from 'src/interface/prediction-class.enum';
 @Entity()
@@ -12,8 +18,10 @@ export class PredictionRecord {
   @ManyToOne(() => Prediction, (prediction) => prediction.id)
   prediction: Prediction;
 
+  // The first element is the Sample identifier from the uploaded file; the rest
+  // are measurements. Typed number[] previously, which it never was.
   @Column('jsonb')
-  dfData: number[];
+  dfData: (string | number)[];
 
   @Column({ type: 'decimal', precision: 10, scale: 4, nullable: true })
   proba?: number;
@@ -35,7 +43,11 @@ export class PredictionRecord {
   @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;
 
-  @Column({ type: 'enum', enum: PredictionStatus, default: PredictionStatus.PENDING })
+  @Column({
+    type: 'enum',
+    enum: PredictionStatus,
+    default: PredictionStatus.PENDING,
+  })
   status: PredictionStatus;
 
   @Column({ type: 'text', nullable: true })

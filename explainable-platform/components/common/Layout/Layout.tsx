@@ -1,6 +1,6 @@
 "use client";
 
-import React, { FC, useEffect, useState } from "react";
+import React, { FC, ReactNode, useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import AuthenticationCheck from "@/hoc/AuthenticationCheck";
 import Sidebar from "@/components/common/Sidebar";
@@ -16,7 +16,7 @@ interface Props {
 }
 
 export interface NavigatorProps {
-  icon?: object;
+  icon?: ReactNode;
   pathName: string;
   name: string;
   slug: string;

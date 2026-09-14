@@ -24,6 +24,12 @@ export interface IPredictResponse {
 export interface IDataframeSplitRequest {
   dataframe_split: {
     columns: string[];
-    data: number[][];
+    data: (string | number)[][];
+    /**
+     * Optional row labels. The Python service uses them as the DataFrame index,
+     * which /v1/explain/values then serializes as `sample_ids` — the mapping from
+     * a PredictionRecord id to its row in the Explanation matrix.
+     */
+    index?: string[];
   };
 }

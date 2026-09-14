@@ -1,9 +1,18 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindManyOptions, In, Repository } from 'typeorm';
 import { Prediction } from '../entity/prediction.entity';
 import { PredictionRecord } from '../entity/prediction-record.entity';
-import { parseCsv } from '../utils/csv-parser.util';
+import {
+  InvalidCsvError,
+  parseCsv,
+  toNumericRows,
+} from '../utils/csv-parser.util';
 import { QueueService } from '../queue/queue.service';
 import { Multer } from 'multer';
 import { v4 as uuidv4 } from 'uuid';
@@ -14,9 +23,24 @@ import {
   PredictionStatus,
 } from 'src/interface/prediction-class.enum';
 import { EventsHub } from 'src/events/events.hub';
+import { gunzipSync } from 'node:zlib';
+import {
+  ExplainPayload,
+  MAX_SAMPLES_PER_PREDICTION,
+  sliceSample,
+} from './explain.builder';
+
+/**
+ * Parsed payloads kept for the per-Sample route. Each is the whole matrix — up
+ * to 500 x ~900 values twice over, tens of MB once parsed — so only a couple.
+ */
+const PARSED_PAYLOAD_CACHE_SIZE = 2;
 
 @Injectable()
 export class PredictionsService {
+  /** Keyed by object key and ETag, least recently used first. */
+  private readonly parsedPayloads = new Map<string, Promise<ExplainPayload>>();
+
   constructor(
     @InjectRepository(Prediction)
     private predictionsRepository: Repository<Prediction>,
@@ -28,7 +52,33 @@ export class PredictionsService {
   ) {}
 
   async createPrediction(file: Multer.File, modelName: string) {
-    const { dfColumns, dfDataRows } = await parseCsv(file);
+    let dfColumns: string[];
+    let dfDataRows: (string | number)[][];
+    try {
+      const parsed = await parseCsv(file);
+      dfColumns = parsed.dfColumns;
+      // Reject before anything is persisted or enqueued. Together with the row cap
+      // below this is what lets the Explanation payload promise it holds no NaN
+      // (docs/shap-explain-spec.md §2.1).
+      dfDataRows = toNumericRows(parsed.dfColumns, parsed.dfDataRows);
+    } catch (error) {
+      if (error instanceof InvalidCsvError) {
+        throw new BadRequestException(error.message);
+      }
+      throw error;
+    }
+
+    if (dfDataRows.length > MAX_SAMPLES_PER_PREDICTION) {
+      throw new BadRequestException(
+        `This file has ${dfDataRows.length} samples; the limit is ` +
+          `${MAX_SAMPLES_PER_PREDICTION} per prediction. Split it and submit the ` +
+          `parts separately.`,
+      );
+    }
+
+    if (dfDataRows.length === 0) {
+      throw new BadRequestException('The file has a header but no data rows.');
+    }
 
     const lastPrediction = await this.predictionsRepository
       .createQueryBuilder('prediction')
@@ -225,6 +275,130 @@ export class PredictionsService {
     });
     await this.queueService.addRegenWaterfallJob(predictionId, recordId);
     return { message: 'Waterfall re-generation queued.' };
+  }
+
+  // ------------------------------------------------------------------
+  // Explanation payload — docs/shap-explain-spec.md §2.3
+  // ------------------------------------------------------------------
+
+  /**
+   * The stored object's key and ETag.
+   *
+   * Deliberately separate from reading the object: a conditional GET is answered
+   * from this alone, so a repeat load costs one database read and never touches
+   * storage.
+   */
+  async getExplanationRef(predictionId: string) {
+    const prediction = await this.predictionsRepository.findOne({
+      where: { id: predictionId },
+      select: ['id', 'explainKey', 'explainEtag', 'explainError'],
+    });
+    if (!prediction) {
+      throw new NotFoundException(`Prediction ${predictionId} not found`);
+    }
+    if (prediction.explainError) {
+      // Distinct from "not ready": the job ran and failed, and the reason is
+      // what the person looking at the drawer needs to see.
+      throw new UnprocessableEntityException(
+        `Explanation failed: ${prediction.explainError}`,
+      );
+    }
+    if (!prediction.explainKey || !prediction.explainEtag) {
+      throw new NotFoundException('Explanation is not ready yet');
+    }
+    return { key: prediction.explainKey, etag: prediction.explainEtag };
+  }
+
+  /** The stored bytes, still gzipped, to be streamed through untouched. */
+  streamExplanation(key: string) {
+    return this.storageService.createReadStream(key);
+  }
+
+  /**
+   * One Sample's Explanation, taken from the stored matrix.
+   *
+   * `PredictionRecord.id` is the platform's identifier and `sample_ids` is the
+   * payload's; this is the only place the two vocabularies meet (CONTEXT.md).
+   * Nothing is recomputed — the SHAP values were produced once for the whole
+   * Prediction.
+   */
+  async sliceExplanationForRecord(predictionId: string, recordId: string) {
+    const { key, etag } = await this.getExplanationRef(predictionId);
+    const payload = await this.parsedPayload(key, etag);
+
+    try {
+      return sliceSample(payload, recordId);
+    } catch (error) {
+      throw new NotFoundException((error as Error).message);
+    }
+  }
+
+  /**
+   * The stored payload, downloaded and parsed once per version.
+   *
+   * Without this every record opened read and gunzipped the whole matrix again.
+   * The ETag in the key means a rebuilt explanation is never served from here
+   * stale, and concurrent requests for the same one share a single download.
+   */
+  private parsedPayload(key: string, etag: string): Promise<ExplainPayload> {
+    const cacheKey = `${key}#${etag}`;
+    const cached = this.parsedPayloads.get(cacheKey);
+    if (cached) {
+      this.parsedPayloads.delete(cacheKey);
+      this.parsedPayloads.set(cacheKey, cached);
+      return cached;
+    }
+
+    const loading = this.storageService
+      .download(key)
+      .then(
+        (compressed) =>
+          JSON.parse(gunzipSync(compressed).toString('utf8')) as ExplainPayload,
+      );
+    // A failed read is not remembered; the next request tries again.
+    loading.catch(() => this.parsedPayloads.delete(cacheKey));
+    this.parsedPayloads.set(cacheKey, loading);
+
+    for (const oldest of this.parsedPayloads.keys()) {
+      if (this.parsedPayloads.size <= PARSED_PAYLOAD_CACHE_SIZE) break;
+      this.parsedPayloads.delete(oldest);
+    }
+    return loading;
+  }
+
+  /**
+   * Queue a rebuild of the Explanation artifact.
+   *
+   * Clearing the fields first makes the in-progress state server-truth, the same
+   * way the plot regeneration methods above do it.
+   */
+  async regenExplanation(predictionId: string) {
+    const prediction = await this.predictionsRepository.findOne({
+      where: { id: predictionId },
+    });
+    if (!prediction) {
+      throw new NotFoundException(`Prediction ${predictionId} not found`);
+    }
+
+    // Every explain field, the versions included: they describe the artifact
+    // being thrown away, and a rebuild that fails must not inherit them.
+    await this.predictionsRepository.update(predictionId, {
+      explainKey: null,
+      explainEtag: null,
+      explainError: null,
+      explainModelVersion: null,
+      explainContractVersion: null,
+    });
+    // An open drawer is still drawing the old explanation. Tell it now, not
+    // when the rebuild finishes minutes from now.
+    this.eventsHub.publishPrediction(predictionId, 'prediction:explanation', {
+      ready: false,
+      etag: null,
+      error: null,
+    });
+
+    await this.queueService.addRegenExplanationJob(predictionId);
+    return { message: `Explanation rebuild queued for ${predictionId}.` };
   }
 
   async getPredictions(page: number = 1, limit: number = 10) {

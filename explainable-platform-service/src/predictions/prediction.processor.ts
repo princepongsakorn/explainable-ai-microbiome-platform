@@ -1,4 +1,5 @@
 import { lastValueFrom } from 'rxjs';
+import { isAxiosError } from 'axios';
 import { Processor, Process } from '@nestjs/bull';
 import { Job } from 'bull';
 import { HttpService } from '@nestjs/axios';
@@ -17,6 +18,14 @@ import {
   PredictionStatus,
 } from 'src/interface/prediction-class.enum';
 import { EventsHub } from 'src/events/events.hub';
+import { createHash } from 'node:crypto';
+import { gzipSync } from 'node:zlib';
+import {
+  ExplainPayload,
+  chunkIndices,
+  concatPayloads,
+  sampleLabelsFor,
+} from './explain.builder';
 
 /**
  * A real matplotlib SHAP plot of ~200 features is tens of KB. A blank/failed
@@ -24,6 +33,25 @@ import { EventsHub } from 'src/events/events.hub';
  * many base64 characters is treated as "image generation failed".
  */
 const MIN_PNG_BASE64_LEN = 8000;
+
+/** Attempts per explain chunk before the whole Explanation is abandoned. */
+const EXPLAIN_CHUNK_ATTEMPTS = 3;
+const EXPLAIN_RETRY_BASE_MS = 1000;
+/**
+ * The PNG endpoints receive every Sample in one call, so they can outlast the
+ * module's 120 s timeout, which is sized for one explain chunk.
+ */
+const PLOT_TIMEOUT_MS = 900_000;
+
+/** The runtime's own message when it sent one, rather than axios's "status code 400". */
+function inferenceErrorMessage(error: unknown): string {
+  if (isAxiosError(error)) {
+    const detail = (error.response?.data as { error?: unknown } | undefined)
+      ?.error;
+    if (typeof detail === 'string' && detail) return detail;
+  }
+  return (error as Error)?.message ?? String(error);
+}
 
 type ExplainEndpoint = 'waterfall' | 'heatmap' | 'beeswarm';
 
@@ -35,6 +63,15 @@ interface ImageResult {
 @Processor('predictionQueue')
 export class PredictionProcessor {
   private inferenceServiceURL: string;
+  /**
+   * Whether to render the matplotlib PNGs (heatmap, beeswarm, waterfall).
+   *
+   * Off by default: the charts are drawn in the browser from the explanation
+   * payload, and every PNG recomputed SHAP for Samples already explained. The
+   * code is kept so they can be switched back on without a revert. The regen
+   * endpoints still render one when asked explicitly.
+   */
+  private readonly generatePngPlots: boolean;
 
   constructor(
     private httpService: HttpService,
@@ -48,6 +85,8 @@ export class PredictionProcessor {
   ) {
     this.inferenceServiceURL =
       this.configService.get<string>('INFERENCE_SERVICE_URL') ?? '';
+    this.generatePngPlots =
+      this.configService.get<string>('GENERATE_PNG_PLOTS') === 'true';
   }
 
   // Build the FE-friendly payload once so every event emits the same shape.
@@ -101,6 +140,7 @@ export class PredictionProcessor {
       const observable = this.httpService.post(
         `${this.inferenceServiceURL}/v1/explain/${endpoint}/${modelName}`,
         dataframeSplit,
+        { timeout: PLOT_TIMEOUT_MS },
       );
       const response = await lastValueFrom(observable);
       base64 = extractBase64(response?.data);
@@ -157,7 +197,155 @@ export class PredictionProcessor {
     console.log(
       `[PredictionProcessor] processing prediction ID: ${predictionId}`,
     );
-    await this.generatePredictionPlots(prediction);
+
+    // The Explanation payload and the PNGs are independent: a failure in one must
+    // not cost the other.
+    await this.buildExplanation(prediction);
+    if (this.generatePngPlots) {
+      await this.generatePredictionPlots(prediction);
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Explanation payload — docs/shap-explain-spec.md §2.2
+  // ------------------------------------------------------------------
+
+  /**
+   * Compute the Explanation for a whole Prediction and store it as one gzipped
+   * JSON object.
+   *
+   * The Python endpoint is called with CHUNK_SIZE Samples at a time so no single
+   * HTTP call is long enough to be a problem, and a failure retries one slice
+   * rather than the whole matrix. Concatenating is sound because a Sample's SHAP
+   * values do not depend on which other Samples shared its request.
+   */
+  private async buildExplanation(prediction: Prediction) {
+    // Ordered explicitly: sample_ids are positional, so an unordered fetch would
+    // silently shuffle which row belongs to which record.
+    const records = await this.recordsRepository.find({
+      where: { prediction: { id: prediction.id } },
+      order: { record_number: 'ASC' },
+    });
+
+    if (records.length === 0) {
+      console.warn(
+        `[PredictionProcessor] prediction ${prediction.id} has no records; skipping explanation`,
+      );
+      return;
+    }
+
+    try {
+      const ranges = chunkIndices(records.length);
+      const chunks: ExplainPayload[] = [];
+
+      for (const [start, end] of ranges) {
+        chunks.push(
+          await this.explainChunk(prediction, records.slice(start, end)),
+        );
+        this.eventsHub.publishPrediction(
+          prediction.id,
+          'prediction:explanation-progress',
+          { done: end, total: records.length },
+        );
+      }
+
+      // Labels are what a person reads; sample_ids stay the record UUIDs every
+      // join relies on. The records were fetched in record_number order above,
+      // so the labels line up with the payload's rows by position.
+      const joined = concatPayloads(chunks);
+      const payload: ExplainPayload = {
+        ...joined,
+        ...sampleLabelsFor(
+          records,
+          prediction.dfColumns ?? [],
+          joined.feature_names,
+        ),
+      };
+      const raw = Buffer.from(JSON.stringify(payload), 'utf8');
+      const etag = createHash('sha256').update(raw).digest('hex');
+
+      prediction.explainKey = await this.storageService.uploadJsonGzip(
+        gzipSync(raw),
+        prediction.id,
+        'explain.json.gz',
+      );
+      prediction.explainEtag = etag;
+      prediction.explainContractVersion = payload.contract_version;
+      prediction.explainModelVersion = payload.model_version ?? null;
+      prediction.explainError = null;
+
+      console.log(
+        `[PredictionProcessor] explanation for ${prediction.id}: ` +
+          `${payload.values.length} samples x ${payload.feature_names.length} features, ` +
+          `${(raw.length / 1024).toFixed(0)} KiB raw`,
+      );
+    } catch (error) {
+      prediction.explainKey = null;
+      prediction.explainEtag = null;
+      prediction.explainError = inferenceErrorMessage(error);
+      console.error(
+        `[PredictionProcessor] explanation for ${prediction.id} failed`,
+        error,
+      );
+    }
+
+    // Only the explanation's own columns. This runs for minutes, and saving the
+    // whole entity loaded at the start would put back plot fields that another
+    // job has written in the meantime.
+    await this.predictionsRepository.update(prediction.id, {
+      explainKey: prediction.explainKey,
+      explainEtag: prediction.explainEtag,
+      explainError: prediction.explainError,
+      explainModelVersion: prediction.explainModelVersion,
+      explainContractVersion: prediction.explainContractVersion,
+    });
+    this.eventsHub.publishPrediction(prediction.id, 'prediction:explanation', {
+      ready: Boolean(prediction.explainKey),
+      etag: prediction.explainEtag ?? null,
+      error: prediction.explainError ?? null,
+    });
+  }
+
+  /** One chunk of Samples, retried independently with exponential backoff. */
+  private async explainChunk(
+    prediction: Prediction,
+    records: PredictionRecord[],
+  ): Promise<ExplainPayload> {
+    const url = `${this.inferenceServiceURL}/v1/explain/values/${prediction.modelName}`;
+    const body: IDataframeSplitRequest = {
+      dataframe_split: {
+        columns: prediction.dfColumns,
+        data: records.map((record) => record.dfData),
+        index: records.map((record) => record.id),
+      },
+    };
+
+    let lastError: unknown;
+    for (let attempt = 0; attempt < EXPLAIN_CHUNK_ATTEMPTS; attempt++) {
+      try {
+        const response = await lastValueFrom(this.httpService.post(url, body));
+        return response.data as ExplainPayload;
+      } catch (error) {
+        lastError = error;
+        const status = isAxiosError(error) ? error.response?.status : undefined;
+        // A 4xx is the runtime's verdict on the request itself, and the same body
+        // gets the same verdict, so only server and network failures are retried.
+        const retryable = status === undefined || status >= 500;
+        const isLast = !retryable || attempt === EXPLAIN_CHUNK_ATTEMPTS - 1;
+        console.warn(
+          `[PredictionProcessor] explain chunk of ${records.length} failed ` +
+            `(attempt ${attempt + 1}/${EXPLAIN_CHUNK_ATTEMPTS}` +
+            (status ? `, HTTP ${status}` : '') +
+            ')' +
+            (isLast ? '' : ', retrying'),
+        );
+        if (isLast) break;
+        await new Promise((resolve) =>
+          setTimeout(resolve, EXPLAIN_RETRY_BASE_MS * 2 ** attempt),
+        );
+      }
+    }
+    throw lastError;
   }
 
   /**
@@ -313,11 +501,11 @@ export class PredictionProcessor {
         );
       }
 
-      // --- Waterfall plot (only attempted when the prediction succeeded) ---
+      // --- Waterfall plot (only when PNGs are on and the prediction succeeded) ---
       // A waterfall failure does NOT fail the record: the prediction itself
       // is valid, the user just needs to re-generate the plot. The failure
       // is recorded in `waterfallError` so the UI can show a re-gen button.
-      if (!predictionFailed) {
+      if (this.generatePngPlots && !predictionFailed) {
         const waterfall = await this.runExplain(
           'waterfall',
           prediction.modelName,
@@ -425,6 +613,28 @@ export class PredictionProcessor {
     console.log(
       `[PredictionProcessor] regenWaterfall completed for Record ID ${recordId}.`,
     );
+  }
+
+  /**
+   * Recompute the Explanation for a Prediction that does not have one.
+   *
+   * Predictions created before this pipeline existed have no artifact, and the
+   * SHAP values do not depend on anything that has changed since — so they can be
+   * backfilled rather than re-uploaded.
+   */
+  @Process('regenExplanation')
+  async handleRegenExplanation(job: Job<{ predictionId: string }>) {
+    const { predictionId } = job.data;
+    const prediction = await this.predictionsRepository.findOne({
+      where: { id: predictionId },
+    });
+    if (!prediction) {
+      console.error(
+        `[PredictionProcessor] regenExplanation: prediction ${predictionId} not found.`,
+      );
+      return;
+    }
+    await this.buildExplanation(prediction);
   }
 
   @Process('regenHeatmap')

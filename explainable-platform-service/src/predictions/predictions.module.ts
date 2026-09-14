@@ -17,12 +17,19 @@ import { ConfigModule } from '@nestjs/config';
   imports: [
     TypeOrmModule.forFeature([Prediction, PredictionRecord]),
     BullModule.registerQueue({ name: 'predictionQueue' }),
-    HttpModule,
+    // Axios defaults to timeout: 0 — no timeout at all. 120 s bounds one
+    // CHUNK_SIZE-sample explain call; nothing in this service should hang forever.
+    HttpModule.register({ timeout: 120_000, maxRedirects: 0 }),
     QueueModule,
     StorageModule,
     ConfigModule,
   ],
   controllers: [PredictionsController],
-  providers: [PredictionsService, PredictionProcessor, StorageService, QueueService],
+  providers: [
+    PredictionsService,
+    PredictionProcessor,
+    StorageService,
+    QueueService,
+  ],
 })
 export class PredictionsModule {}
