@@ -2,11 +2,14 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
+// containerClassName styles the scrolling wrapper. A sticky header only
+// sticks inside its nearest scroll container, which is this wrapper, so a
+// table that scrolls vertically has to set its height here.
 const Table = React.forwardRef<
   HTMLTableElement,
-  React.HTMLAttributes<HTMLTableElement>
->(({ className, ...props }, ref) => (
-  <div className="relative w-full overflow-auto">
+  React.HTMLAttributes<HTMLTableElement> & { containerClassName?: string }
+>(({ className, containerClassName, ...props }, ref) => (
+  <div className={cn("relative w-full overflow-auto", containerClassName)}>
     <table
       ref={ref}
       className={cn("w-full caption-bottom text-sm", className)}
