@@ -6,6 +6,32 @@ A platform for predicting disease from gut-microbiome data that explains each pr
 
 ![Demo 1](docs/assets/demo-1.gif)
 
+## Concept
+
+The platform is an **XAI pipeline** that sits between the people who build models and the people who use them. Neither side has to write any explainability code.
+
+```mermaid
+flowchart LR
+    subgraph DEV["ML developer"]
+        direction TB
+        T["Train a model<br/>any framework"] --> D["Deploy it to the platform<br/>one call + publish"]
+    end
+    subgraph PLAT["XAI pipeline"]
+        direction TB
+        S["Serve the model"] --> X["Compute SHAP<br/>for every prediction"]
+    end
+    subgraph USE["Researcher"]
+        direction TB
+        U["Upload samples"] --> R["See each prediction<br/>with its SHAP explanation"]
+    end
+    D --> S
+    U --> S
+    X --> R
+```
+
+- **The ML developer only builds the model.** They train it as usual and deploy it with one call to `log_explainable_model()`, then publish it from the web UI. The platform builds the SHAP explainer, serves the model and handles every request after that.
+- **The researcher only brings the data.** They pick a published model and upload their samples. Each prediction arrives with its SHAP explanation, showing which taxa pushed the result up or down, for the whole batch and for each sample. They run nothing themselves.
+
 ## Highlights
 
 - **Every model ships with its own explainer.** A model and its SHAP explainer are logged to MLflow as one artifact, so the prediction and its explanation always come from the same version.
