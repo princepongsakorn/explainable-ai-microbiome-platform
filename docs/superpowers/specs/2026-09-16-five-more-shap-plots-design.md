@@ -45,7 +45,7 @@ Numbering continues the original log.
 | D35 | Colour ramp | `red_blue` stays the default for fidelity; a `colormap` prop offers `red_white_blue`, whose midpoint is actually neutral |
 | D36 | Decision plot x limits | **Always symmetric** about the Base value — what SHAP's comment promises and its code does not always deliver |
 | D37 | Interaction strength | The scatter **shows the score** behind its colour Feature, normalised, and declines to colour at all below a threshold |
-| D38 | Genus view | All four new charts support the Species ↔ Genus toggle |
+| D38 | Genus view | All four new charts take `groupByGenus`, the prop the existing charts already use |
 | D39 | Dose–response | The scatter draws a **binned-median trend line** over detected Samples, plus a mean marker on the Absent band |
 | D40 | Table view | Every new chart emits a real `<table>` of its own data, visually hidden by default |
 
@@ -72,8 +72,8 @@ tree-shakable named exports. Measured at ~30 KB minified for four charts; eight 
 near ~55 KB. Accepted knowingly; revisit only if a consumer complains.
 
 **Shared props on all four new charts.** `colormap` (`"red_blue" | "red_white_blue"`, default
-`"red_blue"`) per D35; `level` (`"species" | "genus"`, default `"species"`) per D38, aggregating
-through the existing `taxonomy.ts`; and `tableView` (`"hidden" | "visible" | "none"`, default
+`"red_blue"`) per D35; `groupByGenus` (default `false`) per D38, aggregating through the existing
+`taxonomy.ts` — the name the four existing charts already use, rather than a second spelling; and `tableView` (`"hidden" | "visible" | "none"`, default
 `"hidden"`) per D40, which emits a real `<table>` of the chart's own rows next to the SVG. Each chart
 also exports a pure function returning those rows, for a consumer that would rather render its own.
 
@@ -120,7 +120,7 @@ marker of its own, so "not detected" can be read against the low end of "detecte
 
 Props: `explanation`, `feature` (name or index, required), `colorFeature`, `colorFeatureMinScore`
 (default 0.2), `xScale` (`"log" | "linear"`, default `"log"`), `trend` (default on), plus the shared
-`classIndex`, `labels`, `colorBar`, `colormap`, `level` and `tableView`, and the Sample click-through
+`classIndex`, `labels`, `colorBar`, `colormap`, `groupByGenus` and `tableView`, and the Sample click-through
 callback the beeswarm and heatmap already take.
 
 ### `Plots.embedding`
