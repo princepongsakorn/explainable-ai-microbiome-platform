@@ -42,6 +42,12 @@ Numbering continues the original log.
 | D32 | API shape | `clustering` is a **prop on `Plots.bar`**, not a new entry — matching `shap.plots.bar(exp, clustering=…)`. `Plots` goes from 4 entries to 8 |
 | D33 | Which Feature the scatter draws | **A prop.** The selector UI belongs to the app, per D21 (the package renders, it does not build controls) |
 | D34 | Scatter colour Feature | **Auto-picked** by an interaction heuristic, overridable by prop, disableable |
+| D35 | Colour ramp | `red_blue` stays the default for fidelity; a `colormap` prop offers `red_white_blue`, whose midpoint is actually neutral |
+| D36 | Decision plot x limits | **Always symmetric** about the Base value — what SHAP's comment promises and its code does not always deliver |
+| D37 | Interaction strength | The scatter **shows the score** behind its colour Feature, normalised, and declines to colour at all below a threshold |
+| D38 | Genus view | All four new charts support the Species ↔ Genus toggle |
+| D39 | Dose–response | The scatter draws a **binned-median trend line** over detected Samples, plus a mean marker on the Absent band |
+| D40 | Table view | Every new chart emits a real `<table>` of its own data, visually hidden by default |
 
 ## Package surface, 0.3.0
 
@@ -65,9 +71,16 @@ Exported prop types gain `ScatterPlotProps`, `EmbeddingPlotProps`, `DecisionPlot
 tree-shakable named exports. Measured at ~30 KB minified for four charts; eight is expected to land
 near ~55 KB. Accepted knowingly; revisit only if a consumer complains.
 
+**Shared props on all four new charts.** `colormap` (`"red_blue" | "red_white_blue"`, default
+`"red_blue"`) per D35; `level` (`"species" | "genus"`, default `"species"`) per D38, aggregating
+through the existing `taxonomy.ts`; and `tableView` (`"hidden" | "visible" | "none"`, default
+`"hidden"`) per D40, which emits a real `<table>` of the chart's own rows next to the SVG. Each chart
+also exports a pure function returning those rows, for a consumer that would rather render its own.
+
 `PlotLabels` gains keys for the new wording, additively, defaults in SHAP's own words:
 `absent`, `absentWithCount(n)`, `principalComponent(index, varianceRatio)`, `cumulativeShapValue`,
-`clusterDistance`. Existing keys are untouched.
+`clusterDistance`, `interactionScore(value)`, `weakInteraction`, `trend`, `tableCaption`. Existing
+keys are untouched.
 
 ## The charts
 
@@ -97,11 +110,18 @@ missing-value indicator and takes the larger of the two; D4 forbids `NaN` in the
 branch is dead here.) `colorFeature` overrides it; `colorFeature` overrides it, `"none"`
 disables colouring. Following `_scatter.py`, the colour scale is clipped to the 5th and 95th
 percentiles of the colour Feature — falling back to min and max when those coincide — and the colour
-bar is suppressed when the chosen colour Feature is the Feature being plotted.
+bar is suppressed when the chosen colour Feature is the Feature being plotted. The interaction score
+is shown beside the colour bar, and below `colorFeatureMinScore` the chart draws in a single hue and
+says why (D37).
 
-Props: `explanation`, `feature` (name or index, required), `colorFeature`, `xScale`
-(`"log" | "linear"`, default `"log"`), plus the shared `classIndex`, `labels`, `colorBar`, and the
-Sample click-through callback the beeswarm and heatmap already take.
+A trend line runs through the detected Samples: the median SHAP value per window of sorted
+abundance, using the same window size the interaction score uses. The Absent band carries a mean
+marker of its own, so "not detected" can be read against the low end of "detected" (D39).
+
+Props: `explanation`, `feature` (name or index, required), `colorFeature`, `colorFeatureMinScore`
+(default 0.2), `xScale` (`"log" | "linear"`, default `"log"`), `trend` (default on), plus the shared
+`classIndex`, `labels`, `colorBar`, `colormap`, `level` and `tableView`, and the Sample click-through
+callback the beeswarm and heatmap already take.
 
 ### `Plots.embedding`
 
@@ -144,8 +164,9 @@ where the path begins, and an explicit Other row would draw the same quantity tw
 features row applies to bar, beeswarm, waterfall and heatmap; it does not apply here.
 
 Every Sample is drawn: 1px strokes, coloured by the path's final value — f(x) — on the diverging SHAP
-ramp. The colour scale spans the x limits, which `_decision.py` builds around the Base value, so the
-ramp's neutral midpoint lands on the Base value rather than on zero. Hovering isolates one path, thickening it to 2px as SHAP's
+ramp. The colour scale spans the x limits, and those limits are always symmetric about the Base
+value (D36), so the ramp's neutral midpoint lands exactly on the Base value rather than on zero or on
+a point that drifts with the data. Hovering isolates one path, thickening it to 2px as SHAP's
 `highlight` does, and shows its Sample label and f(x). `sampleIndices` renders a subset without
 recomputing anything.
 
@@ -302,6 +323,84 @@ Kept as a ledger, per D1.
    **Force** matches the layout of SHAP's matplotlib renderer — which SHAP's own docstring calls
    "less developed" than its JavaScript one — without shipping any JavaScript bundle.
 
+## Where this improves on SHAP
+
+D1 licenses deliberate deviation. These six are chosen, not accidental, and each is grounded in
+something measured or read rather than in taste.
+
+### The colour ramp's midpoint is inverted (D35)
+
+`colors.red_blue` is SHAP's default diverging ramp for the scatter, embedding and decision plots.
+Measuring OKLab lightness on the 256-entry lookup table the package already ships:
+
+| Stop | Colour | L |
+| --- | --- | --- |
+| Negative pole | `#008bfb` | 0.636 |
+| **Midpoint (φ = 0)** | `#9c23ad` | **0.512** |
+| Positive pole | `#ff0051` | 0.635 |
+
+The midpoint is darker than both poles, so the taxa that contributed *nothing* are drawn with the
+most visual weight on the chart — the opposite of what a diverging ramp is for. SHAP's own
+`red_white_blue` has L = 1.000 at the midpoint and the correct shape; `colormaps.json` already carries
+it, so this costs nothing to offer.
+
+Colour-blind separation is not the problem here: running the three stops through a CVD validator
+passes every check, worst adjacent pair ΔE 13.5 under deuteranopia. The defect is visual weight, not
+discriminability. `red_blue` therefore stays the default and the choice is a prop.
+
+### The decision plot's axis is not symmetric (D36)
+
+`_decision.py` carries the comment "create a symmetric axis around base_value" above a branch that
+does not always produce one:
+
+```python
+n, m = (base_value - xmin), (xmax - base_value)
+if n > m:
+    xlim = (base_value - n, base_value + m)   # == (xmin, xmax)
+else:
+    xlim = (base_value - m, base_value + m)
+```
+
+Only the second branch is symmetric. Because the colour scale is clamped to `xlim`, an asymmetric
+axis slides the ramp's neutral point off the Base value, and a Sample sitting exactly at the Base
+value stops being drawn as neutral. This design always takes the symmetric form.
+
+### The interaction score is hidden (D37)
+
+`approximate_interactions` returns a ranking and `_scatter.py` takes `[0]` without ever asking how
+strong that winner is. A colour Feature chosen from noise looks exactly like one chosen from a real
+interaction.
+
+The score is therefore surfaced next to the colour bar. It is normalised by the number of windows, so
+it reads as a mean `|Pearson r|` in 0–1 and is comparable across Samples counts — SHAP's raw sum is
+not. Below `colorFeatureMinScore` (default 0.2) the chart declines to colour and says why.
+
+### The dose–response question deserves an answer (D39)
+
+The scatter exists to answer "is more of this taxon always worse, or is there a threshold". SHAP
+draws the cloud and stops.
+
+A trend line is drawn over the **detected** Samples only, as the binned median of SHAP values in
+windows of sorted abundance — the same windowing `approximate_interactions` uses, so one constant
+governs both. A binned median was chosen over LOESS deliberately: it needs no bandwidth parameter, no
+dependency, and it cannot invent a curve the data does not contain. The Absent band carries its own
+mean marker, so the reader can compare "not detected" against the low end of "detected" directly.
+
+### Nothing SHAP draws can be read without seeing it (D40)
+
+A matplotlib PNG is opaque to a screen reader, to text search and to anyone recomputing a number from
+a figure. Each new chart emits a real `<table>` beside its SVG, visually hidden by default and
+switchable to visible, plus a pure function returning the same rows for a consumer that wants to
+render its own. This applies to the four new charts in 0.3.0; retrofitting the original four is
+follow-up work, kept out so the diff stays honest.
+
+### Two more, already in the design
+
+The clustered bar **keeps taxa as separate rows** and draws the cluster bracket, where SHAP fuses two
+Features into one row labelled `A + B`. And the embedding **keeps its axes**, labelled with the
+variance each component explains, where `_embedding.py` calls `plt.axis("off")` and discards the
+ratios entirely.
+
 ## Checked against SHAP's source
 
 Every claim above about what SHAP does was read out of `shap` 0.49.1 as installed in this repo's
@@ -351,6 +450,12 @@ Unit tests per core module: PCA returns identical coordinates across runs and ma
 hand-computed answer on a small matrix; `hclust` reproduces a dendrogram computed by hand; the Absent
 band splits Samples correctly including the all-zero and no-zero edge cases; every decision path ends
 at `base + Σφ` within 1e-3, the tolerance invariant I3 requires.
+
+The improvements get their own tests: the decision plot's x limits are symmetric about the Base
+value for both orderings of the data, including the case SHAP gets asymmetric; the interaction score
+is normalised to 0–1 and a below-threshold score suppresses colouring; the trend line's windows match
+the interaction code's window size on the same input; and each new chart's `<table>` carries one row
+per drawn row with the same numbers the SVG draws.
 
 Golden tests per chart against `fixtures/real.json`, mirroring `golden.beeswarm.test.ts` and its
 siblings. `plots.test.ts` extends to all eight entries.
