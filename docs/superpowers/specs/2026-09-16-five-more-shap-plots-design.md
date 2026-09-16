@@ -80,13 +80,19 @@ left, separated by a visible gap and carrying its own tick labelled `Absent (n =
 above zero is drawn on a log scale to the right of the gap. A horizontal rule marks y = 0.
 
 This is a deliberate deviation from `shap.plots.scatter`, which is linear and would pile every absent
-Sample into one opaque vertical stripe. Microbiome abundance data is zero-inflated; "not detected"
+Sample into one opaque vertical stripe. It is, however, the same device SHAP already uses for a
+different problem: `_scatter.py` draws Samples whose Feature value is `NaN` as tick marks at
+`xlim[0]`, off the axis proper. An Absent band does for a true zero what SHAP does for a missing
+value. Microbiome abundance data is zero-inflated; "not detected"
 and "detected but low" are different statements, and D4 already fixed that a zero here is a true
 biological zero rather than missing data.
 
 Points are coloured by a second Feature's value on the existing SHAP colormap with the existing
 colour bar. That Feature is chosen automatically by an interaction heuristic equivalent to SHAP's
-`approximate_interactions`; `colorFeature` overrides it, `"none"` disables colouring.
+`approximate_interactions`, whose first result SHAP takes; `colorFeature` overrides it, `"none"`
+disables colouring. Following `_scatter.py`, the colour scale is clipped to the 5th and 95th
+percentiles of the colour Feature — falling back to min and max when those coincide — and the colour
+bar is suppressed when the chosen colour Feature is the Feature being plotted.
 
 Props: `explanation`, `feature` (name or index, required), `colorFeature`, `xScale`
 (`"log" | "linear"`, default `"log"`), plus the shared `classIndex`, `labels`, `colorBar`, and the
@@ -97,17 +103,26 @@ Sample click-through callback the beeswarm and heatmap already take.
 PCA of the **SHAP matrix**, not of the abundance matrix. Samples that the model decided for similar
 reasons land near each other — supervised clustering, in SHAP's own framing.
 
-The matrix is centred per Feature, then the top two components are found by power iteration with
-deflation on the n x n Gram matrix. The starting vector is fixed, so repeated renders of the same
-payload give identical coordinates. Axes are labelled with the variance each component explains, e.g.
+The matrix is centred per Feature — `sklearn.decomposition.PCA` centres without scaling, and
+`_embedding.py` uses it with no other preprocessing — then the top two components are found by power
+iteration with deflation on the n x n Gram matrix. The starting vector is fixed and each component's
+sign is normalised so that its largest-magnitude loading is positive, mirroring what `svd_flip` does
+inside scikit-learn, so repeated renders of the same payload give identical coordinates. Axes are labelled with the variance each component explains, e.g.
 `SHAP PC1 (42% of SHAP variance)`.
 
-`coords` accepts `[number, number][]` and skips the PCA entirely, which is how a UMAP or t-SNE
+`coords` accepts `[number, number][]` and skips the PCA entirely — SHAP spells the same escape hatch
+as a non-string `method` argument; which is how a UMAP or t-SNE
 projection computed in Python would be displayed. When `coords` is supplied the axis labels fall back
 to generic wording, since variance ratios are meaningless for a non-linear projection.
 
-Points are coloured by Model output on a sequential ramp by default; `colorBy` accepts a Feature name
-for colouring by that Feature's SHAP value, or `"none"`.
+Points are coloured on the **diverging** SHAP ramp, as `_embedding.py` does with `colors.red_blue`.
+The default is `"sum"` — the sum of a Sample's SHAP values, which is SHAP's own `"sum()"` option and
+equals the Model output minus the Base value. `colorBy` also accepts a Feature name, colouring by
+that Feature's SHAP value, or `"none"`.
+
+Σφ is used rather than f(x) deliberately. They differ by the Base value, which is constant for the
+five TreeExplainer-backed models and therefore only shifts the colour scale; for the permutation-backed
+model the Base value is genuinely per Sample, and Σφ is the quantity SHAP colours by.
 
 ### `Plots.decision`
 
@@ -115,18 +130,29 @@ x is the Model output axis. y lists Features in ascending global importance from
 Sample is a path that starts at the Base value and accumulates its SHAP values upward, ending at
 f(x). Where paths diverge is where the model treated Samples differently.
 
-Every Sample is drawn: 1px strokes, opacity scaled down as n grows, coloured by f(x) on the same
-sequential ramp the embedding uses. Hovering isolates one path and shows its Sample label and f(x).
-`sampleIndices` renders a subset without recomputing anything.
+A vertical rule marks the Base value, as `_decision.py` draws with `axvline`.
 
-Feature ordering and the Other features row come from the existing `order.ts` and `collapse.ts`, so
-`maxDisplay` and the corrected-versus-faithful Other row behave exactly as they do elsewhere.
+Every Sample is drawn: 1px strokes, coloured by the path's final value — f(x) — on the diverging SHAP
+ramp, the scale spanning the x limits. Hovering isolates one path, thickening it to 2px as SHAP's
+`highlight` does, and shows its Sample label and f(x). `sampleIndices` renders a subset without
+recomputing anything.
+
+Opacity falls as n grows. SHAP leaves `alpha` at 1.0 and expects the caller to set it; this is one of
+the few places where drawing every Sample by default (D7, D29) forces a choice SHAP does not make.
+
+Feature ordering and the Other features row come from the existing `order.ts` and `collapse.ts`.
+SHAP orders this chart by ascending `sum|φ|` where `order.ts` uses `mean|φ|`; the two differ by a
+factor of n and produce an identical order, so nothing new is needed.
 
 ### `Plots.force` — local
 
 One horizontal bar for one Sample. Positive SHAP values push from the left, negative from the right,
-and they meet at f(x), which is marked. Segments wide enough to hold text are labelled; the rest are
-identified on hover.
+and they meet at f(x), which is marked and labelled, with the Base value marked separately as
+`_force_matplotlib.py` does. The two directions are labelled "higher" and "lower" either side of
+f(x).
+
+A segment is labelled when it accounts for at least 5% of the total effect — SHAP's `min_perc`
+threshold — rather than by measuring pixels. The rest are identified on hover.
 
 It reuses the waterfall's Feature ordering and row collapsing wholesale. It exists because the
 waterfall needs vertical space proportional to `maxDisplay`, which makes it unusable inside a row of
@@ -144,10 +170,27 @@ clusteringCutoff?: number
 `false` keeps today's behaviour exactly, which is what makes 0.3.0 a minor bump rather than a major
 one. `"shap"` clusters on `1 − |Pearson r|` between Features' SHAP values across Samples; `"data"`
 does the same on relative abundances, which reads as taxon co-occurrence. A `number[][]` is taken as
-a SciPy linkage matrix, shape `(k − 1) × 4`, and drawn as given.
+a SciPy linkage matrix, shape `(k − 1) × 4` — the shape `_bar.py` validates — and drawn as given.
+`clusteringCutoff` defaults to 0.5, SHAP's default, and the cutoff is drawn as a labelled vertical
+line beside the dendrogram.
 
-The dendrogram is drawn to the right of the bars. It is computed over **displayed rows only**
-(at most `maxDisplay + 1`), which keeps it at O(k²n) and therefore free.
+**Turning clustering on is not decoration.** `_bar.py` does two further things, and the design has to
+account for both.
+
+First, it **changes the row order**. The order stops being plain descending mean |φ| and is relaxed
+by `get_sort_order` to respect the partition tree wherever a connection sits below the cutoff. So the
+set of rows that ends up displayed depends on the clustering — which means the clustering cannot be
+computed over "the displayed rows", because that is circular.
+
+The clustering is therefore computed over the **top K Features by mean |φ|**, K = 50, and the display
+order is derived from that. At K = 50 and n = 500 the correlation matrix is about 1.25M
+multiply-accumulates, which is still nothing.
+
+Second, when the cut point at `maxDisplay` falls inside a cluster tighter than the cutoff, SHAP
+**merges the two Features into a single row**, summing their SHAP values and joining their names, and
+repeats until the cut lands on a clean break. This is deferred, not implemented — see the deviations
+ledger. With it deferred, the cut can land inside a cluster, which the dendrogram will show as a
+connection running off the bottom edge.
 
 ## Core modules
 
@@ -156,7 +199,7 @@ Framework-free, no new runtime dependency — the package still has only React a
 | New file | Responsibility |
 | --- | --- |
 | `src/core/pca.ts` | Centre, power iteration with deflation, two components plus variance ratios |
-| `src/core/hclust.ts` | Average-linkage agglomerative clustering, emitting a SciPy-shaped linkage matrix |
+| `src/core/hclust.ts` | Average-linkage agglomerative clustering over the top K = 50 Features, emitting a SciPy-shaped linkage matrix, plus SHAP's cophenetic-distance order relaxation |
 | `src/core/interactions.ts` | Pick the Feature that interacts most with a given Feature |
 | `src/core/scatterLayout.ts` | Absent band, log scale, point positions |
 | `src/core/embeddingLayout.ts` | Point positions, axis labels |
@@ -218,12 +261,49 @@ Kept as a ledger, per D1.
 1. **Clustered bar, browser path** uses unsupervised correlation where SHAP uses supervised
    `xgboost_distances_r2`. A browser cannot train gradient-boosted trees. The Python stream restores
    the faithful measure for consumers that want it.
-2. **Dependence scatter** has an Absent band and a log x axis; SHAP is linear throughout.
-3. **Linkage method.** The browser path uses average linkage; `shap.utils.hclust` defaults to single
+2. **Row merging under clustering is not implemented.** SHAP merges two Features into one row when
+   the display cut falls inside a tight cluster. It interacts with the Other features row (D10) in a
+   way that deserves its own decision, so 0.3.0 cuts the list without merging.
+3. **Dependence scatter** has an Absent band and a log x axis; SHAP is linear throughout.
+4. **Linkage method.** The browser path uses average linkage; `shap.utils.hclust` defaults to single
    linkage. Average is chosen because single linkage chains badly on correlation distances between
    taxa that share a few Samples. The Python path keeps SHAP's default.
-4. **Embedding** and **decision** match SHAP. **Force** matches SHAP's layout without its JavaScript
-   bundle.
+5. **Decision plot opacity** falls as n grows; SHAP fixes `alpha` at 1.0 and leaves it to the caller.
+   A consequence of drawing all 500 Samples by default.
+6. **Embedding** and **decision** otherwise match SHAP, including the diverging colour ramp.
+   **Force** matches the layout of SHAP's matplotlib renderer — which SHAP's own docstring calls
+   "less developed" than its JavaScript one — without shipping any JavaScript bundle.
+
+## Checked against SHAP's source
+
+Every claim above about what SHAP does was read out of `shap` 0.49.1 as installed in this repo's
+`.venv`, not recalled. `shap.utils.hclust` was additionally compared against 0.46.0 in `mlflow-env`:
+the two differ only in formatting and type annotations, so the cost table holds for both.
+
+| Claim | Source | Result |
+| --- | --- | --- |
+| Embedding is a 2-component PCA of the SHAP matrix | `plots/_embedding.py` | Confirmed — `PCA(2).fit_transform(shap_values)` |
+| An externally computed 2-D projection can be passed in | `plots/_embedding.py` | Confirmed — the `method` argument accepts an (n x 2) array |
+| Scatter picks its colour Feature automatically | `plots/_scatter.py` | Confirmed — `approximate_interactions(...)[0]` under `interaction_index="auto"` |
+| Scatter has no log option | `plots/_scatter.py` | Confirmed — only `xmin`/`xmax` |
+| Decision orders Features by ascending importance, bottom up | `plots/_decision.py` | Confirmed — `argsort(sum(abs(shap_values), axis=0))` |
+| Decision colours by the path's final value | `plots/_decision.py` | Confirmed — `m.to_rgba(cumsum[i, -1])` |
+| Force meets positive and negative pushes at f(x) | `plots/_force_matplotlib.py` | Confirmed |
+| `clustering` takes a `(k-1) x 4` linkage matrix | `plots/_bar.py` | Confirmed — validated at line 122 |
+| `clustering_cutoff` defaults to 0.5 | `plots/_bar.py` | Confirmed |
+| `xgboost_distances_r2` is quadratic in model fits | `utils/_clustering.py` | Confirmed — p univariate fits, then a nested p x p loop |
+
+Four claims in the first draft of this document were **wrong** and are corrected above.
+
+1. Both new Global charts were specified with a sequential colour ramp. SHAP uses the diverging
+   `colors.red_blue` in both, and it is the better choice anyway: a cumulative path's endpoint and a
+   sum of signed SHAP values are both quantities with a meaningful midpoint.
+2. The clustered bar was described as a dendrogram drawn alongside an unchanged chart, computed over
+   the displayed rows. Clustering in fact reorders the rows, so computing it from the displayed rows
+   is circular. Hence K = 50.
+3. Row merging was missed entirely. Now deferred explicitly rather than silently.
+4. The embedding's default colour was given as the Model output. SHAP's equivalent is the sum of SHAP
+   values, which differs by the Base value.
 
 ## Testing
 
