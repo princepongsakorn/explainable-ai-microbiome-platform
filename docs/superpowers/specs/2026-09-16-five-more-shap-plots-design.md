@@ -88,8 +88,13 @@ and "detected but low" are different statements, and D4 already fixed that a zer
 biological zero rather than missing data.
 
 Points are coloured by a second Feature's value on the existing SHAP colormap with the existing
-colour bar. That Feature is chosen automatically by an interaction heuristic equivalent to SHAP's
-`approximate_interactions`, whose first result SHAP takes; `colorFeature` overrides it, `"none"`
+colour bar. That Feature is chosen by SHAP's `approximate_interactions` algorithm itself, not an approximation
+of it — it is short enough to port exactly. Sort Samples by the plotted Feature's value; walk them in
+windows of `max(min(floor(n / 10), 50), 1)`; for every other Feature sum `|Pearson r|` between that
+window's values and the correspondingly sorted SHAP values, skipping the Feature itself and any
+Feature that is all but zero; take the Feature with the largest sum. (SHAP also scores a
+missing-value indicator and takes the larger of the two; D4 forbids `NaN` in the payload, so that
+branch is dead here.) `colorFeature` overrides it; `colorFeature` overrides it, `"none"`
 disables colouring. Following `_scatter.py`, the colour scale is clipped to the 5th and 95th
 percentiles of the colour Feature — falling back to min and max when those coincide — and the colour
 bar is suppressed when the chosen colour Feature is the Feature being plotted.
@@ -132,17 +137,29 @@ f(x). Where paths diverge is where the model treated Samples differently.
 
 A vertical rule marks the Base value, as `_decision.py` draws with `axvline`.
 
+**This chart has no Other features row.** When every Feature is shown the path starts exactly at the
+Base value; when it is not, `_decision.py` starts the path at the Base value plus the SHAP values of
+every Feature it is *not* showing, and the first drawn segment begins there. The fold is implicit in
+where the path begins, and an explicit Other row would draw the same quantity twice. D10's Other
+features row applies to bar, beeswarm, waterfall and heatmap; it does not apply here.
+
 Every Sample is drawn: 1px strokes, coloured by the path's final value — f(x) — on the diverging SHAP
-ramp, the scale spanning the x limits. Hovering isolates one path, thickening it to 2px as SHAP's
+ramp. The colour scale spans the x limits, which `_decision.py` builds around the Base value, so the
+ramp's neutral midpoint lands on the Base value rather than on zero. Hovering isolates one path, thickening it to 2px as SHAP's
 `highlight` does, and shows its Sample label and f(x). `sampleIndices` renders a subset without
 recomputing anything.
 
 Opacity falls as n grows. SHAP leaves `alpha` at 1.0 and expects the caller to set it; this is one of
 the few places where drawing every Sample by default (D7, D29) forces a choice SHAP does not make.
 
-Feature ordering and the Other features row come from the existing `order.ts` and `collapse.ts`.
-SHAP orders this chart by ascending `sum|φ|` where `order.ts` uses `mean|φ|`; the two differ by a
-factor of n and produce an identical order, so nothing new is needed.
+Feature ordering comes from the existing `order.ts`, reversed. SHAP orders this chart by ascending
+`sum|φ|` where `order.ts` uses `mean|φ|`; the two differ by a factor of n and produce an identical
+order, so nothing new is needed. `collapse.ts` is **not** used — see the paragraph on the implicit
+fold above.
+
+SHAP's own default here shows the last 20 Features, and it refuses outright above 2,000 Samples or
+200 displayed Features unless warnings are silenced. A 500-Sample cap (D8) sits comfortably inside
+what SHAP itself considers drawable.
 
 ### `Plots.force` — local
 
@@ -151,8 +168,15 @@ and they meet at f(x), which is marked and labelled, with the Base value marked 
 `_force_matplotlib.py` does. The two directions are labelled "higher" and "lower" either side of
 f(x).
 
-A segment is labelled when it accounts for at least 5% of the total effect — SHAP's `min_perc`
-threshold — rather than by measuring pixels. The rest are identified on hover.
+Segments run outward from f(x) in descending magnitude, so the largest contributions sit against the
+meeting point. A segment is labelled when it accounts for at least 5% of the total effect — SHAP's
+`contribution_threshold`, which its matplotlib renderer receives as `min_perc` — rather than by
+measuring pixels. The rest are identified on hover.
+
+`shap.plots.force` passes **every** Feature to its renderer and lets the JavaScript bundle deal with
+crowding. At p = 865 that is not an option here, so this chart takes `maxDisplay` and collapses the
+tail through `collapse.ts` like the waterfall does. That is an addition rather than a deviation:
+SHAP has no behaviour to match.
 
 It reuses the waterfall's Feature ordering and row collapsing wholesale. It exists because the
 waterfall needs vertical space proportional to `maxDisplay`, which makes it unusable inside a row of
@@ -200,7 +224,8 @@ Framework-free, no new runtime dependency — the package still has only React a
 | --- | --- |
 | `src/core/pca.ts` | Centre, power iteration with deflation, two components plus variance ratios |
 | `src/core/hclust.ts` | Average-linkage agglomerative clustering over the top K = 50 Features, emitting a SciPy-shaped linkage matrix, plus SHAP's cophenetic-distance order relaxation |
-| `src/core/interactions.ts` | Pick the Feature that interacts most with a given Feature |
+| `src/core/interactions.ts` | Pick the Feature that interacts most with a given Feature — a direct port of `approximate_interactions` |
+| `src/core/dendrogram.ts` | Port of SHAP's `dendrogram_coords`: line coordinates for a tree drawn in a *given* leaf order, which SciPy cannot produce |
 | `src/core/scatterLayout.ts` | Absent band, log scale, point positions |
 | `src/core/embeddingLayout.ts` | Point positions, axis labels |
 | `src/core/decisionLayout.ts` | Cumulative paths, opacity by n |
@@ -208,6 +233,9 @@ Framework-free, no new runtime dependency — the package still has only React a
 
 Reused unchanged: `parse`, `collapse`, `order`, `colormap`, `colorBar`, `ticks`, `tooltip`, `format`,
 `labels`, `taxonomy`, `rowSort`.
+
+The diverging ramp the new charts need costs nothing: `colormaps.json` already carries `red_blue` and
+`red_white_blue` as 256-entry lookup tables dumped from `shap.plots.colors`.
 
 `hclust.ts` emitting SciPy's linkage format is what lets the browser path and the Python path feed the
 same prop.
@@ -292,8 +320,15 @@ the two differ only in formatting and type annotations, so the cost table holds 
 | `clustering` takes a `(k-1) x 4` linkage matrix | `plots/_bar.py` | Confirmed — validated at line 122 |
 | `clustering_cutoff` defaults to 0.5 | `plots/_bar.py` | Confirmed |
 | `xgboost_distances_r2` is quadratic in model fits | `utils/_clustering.py` | Confirmed — p univariate fits, then a nested p x p loop |
+| Decision paths begin at the Base value | `plots/_decision.py` | Confirmed when all Features are shown; otherwise they begin at the Base value plus the hidden Features' SHAP values |
+| Decision has an Other features row | `plots/_decision.py` | **False** — the remainder is folded into where the path starts |
+| The decision colour scale is centred on the Base value | `plots/_decision.py` | Confirmed — `set_clim(xlim)`, and `xlim` is built around the Base value |
+| `approximate_interactions` is portable as-is | `utils/_general.py` | Confirmed — windowed `|Pearson r|`, no model calls |
+| The dendrogram is drawn to the right of the bars | `plots/_bar.py` | Confirmed — its x positions are offset past `xmax` |
+| Force subsets Features before drawing | `plots/_force.py` | **False** — it passes all p and lets its JavaScript renderer cope |
+| Force's label threshold is 5% of total effect | `plots/_force.py` | Confirmed — `contribution_threshold=0.05` |
 
-Four claims in the first draft of this document were **wrong** and are corrected above.
+Five claims across the first two drafts of this document were **wrong** and are corrected above.
 
 1. Both new Global charts were specified with a sequential colour ramp. SHAP uses the diverging
    `colors.red_blue` in both, and it is the better choice anyway: a cumulative path's endpoint and a
@@ -304,6 +339,9 @@ Four claims in the first draft of this document were **wrong** and are corrected
 3. Row merging was missed entirely. Now deferred explicitly rather than silently.
 4. The embedding's default colour was given as the Model output. SHAP's equivalent is the sum of SHAP
    values, which differs by the Base value.
+5. The decision plot was specified with an Other features row taken from `collapse.ts`. It has none —
+   the Features it does not show are folded into the x position where each path starts, so an
+   explicit row would draw that quantity a second time.
 
 ## Testing
 
