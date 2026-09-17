@@ -48,6 +48,10 @@ Numbering continues the original log.
 | D38 | Genus view | All four new charts take `groupByGenus`, the prop the existing charts already use |
 | D39 | Dose–response | The scatter draws a **binned-median trend line** over detected Samples, plus a mean marker on the Absent band |
 | D40 | Table view | Every new chart emits a real `<table>` of its own data, visually hidden by default |
+| D41 | Scatter colour when no interaction is shown | Colour by each Sample's **own Model output**, with a scale carrying real values. A single flat hue told the reader nothing, and the risk gradient the cloud sits on is the most useful thing the chart can encode for free |
+| D42 | The embedding's axes | Add the left and bottom spines, and a dashed cross where each component is zero — the projection is centred, so that cross is the cohort's own centre and the one position on these arbitrary units that means something. Each axis also states what it turns out to track, measured per render against the summed SHAP values and said only when \|r\| ≥ 0.7 |
+| D43 | The colour key | Boxed as one unit — gradient, ticks and title together. Apart, the rotated title sits exactly where a right-hand y-axis title would, and a reader took it for one twice |
+| D44 | Decision paths in the app | The chart ships in the package but is **not mounted** in the platform. At this cohort's size the paths were unreadable; the package keeps it for consumers whose n is smaller |
 
 ## Package surface, 0.3.0
 
@@ -319,7 +323,9 @@ Kept as a ledger, per D1.
    taxa that share a few Samples. The Python path keeps SHAP's default.
 5. **Decision plot opacity** falls as n grows; SHAP fixes `alpha` at 1.0 and leaves it to the caller.
    A consequence of drawing all 500 Samples by default.
-6. **Embedding** and **decision** otherwise match SHAP, including the diverging colour ramp.
+6. **The scatter's trend window** is taken over the detected Samples rather than all of them, so it differs from the interaction score's window on zero-inflated data. A trend over detected Samples should be binned by how many of those there are; the earlier claim that one constant governs both was wrong.
+7. **A supplied clustering matrix's leaf order is assumed**, not checked: leaf `i` is taken to be the `i`-th most important Feature. A producer that ordered its leaves differently would be mislabelled in silence. The Python stream should send its Feature indices alongside the matrix so this can be verified — recorded here because it is the one place this design trusts a caller without a way to check.
+8. **Embedding** and **decision** otherwise match SHAP, including the diverging colour ramp.
    **Force** matches the layout of SHAP's matplotlib renderer — which SHAP's own docstring calls
    "less developed" than its JavaScript one — without shipping any JavaScript bundle.
 
