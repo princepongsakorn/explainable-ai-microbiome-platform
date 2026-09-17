@@ -52,6 +52,8 @@ Numbering continues the original log.
 | D42 | The embedding's axes | Add the left and bottom spines, and a dashed cross where each component is zero — the projection is centred, so that cross is the cohort's own centre and the one position on these arbitrary units that means something. Each axis also states what it turns out to track, measured per render against the summed SHAP values and said only when \|r\| ≥ 0.7 |
 | D43 | The colour key | Boxed as one unit — gradient, ticks and title together. Apart, the rotated title sits exactly where a right-hand y-axis title would, and a reader took it for one twice |
 | D44 | Decision paths in the app | The chart ships in the package but is **not mounted** in the platform. At this cohort's size the paths were unreadable; the package keeps it for consumers whose n is smaller |
+| D45 | Clustered bar in the app | Also **not mounted**. The prop ships and is tested, but turning it on needs its own control and a `maxDisplay` clamped to the clustering pool, and nobody has asked to read the chart that way yet. D25's "all five in one release" is about the package, which does ship all five |
+| D46 | A class derived from a probability | Where the stored class is not to hand, the breakdown dialog reads the class off the Model output at the 0.5 threshold — but says nothing when the value is within 1e-3 of it. §1.4 writes the payload at four significant figures and I3 holds additivity only to 1e-3, so inside that margin a derived class could contradict the stored one shown in the table the dialog was opened from |
 
 ## Package surface, 0.3.0
 

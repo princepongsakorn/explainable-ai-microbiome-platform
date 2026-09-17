@@ -334,7 +334,17 @@ def capture_decision(values, base_values, data, feature_names, max_display: int)
     range are folded into where each path starts, not into an extra row.
     """
     v = np.asarray(values, dtype=float)
-    base = float(np.asarray(base_values, dtype=float).ravel()[0])
+    bases = np.asarray(base_values, dtype=float).ravel()
+    # Spec §1.3: the Base value belongs to a Sample even when every Sample
+    # shares one. Every fixture here is TreeExplainer-backed, which tiles a
+    # constant, so one number describes the whole batch — but say so rather
+    # than assume it, because a permutation-backed Explainer would not.
+    if bases.size > 1 and not np.allclose(bases, bases[0], atol=1e-12):
+        raise ValueError(
+            "decision golden needs one Base value per batch; this Explanation has "
+            "per-Sample Base values"
+        )
+    base = float(bases[0])
     feature_idx = np.argsort(np.sum(np.abs(v), axis=0))
     shown = feature_idx[-max_display:]
     hidden = feature_idx[:-max_display]
@@ -342,10 +352,10 @@ def capture_decision(values, base_values, data, feature_names, max_display: int)
     cumsum = starts[:, None] + np.cumsum(v[:, shown], axis=1)
     return {
         "max_display": max_display,
-        "base_value": base,
+        "base_value": sigfig(base, 6),
         "row_labels": [str(feature_names[j]) for j in shown],
-        "starts": [float(x) for x in starts],
-        "cumsum": cumsum.tolist(),
+        "starts": [sigfig(float(x), 6) for x in starts],
+        "cumsum": [[sigfig(float(x), 6) for x in row] for row in cumsum],
     }
 
 
@@ -355,9 +365,9 @@ def capture_force(values, base_values, data, feature_names, sample_index: int) -
     base = float(np.asarray(base_values, dtype=float).ravel()[sample_index])
     return {
         "sample_index": sample_index,
-        "base_value": base,
-        "fx": float(base + v[sample_index].sum()),
-        "contributions": [float(x) for x in v[sample_index]],
+        "base_value": sigfig(base, 6),
+        "fx": sigfig(float(base + v[sample_index].sum()), 6),
+        "contributions": [sigfig(float(x), 6) for x in v[sample_index]],
     }
 
 
@@ -368,8 +378,8 @@ def capture_embedding(values, base_values, data, feature_names) -> dict:
     pca = sklearn.decomposition.PCA(2)
     coords = pca.fit_transform(np.asarray(values, dtype=float))
     return {
-        "coords": coords.tolist(),
-        "variance_ratios": [float(r) for r in pca.explained_variance_ratio_],
+        "coords": [[sigfig(float(x), 6) for x in row] for row in coords],
+        "variance_ratios": [sigfig(float(r), 6) for r in pca.explained_variance_ratio_],
     }
 
 
