@@ -12,6 +12,8 @@ import { IPagination } from "@/components/model/pagination.interface";
 import { Pagination } from "@/components/ui/Pagination";
 import {
   GlobalBeeswarmChart,
+  GlobalDependenceChart,
+  GlobalEmbeddingChart,
   GlobalHeatmapChart,
   GlobalImportanceChart,
 } from "@/components/shap/ExplanationCharts";
@@ -310,6 +312,22 @@ export function PredictionListPage() {
               description="Every sample as a column and every taxon as a row, coloured by contribution: white at zero, red above, blue below. Samples are ordered by total contribution, so similar explanations sit together. Hover a column to see which sample it is."
             >
               <GlobalHeatmapChart predictionId={selectPrediction?.id} />
+            </ChartSection>
+            <Separator />
+            <ChartSection
+              id="dependence"
+              title="Abundance and Contribution"
+              description="One taxon at a time: how much of it a sample had, against how much it moved that sample’s prediction. Samples where it was not detected sit in their own band at the left, because a zero is a real absence rather than a small number. The line through the cloud is the median, which shows whether more is always worse or whether there is a level below which it stops mattering."
+            >
+              <GlobalDependenceChart predictionId={selectPrediction?.id} />
+            </ChartSection>
+            <Separator />
+            <ChartSection
+              id="explanation-map"
+              title="Explanation Map"
+              description="Samples placed by why the model decided about them, not by what they contained: the axes are a two-component summary of the contributions themselves. Samples judged for the same reasons sit together, so a cluster here is a group the model reasoned about alike."
+            >
+              <GlobalEmbeddingChart predictionId={selectPrediction?.id} />
             </ChartSection>
           </div>
         </SheetContent>
