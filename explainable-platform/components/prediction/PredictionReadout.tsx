@@ -1,5 +1,5 @@
-import { Badge } from "@/components/ui/badge";
-import { POSITIVE_THRESHOLD, classificationLabel } from "@/lib/classes";
+import { DotBadge } from "@/components/prediction/StatusBadge";
+import { CLASS_UNCERTAIN_MARGIN, POSITIVE_THRESHOLD, classificationLabel } from "@/lib/classes";
 import { EMPTY_VALUE, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -15,13 +15,9 @@ const CLASS_STYLE = {
 export function ClassBadge({ predictedClass }: { predictedClass: number | string }) {
   const style = String(predictedClass) === "1" ? CLASS_STYLE.positive : CLASS_STYLE.negative;
   return (
-    <Badge
-      variant="outline"
-      className={cn("gap-1.5 whitespace-nowrap border-transparent font-medium", style.className)}
-    >
-      <span aria-hidden="true" className={cn("size-1.5 rounded-full", style.dot)} />
+    <DotBadge dot={style.dot} className={style.className}>
       {classificationLabel(predictedClass)}
-    </Badge>
+    </DotBadge>
   );
 }
 
@@ -49,8 +45,17 @@ export function PredictionReadout({
 }) {
   const value = probability === null || probability === undefined ? null : Number(probability);
   const known = value !== null && Number.isFinite(value);
-  const resolvedClass =
-    predictedClass ?? (known ? (value >= POSITIVE_THRESHOLD ? 1 : 0) : null);
+  // A derived class is a guess, and near the threshold it is a guess that can
+  // disagree with the stored class shown elsewhere: the payload this figure
+  // comes from is rounded to four significant figures and its additivity holds
+  // only to 1e-3, so a Sample sitting that close to the threshold could read
+  // one way here and the other way in the table it was opened from. Rather than
+  // pick a side, say the probability and claim no class.
+  const tooCloseToCall =
+    known && Math.abs((value as number) - POSITIVE_THRESHOLD) <= CLASS_UNCERTAIN_MARGIN;
+  const derivedClass =
+    known && !tooCloseToCall ? ((value as number) >= POSITIVE_THRESHOLD ? 1 : 0) : null;
+  const resolvedClass = predictedClass ?? derivedClass;
 
   return (
     <span className={cn("inline-flex flex-wrap items-center gap-2", className)}>

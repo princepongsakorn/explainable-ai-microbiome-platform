@@ -24,6 +24,17 @@ export function classLabel(value: number | string): string {
  */
 export const POSITIVE_THRESHOLD = 0.5;
 
+/**
+ * How near the threshold a derived class stops being claimed.
+ *
+ * `docs/shap-explain-spec.md` §1.4 writes the explanation's numbers at four
+ * significant figures and its invariant I3 holds additivity only to 1e-3
+ * absolute. A Model output recovered from that payload is therefore good to
+ * about 1e-3, which is exactly the width in which a derived class could
+ * contradict the stored one. Inside it, say nothing.
+ */
+export const CLASS_UNCERTAIN_MARGIN = 1e-3;
+
 /** One wording for the predicted class, wherever it is shown. */
 export function classificationLabel(value?: number | string | null): string {
   if (value === null || value === undefined) return EMPTY_VALUE;

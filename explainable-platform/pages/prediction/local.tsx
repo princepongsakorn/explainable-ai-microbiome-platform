@@ -71,7 +71,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { classificationLabel } from "@/lib/classes";
-import { EMPTY_VALUE, displayValue, formatPercent } from "@/lib/format";
+import { displayValue, formatPercent } from "@/lib/format";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { queryToString } from "@/lib/queryToString";
 import { useSse } from "@/lib/useSse";

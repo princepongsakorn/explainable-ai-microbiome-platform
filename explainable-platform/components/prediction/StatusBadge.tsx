@@ -1,6 +1,36 @@
+import { ReactNode } from "react";
+
 import { PredictionStatus } from "@/components/model/model.interface";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+
+/**
+ * A badge with a coloured dot, the shape this app states a status or a class in.
+ *
+ * The theme has no token for either, so the colours live with whichever module
+ * decides them; what they have in common is only this markup.
+ */
+export function DotBadge({
+  dot,
+  className,
+  children,
+}: {
+  /** Tailwind background class for the dot. */
+  dot: string;
+  /** Tailwind background and text classes for the badge. */
+  className: string;
+  children: ReactNode;
+}) {
+  return (
+    <Badge
+      variant="outline"
+      className={cn("gap-1.5 whitespace-nowrap border-transparent font-medium", className)}
+    >
+      <span aria-hidden="true" className={cn("size-1.5 rounded-full", dot)} />
+      {children}
+    </Badge>
+  );
+}
 
 // The theme has no success or info tokens, so the status colours live here,
 // in the one place that decides them.
@@ -42,12 +72,8 @@ export function StatusBadge({ status }: { status?: PredictionStatus }) {
   const style =
     STATUS_STYLE[status && status !== PredictionStatus.ALL ? status : PredictionStatus.PENDING];
   return (
-    <Badge
-      variant="outline"
-      className={cn("gap-1.5 whitespace-nowrap border-transparent font-medium", style.className)}
-    >
-      <span aria-hidden="true" className={cn("size-1.5 rounded-full", style.dot)} />
+    <DotBadge dot={style.dot} className={style.className}>
       {style.label}
-    </Badge>
+    </DotBadge>
   );
 }
