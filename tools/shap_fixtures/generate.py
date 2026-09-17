@@ -326,6 +326,63 @@ def capture_heatmap(values, base_values, data, feature_names, max_display: int) 
     }
 
 
+def capture_decision(values, base_values, data, feature_names, max_display: int) -> dict:
+    """The arrays `shap.plots.decision` builds, without its matplotlib call.
+
+    Its ordering is `np.argsort(np.sum(np.abs(values), axis=0))` and its
+    `feature_display_range` keeps the last `max_display`; Features outside that
+    range are folded into where each path starts, not into an extra row.
+    """
+    v = np.asarray(values, dtype=float)
+    bases = np.asarray(base_values, dtype=float).ravel()
+    # Spec §1.3: the Base value belongs to a Sample even when every Sample
+    # shares one. Every fixture here is TreeExplainer-backed, which tiles a
+    # constant, so one number describes the whole batch — but say so rather
+    # than assume it, because a permutation-backed Explainer would not.
+    if bases.size > 1 and not np.allclose(bases, bases[0], atol=1e-12):
+        raise ValueError(
+            "decision golden needs one Base value per batch; this Explanation has "
+            "per-Sample Base values"
+        )
+    base = float(bases[0])
+    feature_idx = np.argsort(np.sum(np.abs(v), axis=0))
+    shown = feature_idx[-max_display:]
+    hidden = feature_idx[:-max_display]
+    starts = base + v[:, hidden].sum(axis=1)
+    cumsum = starts[:, None] + np.cumsum(v[:, shown], axis=1)
+    return {
+        "max_display": max_display,
+        "base_value": sigfig(base, 6),
+        "row_labels": [str(feature_names[j]) for j in shown],
+        "starts": [sigfig(float(x), 6) for x in starts],
+        "cumsum": [[sigfig(float(x), 6) for x in row] for row in cumsum],
+    }
+
+
+def capture_force(values, base_values, data, feature_names, sample_index: int) -> dict:
+    """What `shap.plots.force` meets at, for one Sample."""
+    v = np.asarray(values, dtype=float)
+    base = float(np.asarray(base_values, dtype=float).ravel()[sample_index])
+    return {
+        "sample_index": sample_index,
+        "base_value": sigfig(base, 6),
+        "fx": sigfig(float(base + v[sample_index].sum()), 6),
+        "contributions": [sigfig(float(x), 6) for x in v[sample_index]],
+    }
+
+
+def capture_embedding(values, base_values, data, feature_names) -> dict:
+    """`shap.plots.embedding` projects with sklearn's own PCA; capture that."""
+    import sklearn.decomposition
+
+    pca = sklearn.decomposition.PCA(2)
+    coords = pca.fit_transform(np.asarray(values, dtype=float))
+    return {
+        "coords": [[sigfig(float(x), 6) for x in row] for row in coords],
+        "variance_ratios": [sigfig(float(r), 6) for r in pca.explained_variance_ratio_],
+    }
+
+
 def write_colormaps() -> None:
     """Dump SHAP's colormaps as lookup tables.
 
@@ -391,6 +448,12 @@ def main(argv: list[str] | None = None) -> None:
     real_v, real_b = explain(real_X, real_df["CRC"])
     write("real.json", build_payload(real_v, real_b, real_X.values, real_X.columns, real_X.index))
     write("real.bar.golden.json", capture_bar(real_v, real_b, real_X.values, real_X.columns, 10))
+    write("real.decision.golden.json",
+          capture_decision(real_v, real_b, real_X.values, real_X.columns, 15))
+    write("real.force.golden.json",
+          capture_force(real_v, real_b, real_X.values, real_X.columns, 0))
+    write("real.embedding.golden.json",
+          capture_embedding(real_v, real_b, real_X.values, real_X.columns))
     write(
         "real.waterfall.golden.json",
         {
@@ -408,6 +471,12 @@ def main(argv: list[str] | None = None) -> None:
     tiny_names = real_X.columns[top50]
     write("tiny.json", build_payload(tiny_v, tiny_b, tiny_d, tiny_names, real_X.index[:20]))
     write("tiny.bar.golden.json", capture_bar(tiny_v, tiny_b, tiny_d, tiny_names, 10))
+    write("tiny.decision.golden.json",
+          capture_decision(tiny_v, tiny_b, tiny_d, tiny_names, 15))
+    write("tiny.force.golden.json",
+          capture_force(tiny_v, tiny_b, tiny_d, tiny_names, 0))
+    write("tiny.embedding.golden.json",
+          capture_embedding(tiny_v, tiny_b, tiny_d, tiny_names))
     # Waterfall is a Local explanation — one Sample, so the golden file names which.
     write(
         "tiny.waterfall.golden.json",

@@ -1,9 +1,15 @@
 import { ReactNode, useEffect, useId, useState } from "react";
-import { ArrowsPointingOutIcon } from "@heroicons/react/24/outline";
-import { genusOf } from "shap-svg";
+import { ArrowsPointingOutIcon, InformationCircleIcon } from "@heroicons/react/24/outline";
+import {
+  genusOf,
+  globalImportance,
+  groupExplanationByGenus,
+  orderFeatures,
+  parseExplanation,
+} from "shap-svg";
 import type { Explanation, PlotLabels, RowSort, ValuePrecision } from "shap-svg";
 import { Plots } from "shap-svg/react";
-import { useExplanation, sampleIndexOf } from "@/lib/useExplanation";
+import { modelOutputOf, useExplanation, sampleIndexOf } from "@/lib/useExplanation";
 import { useElementWidth } from "@/lib/useElementWidth";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,6 +20,29 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Separator } from "@/components/ui/separator";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { ChartSection } from "@/components/shap/ChartSection";
+import {
+  LOCAL_CHART_COPY,
+  RESEARCH_LABELS,
+  formatTaxonName,
+} from "@/components/shap/chartCopy";
+import { cn } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { PredictionReadout } from "@/components/prediction/PredictionReadout";
 
 const MIN_DISPLAY = 5;
 const MAX_DISPLAY = 50;
@@ -35,23 +64,8 @@ const ROW_SORTS: { value: RowSort; label: string }[] = [
   { value: "featureValue", label: "Feature value" },
 ];
 
-/**
- * The charts' text in the terms a microbiome researcher reads results in. The
- * numbers are SHAP's, unchanged; only what they are called differs from SHAP's
- * figures. Every model this platform serves explains a predicted probability.
- */
-const RESEARCH_LABELS: Partial<PlotLabels> = {
-  shapValue: "Contribution",
-  shapValueAxis: "Contribution to predicted probability",
-  meanAbsShapValue: "Mean absolute contribution",
-  featureValue: "Relative abundance",
-  missingFeatureValue: "not measured",
-  samples: "Samples",
-  sampleTotal: "Total contribution",
-  baseValue: "Average prediction",
-  modelOutput: "Prediction",
-  otherFeatures: (count) => `${count} other taxa`,
-};
+
+
 
 /** Inline width before the chart's box has been measured. */
 const INLINE_WIDTH = 720;
@@ -110,6 +124,9 @@ function ChartFrame({
   children,
   emptyLabel,
   rowHeight,
+  extraControls,
+  overlay,
+  showMaxDisplay = true,
   showPrecision = false,
   showRowSort = false,
 }: {
@@ -118,6 +135,25 @@ function ChartFrame({
   title: string;
   emptyLabel: string;
   rowHeight: number;
+  /**
+   * A chart's own switches, rendered in the shared control row so they sit
+   * beside the ones every chart has rather than in a second row below.
+   */
+  extraControls?: ReactNode;
+  /**
+   * A chart's own overlays, such as the dialog a clicked point opens.
+   *
+   * Rendered once, outside `children`, which this frame invokes twice — once
+   * inline and once inside the expanded dialog. An overlay returned from
+   * `children` therefore mounts twice whenever the expanded view is open.
+   */
+  overlay?: (view: ChartView) => ReactNode;
+  /**
+   * Offer the row-count slider. The scatter draws one Feature and the
+   * embedding projects all of them, so for those two it controls nothing and
+   * inviting a reader to drag it is a lie.
+   */
+  showMaxDisplay?: boolean;
   /** Offer the decimal-places control. Only the waterfall labels each bar. */
   showPrecision?: boolean;
   /** Offer the row-order control. Only beeswarm and heatmap have rows to reorder freely. */
@@ -169,22 +205,29 @@ function ChartFrame({
 
   const controls = (placement: "inline" | "expanded") => (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
-      <label htmlFor={`${controlId}-${placement}-shown`}>Features shown</label>
-      <input
-        id={`${controlId}-${placement}-shown`}
-        type="range"
-        // A chart with fewer rows than the usual minimum still gets a slider
-        // whose range is valid.
-        min={Math.min(MIN_DISPLAY, sliderMax)}
-        max={sliderMax}
-        value={shown}
-        onChange={(event) => setMaxDisplay(Number(event.target.value))}
-        className="min-w-[8rem] flex-1 accent-primary"
-      />
-      <span className="w-16 text-right tabular-nums text-foreground">
-        {shown} / {featureCount}
-      </span>
-      <label className="flex items-center gap-1.5 whitespace-nowrap border-l pl-3">
+      {showMaxDisplay && (
+        <>
+          <label htmlFor={`${controlId}-${placement}-shown`}>Features shown</label>
+          <input
+            id={`${controlId}-${placement}-shown`}
+            type="range"
+            // A chart with fewer rows than the usual minimum still gets a slider
+            // whose range is valid.
+            min={Math.min(MIN_DISPLAY, sliderMax)}
+            max={sliderMax}
+            value={shown}
+            onChange={(event) => setMaxDisplay(Number(event.target.value))}
+            className="min-w-[8rem] flex-1 accent-primary"
+          />
+          <span className="w-16 text-right tabular-nums text-foreground">
+            {shown} / {featureCount}
+          </span>
+        </>
+      )}
+      <label className={cn(
+          "flex items-center gap-1.5 whitespace-nowrap",
+          showMaxDisplay && "border-l pl-3",
+        )}>
         <input
           type="checkbox"
           checked={groupByGenus}
@@ -193,6 +236,7 @@ function ChartFrame({
         />
         Group by genus
       </label>
+      {extraControls}
       {showRowSort && (
         <label className="flex items-center gap-1.5 whitespace-nowrap border-l pl-3">
           Sort
@@ -298,6 +342,16 @@ function ChartFrame({
           </div>
         </DialogContent>
       </Dialog>
+
+      {overlay?.({
+        explanation,
+        maxDisplay: shown,
+        decimals,
+        groupByGenus,
+        rowSort,
+        width: Math.max(MIN_INLINE_WIDTH, chartBoxWidth ?? INLINE_WIDTH),
+        rowHeight,
+      })}
     </div>
   );
 }
@@ -358,17 +412,14 @@ export function GlobalBeeswarmChart({ predictionId }: { predictionId?: string })
  * The original PNG labelled its x axis "Instances" and nothing more, which made
  * the substructure it exists to show impossible to read.
  */
-export function GlobalHeatmapChart({
-  predictionId,
-  onSampleClick,
-}: {
-  predictionId?: string;
-  onSampleClick?: (sampleId: string) => void;
-}) {
+export function GlobalHeatmapChart({ predictionId }: { predictionId?: string }) {
+  const peek = useSamplePeek(predictionId);
+
   return (
     <ChartFrame
       predictionId={predictionId}
       title="Heatmap"
+      overlay={({ explanation }) => peek.overlay(explanation)}
       showRowSort
       emptyLabel="No explanation available."
       rowHeight={26}
@@ -382,7 +433,9 @@ export function GlobalHeatmapChart({
           maxDisplay={maxDisplay}
           width={width}
           rowHeight={rowHeight}
-          onSampleClick={onSampleClick}
+          onSampleClick={(sampleId) =>
+            peek.onSampleClick(sampleIndexOf(explanation, sampleId))
+          }
         />
       )}
     </ChartFrame>
@@ -410,28 +463,333 @@ export function LocalWaterfallChart({
       rowHeight={30}
       showPrecision
     >
-      {({ explanation, maxDisplay, decimals, groupByGenus, width, rowHeight }) => {
-        const sampleIndex = sampleIndexOf(explanation, recordId);
-        if (sampleIndex < 0) {
-          return (
-            <div className="py-2 text-sm text-muted-foreground">
-              This record is not in the prediction&apos;s explanation.
+      {({ explanation, maxDisplay, decimals, groupByGenus, width, rowHeight }) => (
+        <LocalChart explanation={explanation} recordId={recordId}>
+          {(sampleIndex) => (
+            <Plots.waterfall
+              explanation={explanation}
+              labels={RESEARCH_LABELS}
+              groupByGenus={groupByGenus}
+              sampleIndex={sampleIndex}
+              maxDisplay={maxDisplay}
+              decimals={decimals}
+              width={width}
+              rowHeight={rowHeight}
+            />
+          )}
+        </LocalChart>
+      )}
+    </ChartFrame>
+  );
+}
+
+/**
+ * The Sample a reader clicked on a global chart, and the dialog showing it.
+ *
+ * Three charts each had the same state, the same reset and the same dialog
+ * element; this keeps them in step and gives `ChartFrame` one thing to render.
+ */
+function useSamplePeek(predictionId?: string) {
+  const [selectedSampleIndex, setSelectedSampleIndex] = useState<number | null>(null);
+  return {
+    onSampleClick: setSelectedSampleIndex,
+    /** Pass to `ChartFrame`'s `overlay`, which renders it exactly once. */
+    overlay: (explanation: Explanation) => (
+      <SampleDialog
+        predictionId={predictionId}
+        explanation={explanation}
+        sampleIndex={selectedSampleIndex}
+        onOpenChange={(open) => !open && setSelectedSampleIndex(null)}
+      />
+    ),
+  };
+}
+
+/**
+ * One Sample's own breakdown, opened by clicking its point on a global chart.
+ *
+ * The global charts answer "which taxa, across everyone"; a point on them is a
+ * person, and until now clicking one did nothing. This keeps the reader where
+ * they were — the cohort view stays behind the dialog — rather than navigating
+ * away and losing the position they clicked from.
+ */
+/**
+ * A Sample's model output, read straight off the payload.
+ *
+ * `f(x)` is the Base value plus that Sample's contributions — an invariant of
+ * the explanation contract, not an approximation — so a breakdown opened from a
+ * cohort chart can show the probability without fetching the record.
+ */
+function SampleDialog({
+  predictionId,
+  explanation,
+  sampleIndex,
+  onOpenChange,
+}: {
+  predictionId?: string;
+  explanation: Explanation;
+  /** null while closed. */
+  sampleIndex: number | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const dialogId = useId();
+  const open = sampleIndex !== null;
+  const recordId = sampleIndex === null ? undefined : explanation.sample_ids?.[sampleIndex];
+  const name =
+    sampleIndex === null
+      ? ""
+      : explanation.sample_labels?.[sampleIndex] ?? `Sample ${sampleIndex + 1}`;
+  const modelOutput = modelOutputOf(explanation, sampleIndex);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="flex h-[calc(100vh-4rem)] max-w-6xl flex-col gap-0 p-0">
+        <DialogHeader className="border-b px-6 py-4 pr-12 text-left">
+          <DialogTitle className="text-base">{name}</DialogTitle>
+          <DialogDescription>
+            {/* The model output is the Base value plus every contribution, which
+                is the definition the payload guarantees — so the probability is
+                already here and needs no second request. */}
+            <PredictionReadout probability={modelOutput} />
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex-1 overflow-auto overscroll-contain p-4">
+          {recordId ? (
+            <div className="flex flex-col gap-8">
+              {/* The same headings and wording the sample's own page uses, so a
+                  reader who arrives here by clicking a point and a reader who
+                  arrives from the table are reading the same thing. */}
+              <ChartSection
+                id={`${dialogId}-glance`}
+                title={LOCAL_CHART_COPY.glance.title}
+                description={LOCAL_CHART_COPY.glance.description}
+              >
+                <LocalForceChart predictionId={predictionId} recordId={recordId} />
+              </ChartSection>
+              <Separator />
+              <ChartSection
+                id={`${dialogId}-breakdown`}
+                title={LOCAL_CHART_COPY.breakdown.title}
+                description={LOCAL_CHART_COPY.breakdown.description}
+              >
+                <LocalWaterfallChart predictionId={predictionId} recordId={recordId} />
+              </ChartSection>
             </div>
-          );
-        }
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              This prediction&apos;s explanation does not carry sample identifiers, so the
+              individual breakdown cannot be looked up.
+            </p>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * A per-Sample chart, or a line saying why it cannot be drawn.
+ *
+ * Both per-Sample charts resolve a record id to a Sample index and refuse the
+ * same way when the payload does not carry it; the refusal wording lived twice.
+ */
+function LocalChart({
+  explanation,
+  recordId,
+  children,
+}: {
+  explanation: Explanation;
+  recordId?: string;
+  children: (sampleIndex: number) => ReactNode;
+}) {
+  const sampleIndex = sampleIndexOf(explanation, recordId);
+  if (sampleIndex < 0) {
+    return (
+      <div className="py-2 text-sm text-muted-foreground">
+        This record is not in the prediction&apos;s explanation.
+      </div>
+    );
+  }
+  return <>{children(sampleIndex)}</>;
+}
+
+/**
+ * One taxon's abundance against its contribution, one dot per sample.
+ *
+ * The question this answers and the others cannot: is more of this taxon always
+ * worse, or is there a level below which it does not matter? Samples where the
+ * taxon was not detected sit in their own band at the left, because a zero is a
+ * real absence rather than a small number, and the rest are on a log axis.
+ */
+export function GlobalDependenceChart({ predictionId }: { predictionId?: string }) {
+  const [feature, setFeature] = useState<string | null>(null);
+  const peek = useSamplePeek(predictionId);
+  // Off by default. SHAP colours these dots by a second taxon — whichever one
+  // interacts most with the plotted one — which answers a real question but
+  // introduces a variable the reader did not ask for, and reads as a mystery
+  // until someone explains it.
+  const [colorByInteraction, setColorByInteraction] = useState(false);
+  const selectId = useId();
+
+  return (
+    <ChartFrame
+      predictionId={predictionId}
+      title="Abundance and contribution"
+      overlay={({ explanation }) => peek.overlay(explanation)}
+      emptyLabel="No explanation available."
+      rowHeight={26}
+      showMaxDisplay={false}
+      extraControls={
+        // The switch's name is two words, so what it does lives behind an
+        // info icon beside it. The icon is the trigger, not the label, so
+        // clicking the words still toggles the box. The app's own Tooltip
+        // rather than a title attribute: that one waits a second, cannot be
+        // styled, and never appears on a touch screen. The provider is local
+        // because the sidebar's does not reach this far.
+        <span className="flex items-center gap-1.5 whitespace-nowrap border-l pl-3 text-sm text-muted-foreground">
+          <label className="flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              checked={colorByInteraction}
+              onChange={(event) => setColorByInteraction(event.target.checked)}
+              className="accent-primary"
+            />
+            Interaction mode
+          </label>
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="What interaction mode does"
+                  className="size-5 rounded-full text-muted-foreground"
+                >
+                  <InformationCircleIcon aria-hidden="true" className="size-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs [text-wrap:pretty]">
+                Colours each dot by how much of the taxon that interacts most with the selected
+                one a sample had, instead of by the sample&apos;s predicted probability.
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </span>
+      }
+    >
+      {({ explanation, groupByGenus, width }) => {
+        // Rank the taxa the chart will actually draw. Grouping by genus
+        // replaces the species columns with genus ones, so ranking the
+        // ungrouped names would offer a name the chart cannot find.
+        const raw = parseExplanation(explanation);
+        const parsed = groupByGenus ? groupExplanationByGenus(raw) : raw;
+        const ranked = orderFeatures(globalImportance(parsed)).map(
+          (index) => parsed.featureNames[index],
+        );
+        const selected = feature && ranked.includes(feature) ? feature : ranked[0];
+
         return (
-          <Plots.waterfall
-            explanation={explanation}
-            labels={RESEARCH_LABELS}
-            groupByGenus={groupByGenus}
-            sampleIndex={sampleIndex}
-            maxDisplay={maxDisplay}
-            decimals={decimals}
-            width={width}
-            rowHeight={rowHeight}
-          />
+          <div className="flex flex-col gap-3">
+            {/* The design system's Select rather than a native one: an
+                `<option>` cannot be italicised, and a scientific name is
+                italic everywhere in this project without exception. */}
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span id={selectId}>Taxon</span>
+              <Select value={selected} onValueChange={setFeature}>
+                <SelectTrigger aria-labelledby={selectId} className="max-w-[28rem] flex-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {ranked.map((name) => (
+                      <SelectItem key={name} value={name}>
+                        <em>{formatTaxonName(name)}</em>
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+            <Plots.scatter
+              explanation={explanation}
+              labels={RESEARCH_LABELS}
+              feature={selected}
+              colorFeature={colorByInteraction ? "auto" : "output"}
+              groupByGenus={groupByGenus}
+              width={width}
+              height={Math.round(width * 0.55)}
+              onSampleClick={peek.onSampleClick}
+            />
+          </div>
         );
       }}
+    </ChartFrame>
+  );
+}
+
+/**
+ * Every sample placed by *why* the model decided about it.
+ *
+ * The axes are a two-component PCA of the contributions themselves, not of the
+ * abundances, so samples the model judged for the same reasons sit together.
+ */
+export function GlobalEmbeddingChart({ predictionId }: { predictionId?: string }) {
+  const peek = useSamplePeek(predictionId);
+
+  return (
+    <ChartFrame
+      predictionId={predictionId}
+      title="Explanation map"
+      overlay={({ explanation }) => peek.overlay(explanation)}
+      emptyLabel="No explanation available."
+      rowHeight={26}
+      showMaxDisplay={false}
+    >
+      {({ explanation, groupByGenus, width }) => (
+        <Plots.embedding
+          explanation={explanation}
+          labels={RESEARCH_LABELS}
+          groupByGenus={groupByGenus}
+          width={width}
+          height={Math.round(width * 0.6)}
+          onSampleClick={peek.onSampleClick}
+        />
+      )}
+    </ChartFrame>
+  );
+}
+
+/** The waterfall compressed onto one line: what raised this sample's prediction and what lowered it. */
+export function LocalForceChart({
+  predictionId,
+  recordId,
+}: {
+  predictionId?: string;
+  recordId?: string;
+}) {
+  return (
+    <ChartFrame
+      predictionId={predictionId}
+      title="Contributions at a glance"
+      emptyLabel="No explanation available for this prediction."
+      rowHeight={26}
+    >
+      {({ explanation, maxDisplay, groupByGenus, width }) => (
+        <LocalChart explanation={explanation} recordId={recordId}>
+          {(sampleIndex) => (
+            <Plots.force
+              explanation={explanation}
+              labels={RESEARCH_LABELS}
+              groupByGenus={groupByGenus}
+              sampleIndex={sampleIndex}
+              maxDisplay={maxDisplay}
+              width={width}
+              height={110}
+            />
+          )}
+        </LocalChart>
+      )}
     </ChartFrame>
   );
 }
