@@ -25,10 +25,10 @@ import {
 import { IPaginationRequestParams } from "@/components/model/pagination.interface";
 import { Pagination } from "@/components/ui/Pagination";
 import {
-  LOCAL_CHART_COPY,
   LocalForceChart,
   LocalWaterfallChart,
 } from "@/components/shap/ExplanationCharts";
+import { LOCAL_CHART_COPY } from "@/components/shap/chartCopy";
 import { ChartSection } from "@/components/shap/ChartSection";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
