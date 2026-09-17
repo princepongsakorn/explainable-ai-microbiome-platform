@@ -15,6 +15,7 @@ import { RefreshButton } from "@/components/common/RefreshButton";
 import { RowOpenButton } from "@/components/common/RowOpenButton";
 import { ModelLink } from "@/components/experiments/ModelLink";
 import { StatusBadge } from "@/components/prediction/StatusBadge";
+import { PredictionReadout } from "@/components/prediction/PredictionReadout";
 import {
   IPredictionRecords,
   IPredictionsPagination,
@@ -23,7 +24,11 @@ import {
 } from "@/components/model/model.interface";
 import { IPaginationRequestParams } from "@/components/model/pagination.interface";
 import { Pagination } from "@/components/ui/Pagination";
-import { LocalWaterfallChart } from "@/components/shap/ExplanationCharts";
+import {
+  LOCAL_CHART_COPY,
+  LocalForceChart,
+  LocalWaterfallChart,
+} from "@/components/shap/ExplanationCharts";
 import { ChartSection } from "@/components/shap/ChartSection";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -65,7 +70,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { classLabel } from "@/lib/classes";
+import { classificationLabel } from "@/lib/classes";
 import { EMPTY_VALUE, displayValue, formatPercent } from "@/lib/format";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { queryToString } from "@/lib/queryToString";
@@ -123,12 +128,6 @@ function usePredictionStatus(): PredictionStatus {
   }
 
   return PredictionStatus.ALL;
-}
-
-/** One wording for the predicted class, in the table and the drawer alike. */
-function classificationLabel(value?: number | null): string {
-  if (value === null || value === undefined) return EMPTY_VALUE;
-  return `Probable ${classLabel(value).toLowerCase()}`;
 }
 
 function FilterGroup<T extends string>({
@@ -574,7 +573,10 @@ export function PredictionRecordsPage() {
               <StatusBadge status={record?.status} />
             </div>
             <SheetDescription>
-              Probability {formatPercent(record?.proba)} · {classificationLabel(record?.class)}
+              <PredictionReadout
+                probability={record?.proba}
+                predictedClass={record?.class}
+              />
             </SheetDescription>
           </SheetHeader>
 
@@ -605,10 +607,20 @@ export function PredictionRecordsPage() {
 
             <ChartSection
               id="contribution-breakdown"
-              title="Contribution Breakdown"
-              description="How this sample’s taxa move the prediction from the model’s average to its final output. Red pushes the prediction up and blue pushes it down; the bars add up to the difference."
+              title={LOCAL_CHART_COPY.breakdown.title}
+              description={LOCAL_CHART_COPY.breakdown.description}
             >
               <LocalWaterfallChart predictionId={predictionId} recordId={record?.id} />
+            </ChartSection>
+
+            <Separator />
+
+            <ChartSection
+              id="contributions-at-a-glance"
+              title={LOCAL_CHART_COPY.glance.title}
+              description={LOCAL_CHART_COPY.glance.description}
+            >
+              <LocalForceChart predictionId={predictionId} recordId={record?.id} />
             </ChartSection>
 
             <Separator />
