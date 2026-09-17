@@ -53,6 +53,12 @@ The value being explained for one Sample, SHAP's `f(x)`. It always equals the Ba
 of that Sample's SHAP values.
 _Avoid_: prediction (that word means the batch job here), score, probability
 
+These _Avoid_ words bind **code, types and prose** — the names a developer reads. They do not bind
+what the interface says to a researcher: the frontend deliberately renders `modelOutput` as
+"Prediction" and a probability as "Probability", because those are the words its readers use. That
+wording lives in one place, `components/shap/chartCopy.ts`, so the two vocabularies cannot leak into
+each other.
+
 **Explanation**:
 The full set of SHAP values, relative abundances, Base values and Feature names for a set of Samples
 — the thing the Python service computes and the charts package draws.

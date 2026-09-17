@@ -1,5 +1,6 @@
 import { useEffect, useReducer } from "react";
 import { getExplanation } from "@/pages/api/predict";
+import { parseExplanation } from "shap-svg";
 import type { Explanation } from "shap-svg";
 
 export interface ExplanationProgress {
@@ -211,4 +212,25 @@ export function sampleIndexOf(
 ): number {
   if (!explanation?.sample_ids || !recordId) return -1;
   return explanation.sample_ids.indexOf(recordId);
+}
+
+/**
+ * A Sample's Model output, read straight off the payload.
+ *
+ * `f(x)` is the Base value plus that Sample's SHAP values — an invariant of the
+ * explanation contract, not an approximation — so a breakdown opened from a
+ * cohort chart can show it without fetching the record.
+ *
+ * Returns undefined for a Sample the payload does not cover, rather than a
+ * number that would be wrong.
+ */
+export function modelOutputOf(
+  explanation: Explanation | undefined,
+  sampleIndex: number | null
+): number | undefined {
+  if (!explanation || sampleIndex === null) return undefined;
+  const parsed = parseExplanation(explanation);
+  const row = parsed.values[sampleIndex];
+  if (!row) return undefined;
+  return parsed.baseValues[sampleIndex] + row.reduce((sum, value) => sum + value, 0);
 }
