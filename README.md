@@ -181,7 +181,7 @@ For a Kubernetes cluster with KServe, [`kserve-custom-runtime/deployment/`](kser
 | Repository | What it is |
 |---|---|
 | [`mlflow-explainable`](https://github.com/princepongsakorn/mlflow-explainable) | The Python library that logs a model and its SHAP explainer as one MLflow artifact. Published on [PyPI](https://pypi.org/project/mlflow-explainable/) and included here as a submodule under `mlflow-experiments/extension/mlflow_explainable`, pinned to v1.0.2 ([DOI 10.5281/zenodo.23347149](https://doi.org/10.5281/zenodo.23347149)). |
-| [`shap-svg`](https://github.com/princepongsakorn/shap-svg) | The browser chart library the web UI uses to draw SHAP explanations. Published on [npm](https://www.npmjs.com/package/shap-svg). |
+| [`shap-svg`](https://github.com/princepongsakorn/shap-svg) | The browser chart library the web UI uses to draw SHAP explanations. Published on [npm](https://www.npmjs.com/package/shap-svg) ([DOI 10.5281/zenodo.23347993](https://doi.org/10.5281/zenodo.23347993)). |
 | [`MLFlow_Server_GCP`](https://github.com/princepongsakorn/MLFlow_Server_GCP) | A fork of `andrevargas22/MLFlow_Server_GCP` with this project's configuration for an MLflow server on GCP. |
 
 ## Citation
