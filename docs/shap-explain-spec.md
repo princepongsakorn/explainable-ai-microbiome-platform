@@ -72,7 +72,7 @@ Sample 0 when the values actually differ — that is the bug this contract exist
 
 Every float is written as **decimal text rounded to 4 significant figures**. No base64, no typed
 arrays. Rationale, measured: 4-s.f. text after gzip is smaller than float32-base64 after gzip, and
-fixtures stay human-readable — which both a reviewer and an implementing agent need throughout.
+fixtures stay readable for anyone reviewing or implementing against them.
 
 `NaN` and `Infinity` MUST NOT appear. They are not valid JSON, Flask's default provider emits them
 bare, and `JSON.parse` rejects them. The upload path guarantees this by rejecting unparseable cells

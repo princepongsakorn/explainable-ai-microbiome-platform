@@ -1,9 +1,9 @@
 # Rynazal et al. (2023) reproduction notes: why the paper says 549 features and our model has 865
 
-Context for anyone (human or LLM) picking this up: this repo reproduces the Random Forest + SHAP setup
-behind Fig. 1 and Fig. 2 of Rynazal et al., *Genome Biology* 24:21 (2023), and registers it on the
-platform's MLflow registry. The reproduction is exact. The "549 features" number in the paper is a
-post-processing count, not the model's input dimension. Details below.
+This repository reproduces the Random Forest and SHAP setup behind Fig. 1 and Fig. 2 of Rynazal et
+al., *Genome Biology* 24:21 (2023), and registers the model on the platform's MLflow registry. The
+reproduction is exact. The paper's "549 features" is a count taken after the model was explained,
+not the model's input dimension, as the sections below show.
 
 ## 1. What the paper actually did (from its own code)
 
