@@ -13,6 +13,7 @@ authors:
 license: MIT
 repository-code: "https://github.com/princepongsakorn/explainable-ai-microbiome-platform"
 version: 1.0.0
+doi: 10.5281/zenodo.23346968
 date-released: "2026-10-13"
 keywords:
   - explainable AI

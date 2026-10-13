@@ -1,5 +1,7 @@
 # XAIServe
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23346968.svg)](https://doi.org/10.5281/zenodo.23346968)
+
 XAIServe is a platform for predicting disease from gut-microbiome data and explaining each prediction with SHAP. A data scientist trains a model in any Python framework and publishes it from the web UI. A researcher uploads a CSV of relative abundances and gets a predicted class, a probability and a SHAP explanation for every sample, drawn as interactive charts.
 
 The platform was built for the master's thesis *Development of an Explainable AI Platform Using SHAP and Machine Learning via a Usecase of Predicting Diseases from Gut Microbiome Data*.
@@ -46,11 +48,10 @@ flowchart LR
 
 ### 1. Train and log an explainable model
 
-Models are logged with [`mlflow-explainable`](https://github.com/princepongsakorn/mlflow-explainable), a small library written for this project. Install the version pinned in the submodule:
+Models are logged with [`mlflow-explainable`](https://github.com/princepongsakorn/mlflow-explainable), a small library written for this project:
 
 ```bash
-git submodule update --init
-pip install -e mlflow-experiments/extension/mlflow_explainable
+pip install mlflow-explainable==1.0.2
 ```
 
 The platform's Developer page shows the MLflow tracking URI and issues an access token. Export them, then train as usual:
@@ -179,13 +180,13 @@ For a Kubernetes cluster with KServe, [`kserve-custom-runtime/deployment/`](kser
 
 | Repository | What it is |
 |---|---|
-| [`mlflow-explainable`](https://github.com/princepongsakorn/mlflow-explainable) | The Python library that logs a model and its SHAP explainer as one MLflow artifact. Included here as a submodule under `mlflow-experiments/extension/mlflow_explainable`, pinned to its `xaiserve` branch. |
+| [`mlflow-explainable`](https://github.com/princepongsakorn/mlflow-explainable) | The Python library that logs a model and its SHAP explainer as one MLflow artifact. Published on [PyPI](https://pypi.org/project/mlflow-explainable/) and included here as a submodule under `mlflow-experiments/extension/mlflow_explainable`, pinned to v1.0.2 ([DOI 10.5281/zenodo.23347149](https://doi.org/10.5281/zenodo.23347149)). |
 | [`shap-svg`](https://github.com/princepongsakorn/shap-svg) | The browser chart library the web UI uses to draw SHAP explanations. Published on [npm](https://www.npmjs.com/package/shap-svg). |
 | [`MLFlow_Server_GCP`](https://github.com/princepongsakorn/MLFlow_Server_GCP) | A fork of `andrevargas22/MLFlow_Server_GCP` with this project's configuration for an MLflow server on GCP. |
 
 ## Citation
 
-The paper describing XAIServe is in preparation and will be listed here once it is published. To cite the software itself, use [`CITATION.cff`](CITATION.cff), which GitHub also offers under "Cite this repository".
+The paper describing XAIServe is in preparation and will be listed here once it is published. To cite the software itself, use its Zenodo DOI: [10.5281/zenodo.23346969](https://doi.org/10.5281/zenodo.23346969) for v1.0.0, or [10.5281/zenodo.23346968](https://doi.org/10.5281/zenodo.23346968) for every version. [`CITATION.cff`](CITATION.cff) has the same details, and GitHub offers them under "Cite this repository".
 
 ## License
 
