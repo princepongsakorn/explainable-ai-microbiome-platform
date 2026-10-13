@@ -46,7 +46,14 @@ flowchart LR
 
 ### 1. Train and log an explainable model
 
-The platform's Developer page shows the MLflow tracking URI and issues an access token. Export them, then train as usual and log the model with [`mlflow-explainable`](https://github.com/princepongsakorn/mlflow-explainable), a small library written for this project (`pip install mlflow-explainable`):
+Models are logged with [`mlflow-explainable`](https://github.com/princepongsakorn/mlflow-explainable), a small library written for this project. Install the version pinned in the submodule:
+
+```bash
+git submodule update --init
+pip install -e mlflow-experiments/extension/mlflow_explainable
+```
+
+The platform's Developer page shows the MLflow tracking URI and issues an access token. Export them, then train as usual:
 
 ```bash
 export MLFLOW_TRACKING_URI=http://<mlflow-host>:5000
@@ -172,7 +179,7 @@ For a Kubernetes cluster with KServe, [`kserve-custom-runtime/deployment/`](kser
 
 | Repository | What it is |
 |---|---|
-| [`mlflow-explainable`](https://github.com/princepongsakorn/mlflow-explainable) | The Python library that logs a model and its SHAP explainer as one MLflow artifact. Published on PyPI and included here as a submodule under `mlflow-experiments/extension/mlflow_explainable`. |
+| [`mlflow-explainable`](https://github.com/princepongsakorn/mlflow-explainable) | The Python library that logs a model and its SHAP explainer as one MLflow artifact. Included here as a submodule under `mlflow-experiments/extension/mlflow_explainable`, pinned to its `xaiserve` branch. |
 | [`shap-svg`](https://github.com/princepongsakorn/shap-svg) | The browser chart library the web UI uses to draw SHAP explanations. Published on [npm](https://www.npmjs.com/package/shap-svg). |
 | [`MLFlow_Server_GCP`](https://github.com/princepongsakorn/MLFlow_Server_GCP) | A fork of `andrevargas22/MLFlow_Server_GCP` with this project's configuration for an MLflow server on GCP. |
 
