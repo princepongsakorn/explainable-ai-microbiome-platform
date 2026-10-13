@@ -114,9 +114,25 @@ else
   echo "INFERENCE_SERVICE_URL=http://host.docker.internal:8080" >> "${BACKEND_ENV}"
 fi
 
+# ---------- Postgres password (read by docker-compose.prod.yml) ----------
+# Compose reads POSTGRES_PASSWORD from ${PROJECT_DIR}/.env. Generate one on the
+# first run. Postgres only applies it when it creates the data volume, so on a
+# VM with an existing volume, set this file to the password that volume uses.
+COMPOSE_ENV="${PROJECT_DIR}/.env"
+touch "${COMPOSE_ENV}"
+chmod 600 "${COMPOSE_ENV}"
+if ! grep -q '^POSTGRES_PASSWORD=' "${COMPOSE_ENV}"; then
+  echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)" >> "${COMPOSE_ENV}"
+  log "Generated POSTGRES_PASSWORD in ${COMPOSE_ENV}."
+fi
+POSTGRES_PASSWORD="$(grep '^POSTGRES_PASSWORD=' "${COMPOSE_ENV}" | cut -d= -f2-)"
+
 # DATABASE_URL must point to the postgres service in the compose network (not localhost)
+DATABASE_URL="postgresql://postgres_user:${POSTGRES_PASSWORD}@postgres:5432/explainable_platform_db"
 if grep -q '^DATABASE_URL=' "${BACKEND_ENV}"; then
-  sed -i "s|^DATABASE_URL=.*|DATABASE_URL=postgresql://postgres_user:change-me@postgres:5432/explainable_platform_db|" "${BACKEND_ENV}"
+  sed -i "s|^DATABASE_URL=.*|DATABASE_URL=${DATABASE_URL}|" "${BACKEND_ENV}"
+else
+  echo "DATABASE_URL=${DATABASE_URL}" >> "${BACKEND_ENV}"
 fi
 if grep -q '^REDIS_HOST=' "${BACKEND_ENV}"; then
   sed -i "s|^REDIS_HOST=.*|REDIS_HOST=redis|" "${BACKEND_ENV}"

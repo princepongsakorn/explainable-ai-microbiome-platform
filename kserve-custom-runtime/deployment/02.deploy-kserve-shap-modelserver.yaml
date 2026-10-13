@@ -15,7 +15,6 @@ spec:
         limits:
           memory: "2048Mi"
           cpu: "500m"
-          env:
       env:
       - name: MODEL_NAME
         value: sample-crc

@@ -13,6 +13,9 @@
 # Backend reaches inference via host.docker.internal:8080 (extra_hosts gateway).
 # GCS access uses Application Default Credentials → metadata server (HTTP) → compute SA.
 #
+# POSTGRES_PASSWORD has no default. Put it in a .env file next to this one
+# (deployment/setup_app.sh generates it on the first run).
+#
 # Usage on VM:
 #   docker compose -f docker-compose.prod.yml up -d --build
 #   docker compose -f docker-compose.prod.yml logs -f backend
@@ -24,7 +27,7 @@ services:
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env next to this file}
       POSTGRES_DB: ${POSTGRES_DB:-explainable_platform_db}
     volumes:
       - postgres_data:/var/lib/postgresql/data

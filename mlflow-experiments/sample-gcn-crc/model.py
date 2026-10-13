@@ -130,9 +130,10 @@ N_FEATURES = len(FEATURE_NAMES)
 # ---------------------------------------------------------------------------
 # MLflow tracking
 # ---------------------------------------------------------------------------
-os.environ["MLFLOW_TRACKING_USERNAME"] = "***REMOVED***"
-os.environ["MLFLOW_TRACKING_PASSWORD"] = "***REMOVED***"
-mlflow.set_tracking_uri("http://<mlflow-host>:5000")
+# The server address and credentials come from the environment
+# (MLFLOW_TRACKING_URI, MLFLOW_TRACKING_USERNAME, MLFLOW_TRACKING_PASSWORD).
+# MLflow reads the username and password itself.
+mlflow.set_tracking_uri(os.environ["MLFLOW_TRACKING_URI"])
 mlflow.set_experiment("sample-gcn-crc")
 
 

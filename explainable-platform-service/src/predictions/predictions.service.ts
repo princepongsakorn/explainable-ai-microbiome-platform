@@ -323,7 +323,7 @@ export class PredictionsService {
    * One Sample's Explanation, taken from the stored matrix.
    *
    * `PredictionRecord.id` is the platform's identifier and `sample_ids` is the
-   * payload's; this is the only place the two vocabularies meet (CONTEXT.md).
+   * payload's; this is the only place the two vocabularies meet.
    * Nothing is recomputed — the SHAP values were produced once for the whole
    * Prediction.
    */

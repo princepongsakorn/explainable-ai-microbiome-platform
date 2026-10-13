@@ -26,19 +26,20 @@
 # stream against a backend/nginx that isn't ready yet.
 #
 # Usage (from anywhere on the Mac):
-#   bash ~/MasterProject/project/explainable-ai-microbiome-platform/deployment/deploy_all.sh
+#   VM_SSH=<user>@<app-vm-host> bash deployment/deploy_all.sh
 #
 # Override the SSH target / paths if they change:
-#   VM_SSH=print@new-host bash deploy_all.sh
+#   VM_SSH=<user>@<app-vm-host> bash deploy_all.sh
 #
 # Requires: ssh + rsync on the Mac, the matching SSH key already loaded, and
-# sudo rights for the `print` user on the VM (for nginx + docker).
+# sudo rights for the SSH user on the VM (for nginx + docker).
 
 set -euo pipefail
 
-VM_SSH="${VM_SSH:-print@<inference-host>}"
-VM_PROJECT_DIR="${VM_PROJECT_DIR:-/home/print/explainable-ai-microbiome-platform}"
-MAC_REPO_DIR="${MAC_REPO_DIR:-$HOME/MasterProject/project/explainable-ai-microbiome-platform}"
+VM_SSH="${VM_SSH:?set VM_SSH=<user>@<app-vm-host>}"
+VM_HOST="${VM_SSH#*@}"
+VM_PROJECT_DIR="${VM_PROJECT_DIR:-/home/${VM_SSH%@*}/explainable-ai-microbiome-platform}"
+MAC_REPO_DIR="${MAC_REPO_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 COMPOSE_FILE="docker-compose.prod.yml"
 
 echo "==> Target VM : ${VM_SSH}"
@@ -73,7 +74,7 @@ echo
 
 # ---------- 3. Upload compose file + nginx config ----------
 # Single files, no --delete. nginx.conf is staged in /tmp and applied with
-# sudo in step 5 (the print user can't write /etc/nginx directly via rsync).
+# sudo in step 5 (the SSH user can't write /etc/nginx directly via rsync).
 echo "==> [3/7] copy ${COMPOSE_FILE} + nginx.conf to VM"
 rsync -avz \
     "${MAC_REPO_DIR}/${COMPOSE_FILE}" \
@@ -146,6 +147,6 @@ ssh -t "${VM_SSH}" '
 '
 
 echo
-echo "Done. Hard-refresh http://<inference-host>/ in the browser (Cmd+Shift+R)."
+echo "Done. Hard-refresh http://${VM_HOST}/ in the browser (Cmd+Shift+R)."
 echo "Then open a prediction page and confirm /api/events/predictions/<id>"
 echo "stays open as an event-stream in DevTools > Network."

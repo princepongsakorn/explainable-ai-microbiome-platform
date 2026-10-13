@@ -1,13 +1,21 @@
 # SHAP explanation payload & `shap-svg` — specification
 
-Normative spec for the work agreed in the Decision log of
-[`shap-interactive-frontend-feasibility.md`](./shap-interactive-frontend-feasibility.md). That note
-says **why**; this says **what**. Vocabulary is defined in [`CONTEXT.md`](../CONTEXT.md) — the terms
-**Sample**, **Feature**, **SHAP value**, **Base value**, **Model output**, **Other features row** are
-used here with exactly those meanings.
+This spec defines the JSON payload the inference service returns in place of SHAP PNGs, and how the
+`shap-svg` charts draw it. The charts follow the algorithms of SHAP's own `shap.plots` functions.
+The constants below are restated because they are acceptance criteria.
 
-Everything in §3 of the feasibility note is the source of truth for algorithm behaviour. Constants
-are restated here because they are acceptance criteria.
+### Terms
+
+- **Sample**: one biological specimen, so one row of the input matrix.
+- **Feature**: one column of the input matrix. Here a Feature is a taxon written `Genus_species`.
+- **SHAP value** (φ): the signed contribution of one Feature to one Sample's model output, relative
+  to the Base value.
+- **Base value**: the output the explainer expects before seeing any Feature, SHAP's `E[f(X)]`. It
+  belongs to a Sample, even when every Sample in a batch shares the same one.
+- **Model output**: the value being explained for one Sample, SHAP's `f(x)`. It equals the Base
+  value plus the sum of that Sample's SHAP values.
+- **Other features row**: the single row a chart draws in place of every Feature it has no room
+  for, carrying the sum of their SHAP values.
 
 ---
 

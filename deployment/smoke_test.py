@@ -2,20 +2,21 @@
 """
 MLflow GCP Deployment - Smoke Test (e2e, 4 stages)
 
-ต้องรัน บน VM #1 (MLflow VM) เพราะ:
-  - ใช้ compute SA OAuth scope ในการเขียน/อ่าน GCS (ตัวเดียวกับที่ MLflow proxy ใช้)
-  - google-cloud-storage SDK จะใช้ Application Default Credentials = compute SA
-  - = ทดสอบ identity จริงที่ deploy ใช้
+Run it on the MLflow VM. The google-cloud-storage SDK there picks up the
+VM's compute service account through Application Default Credentials, the
+same identity the MLflow artifact proxy uses, so the test exercises the
+permissions the deployment actually relies on.
 
 Stages:
   1. log_param + log_metric → Postgres backend store
   2. log_artifact → MLflow server proxy upload to GCS
-  3. google-cloud-storage SDK list blob → confirm artifact in bucket จริง (independent check)
+  3. google-cloud-storage SDK list blob → confirm the artifact is in the bucket (independent check)
   4. download_artifacts via proxy → round-trip content compare
 
-Usage (บน VM):
+Usage (on the MLflow VM):
     sudo /opt/mlflow/venv/bin/pip install google-cloud-storage
-    sudo /opt/mlflow/venv/bin/python smoke_test.py
+    export MLFLOW_TRACKING_PASSWORD=...   # the MLflow admin password
+    sudo -E /opt/mlflow/venv/bin/python smoke_test.py
 """
 
 import os
@@ -26,10 +27,9 @@ from datetime import datetime
 # ---------- Config ----------
 MLFLOW_URL = os.environ.get("MLFLOW_TRACKING_URI", "http://127.0.0.1:5000")
 MLFLOW_USERNAME = os.environ.get("MLFLOW_TRACKING_USERNAME", "admin")
-MLFLOW_PASSWORD = os.environ.get(
-    "MLFLOW_TRACKING_PASSWORD",
-    "***REMOVED***",
-)
+MLFLOW_PASSWORD = os.environ.get("MLFLOW_TRACKING_PASSWORD")
+if not MLFLOW_PASSWORD:
+    sys.exit("ERROR: set MLFLOW_TRACKING_PASSWORD before running the smoke test.")
 GCS_BUCKET = os.environ.get("GCS_BUCKET", "microbiome_xai_platform")
 # Subpath under bucket where MLflow stores artifacts (matches --artifacts-destination)
 GCS_ARTIFACTS_PREFIX = os.environ.get("GCS_ARTIFACTS_PREFIX", "mlflow-artifacts")
@@ -53,7 +53,7 @@ except ImportError:
 ARTIFACT_PAYLOAD = (
     f"smoke test artifact - {datetime.now().isoformat()}\n"
     f"random-token: {os.urandom(8).hex()}\n"
-    "If you see this content roundtripped + in bucket, MLflow + GCS + scope ทุกชั้น OK\n"
+    "If you see this content roundtripped + in bucket, every layer (MLflow, GCS, OAuth scope) works\n"
 )
 
 
@@ -172,8 +172,8 @@ def run_test():
         print(f"\n  EXCEPTION: {type(e).__name__}: {e}")
         msg = str(e).lower()
         if "scope" in msg or "permission" in msg or "forbidden" in msg or "500" in msg:
-            print("  hint: ตรวจ VM OAuth scope = cloud-platform บน MLflow VM")
-            print("        และ bucket IAM = roles/storage.objectAdmin บน compute SA")
+            print("  hint: check that the MLflow VM's OAuth scope is cloud-platform")
+            print("        and that its compute SA has roles/storage.objectAdmin on the bucket")
 
     # ---------- Summary ----------
     banner("SUMMARY")

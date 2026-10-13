@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,7 +21,7 @@ from .data import PreparedDataset
 from .evaluate import reference_model
 
 
-DEFAULT_TRACKING_URI = "http://<mlflow-host>:5000"
+DEFAULT_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://127.0.0.1:5000")
 DEFAULT_EXPERIMENT_NAME = "crc-curatedcrc-rf"
 DEFAULT_REGISTERED_NAME = "crc-curatedcrc-rf"
 PROTECTED_MODEL_NAMES = frozenset({"sample-rf-crc", "ryza-rynazal-crc"})

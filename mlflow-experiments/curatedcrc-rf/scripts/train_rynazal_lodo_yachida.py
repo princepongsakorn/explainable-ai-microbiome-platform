@@ -86,7 +86,7 @@ sys.path.insert(0, str(EXPERIMENT_ROOT))
 from curatedcrc.acquire import acquire_upstream, sha256_file  # noqa: E402
 from curatedcrc.train import production_snapshot  # noqa: E402
 
-DEFAULT_TRACKING_URI = "http://<mlflow-host>:5000"
+DEFAULT_TRACKING_URI = "http://127.0.0.1:5000"
 DEFAULT_NAME = "crc-rynazal-lodo-yachida"
 TEST_COHORT = "YachidaS_2019"
 TRAIN_COHORTS = ("YuJ_2015", "WirbelJ_2018", "ZellerG_2014", "VogtmannE_2016")

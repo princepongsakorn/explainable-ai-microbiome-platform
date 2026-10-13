@@ -22,19 +22,20 @@
 # routine code update, this script is all you need.
 #
 # Usage (from anywhere on the Mac):
-#   bash ~/MasterProject/project/explainable-ai-microbiome-platform/deployment/deploy_inference.sh
+#   VM_SSH=<user>@<app-vm-host> bash deployment/deploy_inference.sh
 #
 # Override the SSH target / image tag if they change:
-#   VM_SSH=print@new-host IMAGE=myrepo/img:tag bash deploy_inference.sh
+#   VM_SSH=<user>@<app-vm-host> IMAGE=myrepo/img:tag bash deploy_inference.sh
 #
 # Requires: ssh + rsync on the Mac, the matching SSH key loaded, and sudo
-# rights for the `print` user on the VM (for docker + systemctl).
+# rights for the SSH user on the VM (for docker + systemctl).
 
 set -euo pipefail
 
-VM_SSH="${VM_SSH:-print@<inference-host>}"
-VM_PROJECT_DIR="${VM_PROJECT_DIR:-/home/print/explainable-ai-microbiome-platform}"
-MAC_REPO_DIR="${MAC_REPO_DIR:-$HOME/MasterProject/project/explainable-ai-microbiome-platform}"
+VM_SSH="${VM_SSH:?set VM_SSH=<user>@<app-vm-host>}"
+VM_HOST="${VM_SSH#*@}"
+VM_PROJECT_DIR="${VM_PROJECT_DIR:-/home/${VM_SSH%@*}/explainable-ai-microbiome-platform}"
+MAC_REPO_DIR="${MAC_REPO_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 IMAGE="${IMAGE:-pongsakornpongsutiyakorn/kserve-shap-model:latest}"
 INFERENCE_PORT="${INFERENCE_PORT:-8080}"
 

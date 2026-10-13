@@ -2,12 +2,12 @@
 #
 # MLflow Tracking Server setup with built-in basic auth
 # Target: Ubuntu 22.04 LTS, same VM as PostgreSQL
-# Prereq : setup_postgresql.sh has already been run successfully
-#          (reads credentials from /root/mlflow_db_credentials.txt)
+# Prereq : PostgreSQL is installed and /root/mlflow_db_credentials.txt exists
+#          (see docs/deployment.md, step 2, for its format)
 #
 # Usage:
-#   scp setup_mlflow.sh print@<mlflow-host>:~
-#   ssh print@<mlflow-host>
+#   scp setup_mlflow.sh <user>@<mlflow-vm-host>:~
+#   ssh <user>@<mlflow-vm-host>
 #   chmod +x setup_mlflow.sh
 #   sudo ./setup_mlflow.sh
 #
@@ -16,6 +16,7 @@
 #   MLFLOW_PORT              (default: 5000)
 #   GCS_BUCKET               (default: gs://microbiome_xai_platform)
 #   ARTIFACT_PREFIX          (default: mlflow-artifacts)
+#   EXPECTED_SA              (optional: warn if the VM runs as another account)
 
 set -euo pipefail
 
@@ -37,7 +38,9 @@ ADMIN_PASSWORD="${MLFLOW_ADMIN_PASSWORD:-$(openssl rand -base64 32 | tr -d '/+='
 DB_CREDS_FILE="/root/mlflow_db_credentials.txt"
 CREDS_FILE="/root/mlflow_credentials.txt"
 
-EXPECTED_SA="<vm-service-account>"
+# The compute service account that should own GCS access. Optional: when
+# unset, the script only reports the account the VM runs as.
+EXPECTED_SA="${EXPECTED_SA:-}"
 
 log() { echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')] $*"; }
 
@@ -48,7 +51,7 @@ fi
 
 # ---------- Load DB credentials ----------
 if [[ ! -f "${DB_CREDS_FILE}" ]]; then
-  echo "ERROR: ${DB_CREDS_FILE} not found. Run setup_postgresql.sh first." >&2
+  echo "ERROR: ${DB_CREDS_FILE} not found. See docs/deployment.md, step 2." >&2
   exit 1
 fi
 # shellcheck disable=SC1090
@@ -85,7 +88,7 @@ ACTUAL_SA=$(curl -sf -H "Metadata-Flavor: Google" \
   http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email || true)
 if [[ -n "${ACTUAL_SA}" ]]; then
   log "VM service account: ${ACTUAL_SA}"
-  if [[ "${ACTUAL_SA}" != "${EXPECTED_SA}" ]]; then
+  if [[ -n "${EXPECTED_SA}" && "${ACTUAL_SA}" != "${EXPECTED_SA}" ]]; then
     log "WARNING: VM SA differs from expected (${EXPECTED_SA})."
   fi
 
@@ -275,7 +278,7 @@ echo "         --source-ranges=<YOUR_IP>/32"
 echo
 echo "  2. Grant bucket access to the VM's service account (one-time):"
 echo "       gcloud storage buckets add-iam-policy-binding ${GCS_BUCKET} \\"
-echo "         --member=serviceAccount:${EXPECTED_SA} \\"
+echo "         --member=serviceAccount:${EXPECTED_SA:-${ACTUAL_SA:-<vm-service-account>}} \\"
 echo "         --role=roles/storage.objectAdmin"
 echo
 echo "  3. (Recommended) Put nginx + HTTPS in front before exposing publicly."
