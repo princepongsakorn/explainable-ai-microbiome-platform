@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "XAIServe: an explainable AI platform for gut-microbiome disease prediction"
+abstract: >-
+  XAIServe predicts disease from gut-microbiome relative abundances and explains
+  each prediction with SHAP. Models and their explainers are logged to MLflow as
+  one artifact, served by a framework-agnostic inference service, and published
+  from a web interface that draws interactive SHAP charts.
+type: software
+authors:
+  - family-names: Pongsutiyakorn
+    given-names: Pongsakorn
+license: MIT
+repository-code: "https://github.com/princepongsakorn/explainable-ai-microbiome-platform"
+version: 1.0.0
+date-released: "2026-10-13"
+keywords:
+  - explainable AI
+  - SHAP
+  - gut microbiome
+  - MLflow
+  - machine learning platform

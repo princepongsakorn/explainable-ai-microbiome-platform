@@ -185,7 +185,7 @@ For a Kubernetes cluster with KServe, [`kserve-custom-runtime/deployment/`](kser
 
 ## Citation
 
-The paper describing XAIServe is in preparation. A citation will be added here once it is published.
+The paper describing XAIServe is in preparation and will be listed here once it is published. To cite the software itself, use [`CITATION.cff`](CITATION.cff), which GitHub also offers under "Cite this repository".
 
 ## License
 
