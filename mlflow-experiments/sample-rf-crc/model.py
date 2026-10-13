@@ -55,6 +55,12 @@ mlflow.set_experiment("sample-rf-crc")
 # Hyperopt objective
 # ---------------------------------------------------------------------------
 def objective(params):
+    """One hyperopt trial: train a Random Forest with ``params`` and log it.
+
+    Each trial is its own MLflow run with the parameters, the test-set metrics
+    and an explainable model registered as a new version of ``sample-rf-crc``.
+    Hyperopt minimises the returned loss, which is the negative accuracy.
+    """
     with mlflow.start_run():
         params["n_estimators"] = int(params["n_estimators"])
         params["min_samples_leaf"] = int(params["min_samples_leaf"])

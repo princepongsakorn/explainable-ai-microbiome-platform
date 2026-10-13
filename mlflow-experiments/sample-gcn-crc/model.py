@@ -240,6 +240,12 @@ def _cast_params(raw):
 
 
 def objective(params):
+    """One hyperopt trial: train a graph convolutional network with ``params`` and log it.
+
+    Each trial is its own MLflow run with the parameters, the test-set metrics
+    and an explainable model registered as a new version of ``sample-gcn-crc``.
+    Hyperopt minimises the returned loss, which is the negative accuracy.
+    """
     with mlflow.start_run():
         params = _cast_params(params)
 

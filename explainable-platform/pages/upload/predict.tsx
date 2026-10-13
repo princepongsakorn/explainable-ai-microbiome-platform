@@ -175,6 +175,10 @@ function uploadErrorMessage(error: unknown): string {
   return `The upload didn’t go through. Check that the file is a valid CSV, then try again.${detail}`;
 }
 
+/**
+ * The upload page: choose a published model and a CSV of relative
+ * abundances, then submit them as a new Prediction.
+ */
 export function Home() {
   const router = useRouter();
   // Changing the key clears the native file input, which cannot be reset by value.

@@ -33,8 +33,8 @@
     "shapmat_commit": "0ca51a9ab9c859fac3305f599a81b2e2206bef49"
   },
   "exports": {
-    "labels_csv": "/Users/pongsakorn/MasterProject/project/explainable-ai-microbiome-platform/sample-data/yachidas_2019_test_labels.csv",
-    "test_csv": "/Users/pongsakorn/MasterProject/project/explainable-ai-microbiome-platform/sample-data/yachidas_2019_test.csv"
+    "labels_csv": "sample-data/yachidas_2019_test_labels.csv",
+    "test_csv": "sample-data/yachidas_2019_test.csv"
   },
   "features": 228,
   "features_raw": 864,

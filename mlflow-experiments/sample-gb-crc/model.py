@@ -26,6 +26,12 @@ mlflow.set_tracking_uri(os.environ["MLFLOW_TRACKING_URI"])
 mlflow.set_experiment("sample-gradient-boosting-crc")
 
 def objective(params):
+    """One hyperopt trial: train a Gradient Boosting classifier and log it.
+
+    This script predates ``mlflow_explainable``: it logs the explainer and the
+    model as separate artifacts, so the platform's inference service cannot
+    serve the result. Hyperopt minimises the returned negative accuracy.
+    """
     with mlflow.start_run() as run:
         params["n_estimators"] = int(params["n_estimators"])
         params["max_depth"] = int(params["max_depth"])

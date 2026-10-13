@@ -26,6 +26,10 @@ function shortenJsonData(data: any, length = 500): string {
   return `${head}...${tail}`;
 }
 
+/**
+ * Starts the API on PORT (default 3000) under the /api prefix, and logs every
+ * outbound axios call to the inference service with its payload shortened.
+ */
 async function bootstrap() {
   axios.interceptors.request.use((config) => {
     console.log(`${color.green}[HTTP:Outbound]${color.reset} ${config.method?.toUpperCase()} ${config.url}`);

@@ -48,6 +48,14 @@ def prepare_dataset(
     *,
     enforce_reference_shape: bool = True,
 ) -> PreparedDataset:
+    """Load the curatedCRC table, check it, and filter it to the model's features.
+
+    With ``enforce_reference_shape`` (the default) the source must be the
+    pinned commits and checksum, and the row and feature counts must match the
+    reference exactly. Either way the labels must be binary, the cohorts must
+    be the expected ones, abundances must be finite and non-negative, and the
+    abundance and prevalence filter must keep every reference biomarker.
+    """
     if enforce_reference_shape:
         mismatches = []
         if source.shapmat_commit != SHAPMAT_COMMIT:

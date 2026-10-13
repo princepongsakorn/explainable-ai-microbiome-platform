@@ -5,10 +5,10 @@ repo, explains them with the locally installed shap, and captures what `shap.plo
 actually draws so the TypeScript renderer can be tested against SHAP itself rather than
 against someone's reading of SHAP.
 
-Run with the worktree venv, which has shap 0.49.1:
+Run it in a Python environment with shap 0.49.1, the version the golden values
+were captured from:
 
-    .worktrees/curatedcrc-retraining/.venv/bin/python tools/shap_fixtures/generate.py \
-        --shap-svg /path/to/shap-svg
+    python tools/shap_fixtures/generate.py --shap-svg /path/to/shap-svg
 
 shap-svg lives in its own repository (github.com/princepongsakorn/shap-svg). The fixtures
 and golden values are written to its fixtures/ directory, and SHAP's colour tables to

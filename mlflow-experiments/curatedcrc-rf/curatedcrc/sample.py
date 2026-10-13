@@ -54,6 +54,13 @@ def export_platform_sample(
     n: int = 60,
     random_state: int = 42,
 ) -> dict[str, object]:
+    """Write a stratified sample of ``n`` subjects as a CSV the platform accepts.
+
+    The CSV holds the filtered features plus the ``CRC`` label, indexed by
+    ``subject_id``. A JSON manifest next to it records the selected ids,
+    class and cohort counts, and the source provenance. Both files are written
+    atomically, and the sample must cover every cohort and both classes.
+    """
     selected_ids = select_sample_ids(prepared, n=n, random_state=random_state)
     selected_metadata = prepared.metadata.loc[selected_ids]
     selected_cohorts = set(selected_metadata["study_name"])

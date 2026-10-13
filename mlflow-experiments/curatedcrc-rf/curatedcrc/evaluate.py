@@ -55,6 +55,12 @@ def _evaluation_groups(prepared: PreparedDataset) -> list[tuple[str, pd.Index]]:
 
 
 def evaluate_cohort_cv(prepared: PreparedDataset) -> pd.DataFrame:
+    """Repeated stratified 10-fold CV ROC AUC (10 repeats) for each evaluation group.
+
+    Each group is scored with the paper's reference Random Forest. Groups
+    with fewer than 10 samples in either class are rejected. The Yachida
+    stage III/IV row carries the paper's reported AUC for comparison.
+    """
     records: list[dict[str, object]] = []
     for group_name, ids in _evaluation_groups(prepared):
         X_group = prepared.X.loc[ids]

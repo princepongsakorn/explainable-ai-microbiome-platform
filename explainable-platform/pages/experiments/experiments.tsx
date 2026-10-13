@@ -62,6 +62,11 @@ type SortOrder = "ASC" | "DESC";
 // over SSE — a lightweight poll is the pragmatic choice here.
 const RUNS_POLL_INTERVAL_MS = 15_000;
 
+/**
+ * The Experiments page: MLflow experiments on the left, the selected
+ * experiment's runs on the right with their metrics, sorting and paging.
+ * A run can be opened to register it as a model version and publish it.
+ */
 export function Experiments() {
   const [experiments, setExperiments] = useState<IExperiment[]>();
   const [experimentsLoading, setExperimentsLoading] = useState<boolean>(true);

@@ -219,6 +219,13 @@ def register_model(
     explainer: Any | None = None,
     extra_artifacts: dict[str, str] | None = None,
 ) -> RegistrationResult:
+    """Log ``trained`` as an explainable model and move it to Staging.
+
+    Earlier Staging versions of the same name are archived. Production is
+    never touched: the Production state of the whole registry is captured
+    before and after, and any difference raises an error. Names in
+    ``PROTECTED_MODEL_NAMES`` are refused.
+    """
     if registered_name in PROTECTED_MODEL_NAMES:
         raise ValueError(f"Refusing protected registered model name: {registered_name}")
     client = MlflowClient()

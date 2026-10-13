@@ -235,6 +235,11 @@ const SampleDataTable = ({ record }: { record: IPredictionRecords }) => {
   );
 };
 
+/**
+ * One Prediction's samples, with each one's class, probability and status kept
+ * current over server-sent events. Opening a sample shows its Local
+ * explanation (waterfall and force charts) in a side sheet.
+ */
 export function PredictionRecordsPage() {
   const router = useRouter();
   const [predictions, setPredictions] = useState<IPredictionsPagination>();
