@@ -89,6 +89,13 @@ def create_shap_report(
     *,
     top_k: int = 20,
 ) -> ShapReport:
+    """Explain ``X_explain`` and check where the reference biomarkers rank.
+
+    Features are ranked by their mean positive SHAP contribution to the CRC
+    class. The report is "passed" when every reference biomarker is in the top
+    ``top_k`` and "flagged" otherwise. It writes the ranking CSV, a JSON
+    summary and a beeswarm PNG to ``output_dir``.
+    """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     explainer = shap.Explainer(model, background)

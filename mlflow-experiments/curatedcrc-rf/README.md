@@ -29,7 +29,7 @@ python3 -m venv .venv
 .venv/bin/python -m pip install -e mlflow-experiments/extension/mlflow_explainable
 ```
 
-MLflow credentials are never stored by this experiment. If the server requires basic authentication, export `MLFLOW_TRACKING_USERNAME` and `MLFLOW_TRACKING_PASSWORD` before training. The default tracking server is `http://<mlflow-host>:5000`; override it with `--tracking-uri` or `MLFLOW_TRACKING_URI`.
+MLflow credentials are never stored by this experiment. If the server requires basic authentication, export `MLFLOW_TRACKING_USERNAME` and `MLFLOW_TRACKING_PASSWORD` before training. The default tracking server is `http://127.0.0.1:5000`; override it with `--tracking-uri` or `MLFLOW_TRACKING_URI`.
 
 ## Prepare data and the 60-row sample
 

@@ -14,6 +14,7 @@ What this does NOT delete:
 
 Usage::
 
+    export MLFLOW_TRACKING_URI=http://<mlflow-host>:5000
     export MLFLOW_TRACKING_USERNAME=...
     export MLFLOW_TRACKING_PASSWORD=...
     python cleanup_mlflow.py
@@ -29,17 +30,11 @@ from mlflow.exceptions import MlflowException
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-TRACKING_URI = "http://<mlflow-host>:5000"
+TRACKING_URI = os.environ["MLFLOW_TRACKING_URI"]
 TARGETS = ["sample-gcn-crc", "smoke-test-gcp", "_smoke_test_e2e", "_smoke_test"]
 
-# Read from env to avoid committing creds. Falls back to the values used in
-# model.py so you can run this without exporting if you really want.
-os.environ.setdefault(
-    "MLFLOW_TRACKING_USERNAME", "***REMOVED***"
-)
-os.environ.setdefault(
-    "MLFLOW_TRACKING_PASSWORD", "***REMOVED***"
-)
+# MLflow reads MLFLOW_TRACKING_USERNAME and MLFLOW_TRACKING_PASSWORD from the
+# environment; see the usage note at the top of this file.
 mlflow.set_tracking_uri(TRACKING_URI)
 client = MlflowClient()
 

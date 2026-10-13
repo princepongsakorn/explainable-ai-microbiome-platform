@@ -54,3 +54,20 @@ htmlcov/
 
 # --- Local Git worktrees ---
 .worktrees/
+
+# --- Secrets: real environment files (the .env.example templates stay tracked) ---
+.env
+.env.*
+!.env.example
+
+# --- Local agent and note files (kept on disk, not published) ---
+.claude/
+.superpowers/
+AGENTS.md
+CONTEXT.md
+docs/superpowers/
+docs/todo/
+docs/shap-interactive-frontend-feasibility.md
+
+# --- Runtime data the backend writes locally ---
+explainable-platform-service/.local-storage/

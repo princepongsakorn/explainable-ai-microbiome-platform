@@ -455,14 +455,20 @@ def _is_summary_row(label: str) -> bool:
     SHAP groups features beyond ``max_display`` into a single summary row.
     That label is not a taxon name, so it must stay upright while every real
     feature label is italicised (species-name convention). Detect it by text
-    rather than by index: the summary row's position depends on the feature
-    count, and the previous index-based guess also un-italicised the top
-    (most important) real feature.
+    rather than by index, because the summary row's position depends on the
+    feature count.
     """
     return "other features" in label.lower()
 
 
 def get_beeswarm(explanation):
+    """Render SHAP's beeswarm for a whole batch as a base64 PNG.
+
+    It shows at most 15 rows (``max_display``), the last of which sums the
+    remaining features. Matplotlib's own tick labels are replaced
+    with text drawn by hand so that taxon names can be italicised and shown
+    with spaces instead of underscores.
+    """
     with _plt_lock:
         plt.ioff()
         plt.figure()
@@ -500,6 +506,11 @@ def get_beeswarm(explanation):
 
 
 def get_heatmap(explanation):
+    """Render SHAP's heatmap for a whole batch as a base64 PNG.
+
+    Samples are ordered by their total SHAP value. Like the beeswarm it shows
+    at most 15 feature rows, with the same hand-drawn italic labels as :func:`get_beeswarm`.
+    """
     with _plt_lock:
         shap.plots.heatmap(
             explanation,
@@ -535,6 +546,12 @@ def get_heatmap(explanation):
 
 
 def get_local_waterfall_plot(subject_id, shap_value_object):
+    """Render one sample's waterfall chart as a base64 PNG.
+
+    ``subject_id`` is the sample's row label in ``shap_value_object.shap_df``.
+    Each sample uses its own base value. The chart has at most 8 rows; the
+    smallest contributions are folded into the last one.
+    """
     with _plt_lock:
         plt.ioff()
         plt.figure()
@@ -623,6 +640,12 @@ app = Flask(__name__)
 
 
 def _parse_dataframe_split(req_json):
+    """Read an MLflow-style ``dataframe_split`` request body into a DataFrame.
+
+    Returns ``(df, None)`` on success, or ``(None, error_response)`` with a 400
+    when the body is not an object with ``columns`` and ``data``, or when an
+    optional ``index`` does not have one entry per row.
+    """
     # Valid JSON is not necessarily an object: a body of `null` or `[1]` must be
     # the caller's 400, not a TypeError's 500.
     split = req_json.get("dataframe_split") if isinstance(req_json, dict) else None
@@ -869,9 +892,14 @@ def predict(model_name):
         return jsonify({"error": str(e)}), 500
 
 
-# ---- model discovery / mlflow ops (unchanged) -----------------------------
+# ---- model discovery / mlflow ops -----------------------------
 @app.route("/v1/models", methods=["GET"])
 def list_models():
+    """List the model versions currently in the Production stage.
+
+    Each version is returned as MLflow reports it, with its run's metrics
+    added under ``metrics`` (empty when the run cannot be read).
+    """
     from requests.auth import HTTPBasicAuth
     import requests
 
@@ -1012,6 +1040,13 @@ def get_model_version(model_name, version):
 
 @app.route("/v1/mlflow/run/<run_id>/stage", methods=["PUT"])
 def update_model_stage_by_run_id(run_id):
+    """Move the model version logged by ``run_id`` to another stage.
+
+    The JSON body takes ``stage`` (None, Staging, Production or Archived), an
+    optional ``description`` to set on the version, and
+    ``archive_existing_versions``. This is what the web UI's publish and
+    unpublish buttons call.
+    """
     data = request.get_json()
     stage = data.get("stage", None)
     description = data.get("description", None)

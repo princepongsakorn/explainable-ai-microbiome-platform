@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,7 +21,7 @@ from .data import PreparedDataset
 from .evaluate import reference_model
 
 
-DEFAULT_TRACKING_URI = "http://<mlflow-host>:5000"
+DEFAULT_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://127.0.0.1:5000")
 DEFAULT_EXPERIMENT_NAME = "crc-curatedcrc-rf"
 DEFAULT_REGISTERED_NAME = "crc-curatedcrc-rf"
 PROTECTED_MODEL_NAMES = frozenset({"sample-rf-crc", "ryza-rynazal-crc"})
@@ -218,6 +219,13 @@ def register_model(
     explainer: Any | None = None,
     extra_artifacts: dict[str, str] | None = None,
 ) -> RegistrationResult:
+    """Log ``trained`` as an explainable model and move it to Staging.
+
+    Earlier Staging versions of the same name are archived. Production is
+    never touched: the Production state of the whole registry is captured
+    before and after, and any difference raises an error. Names in
+    ``PROTECTED_MODEL_NAMES`` are refused.
+    """
     if registered_name in PROTECTED_MODEL_NAMES:
         raise ValueError(f"Refusing protected registered model name: {registered_name}")
     client = MlflowClient()

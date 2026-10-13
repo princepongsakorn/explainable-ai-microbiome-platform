@@ -47,9 +47,10 @@ X_train, X_test, y_train, y_test = train_test_split(
 # ---------------------------------------------------------------------------
 # MLflow tracking
 # ---------------------------------------------------------------------------
-os.environ["MLFLOW_TRACKING_USERNAME"] = "***REMOVED***"
-os.environ["MLFLOW_TRACKING_PASSWORD"] = "***REMOVED***"
-mlflow.set_tracking_uri("http://<mlflow-host>:5000")
+# The server address and credentials come from the environment
+# (MLFLOW_TRACKING_URI, MLFLOW_TRACKING_USERNAME, MLFLOW_TRACKING_PASSWORD).
+# MLflow reads the username and password itself.
+mlflow.set_tracking_uri(os.environ["MLFLOW_TRACKING_URI"])
 
 mlflow.set_experiment("sample-xgboost-crc")
 
@@ -58,6 +59,12 @@ mlflow.set_experiment("sample-xgboost-crc")
 # Hyperopt objective
 # ---------------------------------------------------------------------------
 def objective(params):
+    """One hyperopt trial: train a XGBoost classifier with ``params`` and log it.
+
+    Each trial is its own MLflow run with the parameters, the test-set metrics
+    and an explainable model registered as a new version of ``sample-xgboost-crc``.
+    Hyperopt minimises the returned loss, which is the negative accuracy.
+    """
     with mlflow.start_run():
         params["n_estimators"] = int(params["n_estimators"])
         params["max_depth"] = int(params["max_depth"])

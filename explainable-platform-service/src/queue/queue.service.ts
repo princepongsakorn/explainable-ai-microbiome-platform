@@ -45,6 +45,11 @@ export class QueueService {
     await this.predictionQueue.add('regenExplanation', { predictionId });
   }
 
+  /**
+   * Removes a Prediction's per-record jobs that have not finished yet, then
+   * marks every record still pending or in progress as cancelled. A job a
+   * worker is already running can still finish and write its result.
+   */
   async cancelPredictionJob(predictionId: string) {
     const jobs: Job[] = await this.predictionQueue.getJobs([
       'active',
@@ -94,15 +99,5 @@ export class QueueService {
       },
       { status: PredictionStatus.CANCELED, errorMsg: 'Job was canceled' },
     );
-
-    // await this.recordsRepository
-    //   .createQueryBuilder()
-    //   .update(PredictionRecord)
-    //   .set({ status: PredictionStatus.CANCELED, errorMsg: 'Job was terminated' })
-    //   .where('predictionId = :predictionId AND status IN (:...statuses)', {
-    //     predictionId,
-    //     statuses: [PredictionStatus.PENDING, PredictionStatus.IN_PROGRESS],
-    //   })
-    //   .execute();
   }
 }

@@ -56,6 +56,12 @@ export class PredictionsService {
     private readonly eventsHub: EventsHub,
   ) {}
 
+  /**
+   * Turns an uploaded CSV into a Prediction with one record per row, then
+   * queues the work: one job for the whole Prediction (the Explanation) and one
+   * job per record (class and probability). Nothing is saved if the file is
+   * empty, has non-numeric cells, or has more rows than one Prediction allows.
+   */
   async createPrediction(file: Multer.File, modelName: string) {
     let dfColumns: string[];
     let dfDataRows: (string | number)[][];
@@ -134,6 +140,10 @@ export class PredictionsService {
     return { message: 'Prediction Created', predictionId: prediction.id };
   }
 
+  /**
+   * Re-queues every record of a Prediction that ended in error or was
+   * cancelled. Records that already succeeded are left alone.
+   */
   async rePredictRecords(predictionId: string) {
     const failedRecords = await this.recordsRepository.find({
       where: {
@@ -323,7 +333,7 @@ export class PredictionsService {
    * One Sample's Explanation, taken from the stored matrix.
    *
    * `PredictionRecord.id` is the platform's identifier and `sample_ids` is the
-   * payload's; this is the only place the two vocabularies meet (CONTEXT.md).
+   * payload's; this is the only place the two vocabularies meet.
    * Nothing is recomputed — the SHAP values were produced once for the whole
    * Prediction.
    */
@@ -406,6 +416,10 @@ export class PredictionsService {
     return { message: `Explanation rebuild queued for ${predictionId}.` };
   }
 
+  /**
+   * One page of the prediction list, newest first, with each Prediction's
+   * record counts by status and class and signed URLs for any stored charts.
+   */
   async getPredictions(page: number = 1, limit: number = 10) {
     const [items, totalItems] = await this.predictionsRepository.findAndCount({
       select: [

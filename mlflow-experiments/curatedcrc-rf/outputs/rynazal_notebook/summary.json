@@ -29,13 +29,13 @@
       }
     },
     "paper_commit": "6600175db5984a07b86f2b5591114f39181ff4dc",
-    "path": "/Users/pongsakorn/MasterProject/project/explainable-ai-microbiome-platform/mlflow-experiments/curatedcrc-rf/.upstream/shapmat_paper/data/bacteria_relative_abundance_concat.csv",
+    "path": "mlflow-experiments/curatedcrc-rf/.upstream/shapmat_paper/data/bacteria_relative_abundance_concat.csv",
     "sha256": "104797329c402ce6de71bfade1993126a4150283ff97bb9269b56f84fb72fc24",
     "shapmat_commit": "0ca51a9ab9c859fac3305f599a81b2e2206bef49"
   },
   "exports": {
-    "labels_csv": "/Users/pongsakorn/MasterProject/project/explainable-ai-microbiome-platform/sample-data/yachidas_2019_test_labels.csv",
-    "test_csv": "/Users/pongsakorn/MasterProject/project/explainable-ai-microbiome-platform/sample-data/yachidas_2019_test.csv"
+    "labels_csv": "sample-data/yachidas_2019_test_labels.csv",
+    "test_csv": "sample-data/yachidas_2019_test.csv"
   },
   "features": 865,
   "features_raw": 865,

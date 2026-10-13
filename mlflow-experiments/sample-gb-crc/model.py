@@ -22,10 +22,16 @@ X = train_data.loc[train_ids]
 y = train_metadata['CRC']
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-mlflow.set_tracking_uri(os.environ.get("MLFLOW_TRACKING_URI", "http://<mlflow-host>:5000"))
+mlflow.set_tracking_uri(os.environ["MLFLOW_TRACKING_URI"])
 mlflow.set_experiment("sample-gradient-boosting-crc")
 
 def objective(params):
+    """One hyperopt trial: train a Gradient Boosting classifier and log it.
+
+    This script predates ``mlflow_explainable``: it logs the explainer and the
+    model as separate artifacts, so the platform's inference service cannot
+    serve the result. Hyperopt minimises the returned negative accuracy.
+    """
     with mlflow.start_run() as run:
         params["n_estimators"] = int(params["n_estimators"])
         params["max_depth"] = int(params["max_depth"])

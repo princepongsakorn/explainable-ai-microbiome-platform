@@ -60,6 +60,11 @@ import { getPredictionSummary, getPredictions } from "../api/predict";
 // While a prediction on the page is still running, look again this often.
 const LIST_POLL_INTERVAL_MS = 15_000;
 
+/**
+ * The list of Predictions, newest first, with a summary strip across all of
+ * them. Opening one shows its Global explanation charts in a side sheet. The
+ * page polls while any Prediction on it is still running.
+ */
 export function PredictionListPage() {
   const router = useRouter();
   const [predictions, setPredictions] = useState<IPagination<IPredictions>>();

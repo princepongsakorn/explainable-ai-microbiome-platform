@@ -6,14 +6,18 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { UsersModule } from '../users/users.module';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { jwtSecret } from './jwt-secret';
 
 @Global()
 @Module({
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }), 
-    JwtModule.register({
-      secret: 'default_secret',
-      signOptions: { expiresIn: '12h' },
+    // registerAsync so the secret is read after ConfigModule has loaded .env.
+    JwtModule.registerAsync({
+      useFactory: () => ({
+        secret: jwtSecret(),
+        signOptions: { expiresIn: '12h' },
+      }),
     }),
     UsersModule,
   ],

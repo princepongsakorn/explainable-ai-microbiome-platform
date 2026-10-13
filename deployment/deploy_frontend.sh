@@ -9,19 +9,20 @@
 # - Run the 5-layer health check so any breakage shows up immediately.
 #
 # Usage (from anywhere on the Mac):
-#   bash ~/MasterProject/project/explainable-ai-microbiome-platform/deployment/deploy_frontend.sh
+#   VM_SSH=<user>@<app-vm-host> bash deployment/deploy_frontend.sh
 #
 # Override the SSH target if it ever changes:
-#   VM_SSH=print@new-host bash deploy_frontend.sh
+#   VM_SSH=<user>@<app-vm-host> bash deploy_frontend.sh
 #
 # Requires: ssh + rsync on the Mac, and the matching SSH key already loaded
 # (this is the same setup that worked in the prior deploy).
 
 set -euo pipefail
 
-VM_SSH="${VM_SSH:-print@<inference-host>}"
-VM_PROJECT_DIR="${VM_PROJECT_DIR:-/home/print/explainable-ai-microbiome-platform}"
-MAC_REPO_DIR="${MAC_REPO_DIR:-$HOME/MasterProject/project/explainable-ai-microbiome-platform}"
+VM_SSH="${VM_SSH:?set VM_SSH=<user>@<app-vm-host>}"
+VM_HOST="${VM_SSH#*@}"
+VM_PROJECT_DIR="${VM_PROJECT_DIR:-/home/${VM_SSH%@*}/explainable-ai-microbiome-platform}"
+MAC_REPO_DIR="${MAC_REPO_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 
 echo "==> Mac source: ${MAC_REPO_DIR}/explainable-platform/"
 echo "==> Remote   : ${VM_SSH}:${VM_PROJECT_DIR}/explainable-platform/"
@@ -70,4 +71,4 @@ ssh -t "${VM_SSH}" '
 '
 
 echo
-echo "Done. Hard-refresh http://<inference-host>/developer/mlflow in the browser (Cmd+Shift+R)."
+echo "Done. Hard-refresh http://${VM_HOST}/developer/mlflow in the browser (Cmd+Shift+R)."

@@ -3,16 +3,23 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { AuthService } from './auth.service';
 import * as jwt from 'jsonwebtoken';
+import { jwtSecret } from './jwt-secret';
+
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   constructor(private authService: AuthService) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      secretOrKey: 'default_secret',
+      secretOrKey: jwtSecret(),
       passReqToCallback: true,
     });
   }
 
+  /**
+   * Rejects tokens revoked at logout, then returns the user that the guarded
+   * route sees as `req.user`. With passReqToCallback set, passport hands this
+   * method the request, so `payload` is the request here.
+   */
   async validate(payload: any) {
     const token = ExtractJwt.fromAuthHeaderAsBearerToken()(payload);
     if (this.authService.isTokenBlacklisted(token)) {
@@ -22,7 +29,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       try {
         const decoded = jwt.verify(
           token,
-          process.env.JWT_SECRET || 'default_secret',
+          jwtSecret(),
         ) as {
           username: string;
           sub: string;

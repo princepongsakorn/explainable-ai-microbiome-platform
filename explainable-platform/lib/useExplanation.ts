@@ -71,6 +71,12 @@ function messageFor(error: RequestError): string {
   return "The explanation could not be loaded.";
 }
 
+/**
+ * Fetch a Prediction's Explanation into its shared cache entry and notify the
+ * charts listening to it. At most one request per Prediction is in flight.
+ * If the server announces a change while one is in flight, the entry is
+ * marked stale: that request's answer is dropped and the fetch runs again.
+ */
 function load(predictionId: string) {
   const entry = entryFor(predictionId);
   if (entry.loading) return;

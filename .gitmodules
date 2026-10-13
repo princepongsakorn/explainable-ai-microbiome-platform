@@ -1,0 +1,4 @@
+[submodule "mlflow-experiments/extension/mlflow_explainable"]
+	path = mlflow-experiments/extension/mlflow_explainable
+	url = https://github.com/princepongsakorn/mlflow-explainable.git
+	branch = xaiserve

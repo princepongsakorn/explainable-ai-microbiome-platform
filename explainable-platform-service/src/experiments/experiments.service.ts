@@ -96,6 +96,11 @@ export class ExperimentsService {
     }
   }
 
+  /**
+   * One MLflow run, with its `user_id` resolved to a username. Runs logged
+   * with a platform access token carry the user's id; other runs keep
+   * whatever MLflow recorded.
+   */
   async getRunById(runId: string) {
     try {
       const response = await lastValueFrom(
@@ -103,7 +108,6 @@ export class ExperimentsService {
           `${this.inferenceServiceURL}/v1/mlflow/run/${runId}`,
         ),
       );
-      console.log('response', response)
       const run = response.data.run;
       const userId = run.info?.user_id;
       let user_name: string | null = null;
