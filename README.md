@@ -151,7 +151,7 @@ MLFLOW_TRACKING_USERNAME=<username> MLFLOW_TRACKING_PASSWORD=<password> \
 
 # 3. API on :3000
 cd explainable-platform-service
-cp .env.example .env        # then set INFERENCE_SERVICE_URL=http://localhost:8080
+cp .env.example .env        # then point DATABASE_URL, REDIS_HOST and INFERENCE_SERVICE_URL at localhost
 npm install && npm run start:dev
 
 # 4. Web UI on :3001

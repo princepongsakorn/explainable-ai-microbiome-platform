@@ -16,7 +16,7 @@ All routes are under `/api`. Prediction progress is pushed to the browser as ser
 
 ```bash
 docker compose up -d     # PostgreSQL on :5432, Redis on :6379, Adminer on :8081
-cp .env.example .env     # set INFERENCE_SERVICE_URL=http://localhost:8080
+cp .env.example .env     # point DATABASE_URL, REDIS_HOST and INFERENCE_SERVICE_URL at localhost
 npm install
 npm run start:dev        # http://localhost:3000/api
 ```
