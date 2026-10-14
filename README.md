@@ -100,15 +100,17 @@ The inference service loads models by name from `models:/<name>/<Production vers
 
 Published models then appear on the prediction page.
 
+Each prediction is pinned to the model version that is in `Production` when it is submitted. Every request it makes to the inference service names that version (`?version=N`), including re-runs and rebuilt explanations, so publishing a new version while a job runs does not mix versions in one result. The prediction stores the version it is pinned to, and every sample stores the version that actually answered. A sample answered by any other version is marked as an error. The UI shows the version next to the model name. Callers that send no `version`, such as older predictions, get the current `Production` version as before. [`docs/shap-explain-spec.md`](docs/shap-explain-spec.md) §2.4 has the details.
+
 ## What happens when a researcher submits samples
 
 ```mermaid
 flowchart TD
     CSV["Upload CSV<br/>relative abundances"] --> P["Create Prediction<br/>one record per sample"]
     P --> Q[["Bull queue on Redis"]]
-    Q --> PR["Predict each sample<br/>POST /v1/predict/:model"]
+    Q --> PR["Predict each sample<br/>POST /v1/predict/:model?version=N"]
     PR --> R["Class + probability<br/>status per record"]
-    Q --> EX["Explain in chunks<br/>POST /v1/explain/values/:model"]
+    Q --> EX["Explain in chunks<br/>POST /v1/explain/values/:model?version=N"]
     EX --> PAY["Explanation payload<br/>gzipped JSON + model version"]
     R --> SSE["Server-sent events"]
     PAY --> SSE
@@ -117,7 +119,7 @@ flowchart TD
     FE --> L["Local: waterfall per sample"]
 ```
 
-1. The researcher uploads a CSV of taxa (`Genus_species` columns) and picks a published model. The API parses the file and creates one Prediction, with one Prediction Record per sample. The inference service later lines the columns up with the model's features: it drops extra columns, fills missing ones with 0 and puts them in training order.
+1. The researcher uploads a CSV of taxa (`Genus_species` columns) and picks a published model. The API parses the file and creates one Prediction, with one Prediction Record per sample, pinned to the model's current `Production` version. The inference service later lines the columns up with the model's features: it drops extra columns, fills missing ones with 0 and puts them in training order.
 2. The work goes on a Bull queue backed by Redis, so a large batch never blocks the API. A job can be cancelled or run again, and a single chart can be regenerated.
 3. Each record is sent to the inference service, which returns the predicted class and probability. The record's status (in progress, success, error, cancelled) is stored and pushed to the browser.
 4. The samples go to the SHAP endpoint in chunks. A sample's SHAP values do not depend on the other samples in its request, so the chunks join without changing any value, and a failed chunk is retried on its own. The result is stored as one explanation payload. Its fields use the names from `shap.Explanation` (`values`, `base_values`, `data`, `feature_names`), values keep four significant figures, and it records the model version that produced it. [`docs/shap-explain-spec.md`](docs/shap-explain-spec.md) specifies the format.
