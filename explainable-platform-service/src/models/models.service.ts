@@ -2,10 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { lastValueFrom } from 'rxjs';
+import { isAxiosError } from 'axios';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ModelType } from 'src/entity/model-type.entity';
 import { In, Repository } from 'typeorm';
 import { IProductionModels } from 'src/interface/experiments.interface';
+import { IProductionVersionResponse } from 'src/interface/prediction-api.interface';
 import { validate as isUuid } from 'uuid';
 
 @Injectable()
@@ -76,6 +78,25 @@ export class ModelsService {
       return transformedModels;
     } catch (error) {
       console.error(`Failed to fetch models`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * The version of `modelName` in Production right now, asked of the registry
+   * rather than any cache. Null when the registry says nothing is in Production;
+   * any other failure is thrown.
+   */
+  async fetchProductionVersion(modelName: string): Promise<string | null> {
+    try {
+      const response = await lastValueFrom(
+        this.httpService.get<IProductionVersionResponse>(
+          `${this.inferenceServiceURL}/v1/models/${encodeURIComponent(modelName)}/production`,
+        ),
+      );
+      return String(response.data.version);
+    } catch (error) {
+      if (isAxiosError(error) && error.response?.status === 404) return null;
       throw error;
     }
   }

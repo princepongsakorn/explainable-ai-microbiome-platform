@@ -12,6 +12,7 @@ import { HttpModule } from '@nestjs/axios';
 import { QueueModule } from 'src/queue/queue.module';
 import { StorageModule } from 'src/storage/storage.module';
 import { ConfigModule } from '@nestjs/config';
+import { ModelsModule } from 'src/models/models.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { ConfigModule } from '@nestjs/config';
     QueueModule,
     StorageModule,
     ConfigModule,
+    ModelsModule,
   ],
   controllers: [PredictionsController],
   providers: [

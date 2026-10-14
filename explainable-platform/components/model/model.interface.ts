@@ -56,6 +56,12 @@ export interface IPredictionRecords {
   record_number: number;
   proba?: number;
   class?: number;
+  /**
+   * The model version that produced `proba` and `class`, as the inference
+   * service reported it. Null until the Sample is predicted, and for Samples
+   * predicted before versions were recorded.
+   */
+  modelVersion?: string | null;
   waterfall?: string;
   waterfallError?: ImageGenStatus | string | null;
   status?: PredictionStatus;
@@ -69,8 +75,9 @@ export interface IPredictions {
   predictionNumber: number;
   modelName: string;
   /**
-   * The registry version of `modelName` that made this prediction. Recorded
-   * since explanations started carrying it; null for older predictions.
+   * The registry version of `modelName` this prediction is pinned to: the one
+   * in Production when it was submitted. For a prediction made before pinning,
+   * the version its explanation recorded; null when neither is known.
    */
   modelVersion?: string | null;
   records: IRecordCounts;

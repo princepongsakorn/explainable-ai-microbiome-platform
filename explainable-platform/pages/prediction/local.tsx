@@ -583,6 +583,17 @@ export function PredictionRecordsPage() {
                 predictedClass={record?.class}
               />
             </SheetDescription>
+            {prediction && (
+              // The version that answered for this Sample, else the one the
+              // prediction is pinned to (a Sample not predicted yet will use it).
+              <p className="text-sm text-muted-foreground">
+                {record?.status === PredictionStatus.SUCCESS ? "Predicted by" : "Model:"}{" "}
+                <ModelLink
+                  name={prediction.modelName}
+                  version={record?.modelVersion ?? prediction.modelVersion}
+                />
+              </p>
+            )}
           </SheetHeader>
 
           <div

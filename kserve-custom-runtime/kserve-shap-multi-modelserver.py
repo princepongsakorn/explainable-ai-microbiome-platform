@@ -127,6 +127,9 @@ _version_cache: dict[str, tuple[float, str, str]] = {}
 _version_lock = threading.Lock()
 # Model names whose registry lookup is running in the background right now.
 _refreshing: set[str] = set()
+# (model_name, version) -> run_id for versions a caller asked for by number. A
+# registered version never changes the run it came from, so these never expire.
+_pinned_run_ids: dict[tuple[str, str], str] = {}
 
 # One lock per key for work that must not run twice at once: a cold model load
 # (a 200-400 MB unpickle per copy) and a model's first registry lookup.
@@ -142,6 +145,10 @@ def _single_flight(key):
 
 class NoProductionVersionError(ValueError):
     """The registry answered, and no version of the model is in Production."""
+
+
+class ModelVersionNotFoundError(LookupError):
+    """The registry answered, and it has no such version of the model."""
 
 
 def _start_refresh(target):
@@ -184,6 +191,7 @@ def _reset_model_caches():
     with _version_lock:
         _version_cache.clear()
         _refreshing.clear()
+        _pinned_run_ids.clear()
 
 
 def _fetch_production_version(model_name):
@@ -272,10 +280,44 @@ def _resolve_production_version(model_name):
     return cached[1], cached[2]
 
 
-def load_explainable_model(model_name):
-    """Look up the Production version of ``model_name`` and load it as an
-    ``ExplainableModel`` (pyfunc-backed)."""
-    version, run_id = _resolve_production_version(model_name)
+def _resolve_pinned_version(model_name, version):
+    """The ``run_id`` of one numbered version of ``model_name``, whatever its stage.
+
+    A prediction job names the version it was submitted against, so every
+    request it makes is served by that version even after another is promoted
+    or this one is archived. Only the first request for a version asks the
+    registry.
+    """
+    key = (model_name, version)
+    with _version_lock:
+        run_id = _pinned_run_ids.get(key)
+    if run_id is not None:
+        return run_id
+
+    client = mlflow.tracking.MlflowClient()
+    try:
+        mv = client.get_model_version(name=model_name, version=version)
+    except MlflowException as e:
+        if e.error_code == "RESOURCE_DOES_NOT_EXIST":
+            raise ModelVersionNotFoundError(
+                f"Model '{model_name}' has no version {version} in the registry."
+            ) from e
+        raise
+    with _version_lock:
+        _pinned_run_ids[key] = mv.run_id
+    return mv.run_id
+
+
+def load_explainable_model(model_name, version=None):
+    """Load ``model_name`` as an ``ExplainableModel`` (pyfunc-backed).
+
+    ``version`` loads that registered version; without it, the one in
+    Production now.
+    """
+    if version is None:
+        version, run_id = _resolve_production_version(model_name)
+    else:
+        run_id = _resolve_pinned_version(model_name, version)
     model_uri = f"models:/{model_name}/{version}"
     # lru_cache does not stop concurrent misses from each loading a copy; the
     # lock does. A warm hit holds it only for the cache lookup.
@@ -285,15 +327,18 @@ def load_explainable_model(model_name):
 
 
 class ModelLoader:
-    def __init__(self, model_name):
+    def __init__(self, model_name, version=None):
         self.model_name = model_name
+        self.requested_version = version
         self.mlflow_url = os.getenv("MLFLOW_URL", None)
         if not self.mlflow_url:
             raise ValueError("Environment variable 'MLFLOW_URL' is required.")
         mlflow.set_tracking_uri(self.mlflow_url)
 
     def load(self):
-        loaded, impl, run_id, version = load_explainable_model(self.model_name)
+        loaded, impl, run_id, version = load_explainable_model(
+            self.model_name, self.requested_version
+        )
         self.version = version
         logger.info(f"Loaded ExplainableModel '{self.model_name}' (run {run_id})")
 
@@ -677,14 +722,34 @@ def _parse_dataframe_split(req_json):
     return pd.DataFrame(data=data, columns=columns, index=index), None
 
 
+def _requested_version():
+    """The ``?version=`` query parameter as a version string, or ``None``.
+
+    Raises ``ValueError`` when it is present but not a positive integer.
+    """
+    raw = request.args.get("version")
+    if raw is None:
+        return None
+    if not raw.isascii() or not raw.isdigit() or int(raw) <= 0:
+        raise ValueError(
+            f"'version' must be a positive whole number, got {raw!r}."
+        )
+    return str(int(raw))
+
+
 def _load_model_or_error(model_name):
     """Load a model for an endpoint.
 
     Returns ``(loaded, impl, input_columns, None)`` on success, or
     ``(None, None, None, (response, status))`` on failure.
 
+    With ``?version=N`` that registered version is loaded whatever its stage;
+    without it, the version in Production now.
+
     Status semantics:
-      * 404 — the model genuinely is not registered / not in Production.
+      * 400 — ``version`` is not a positive integer.
+      * 404 — the model genuinely is not registered / not in Production, or
+        the requested version does not exist.
       * 503 — the model exists but could not be loaded (bad artifact, a
         missing runtime dependency such as torch_geometric, an incompatible
         contract, ...). These are server-side problems, not "not found".
@@ -694,12 +759,17 @@ def _load_model_or_error(model_name):
     response body.
     """
     try:
-        loader = ModelLoader(model_name)
+        version = _requested_version()
+    except ValueError as e:
+        return None, None, None, (jsonify({"error": str(e)}), 400)
+
+    try:
+        loader = ModelLoader(model_name, version=version)
         loaded, impl, input_columns = loader.load()
         # Read back by explain_values, so a payload names the version behind it.
         g.model_version = getattr(loader, "version", None)
         return loaded, impl, input_columns, None
-    except NoProductionVersionError as e:
+    except (NoProductionVersionError, ModelVersionNotFoundError) as e:
         # Only a registry answer is a 404. Any other ValueError while loading —
         # a malformed artifact, bad feature metadata — is the model failing.
         logger.warning(f"Model '{model_name}' unavailable: {e}")
@@ -886,13 +956,37 @@ def predict(model_name):
             }
             for idx, row in result_df.iterrows()
         ]
-        return jsonify({"predict": predictions})
+        # The version that answered, so a caller can check it got the one it pinned.
+        return jsonify({
+            "predict": predictions,
+            "model_version": g.get("model_version"),
+        })
     except Exception as e:
         logger.exception("predict failed")
         return jsonify({"error": str(e)}), 500
 
 
 # ---- model discovery / mlflow ops -----------------------------
+@app.route("/v1/models/<model_name>/production", methods=["GET"])
+def get_production_version(model_name):
+    """The version of ``model_name`` in Production right now.
+
+    Asked of the registry directly, not the request cache: the platform calls
+    this once when a prediction is submitted and pins every later request of
+    that prediction to the answer, so the answer must not be up to a minute
+    stale.
+    """
+    mlflow.set_tracking_uri(os.environ.get("MLFLOW_URL", None))
+    try:
+        version, run_id = _fetch_production_version(model_name)
+    except NoProductionVersionError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:  # noqa: BLE001
+        logger.exception(f"Production lookup for '{model_name}' failed")
+        return jsonify({"error": f"The model registry could not be reached: {e}"}), 503
+    return jsonify({"name": model_name, "version": version, "run_id": run_id})
+
+
 @app.route("/v1/models", methods=["GET"])
 def list_models():
     """List the model versions currently in the Production stage.

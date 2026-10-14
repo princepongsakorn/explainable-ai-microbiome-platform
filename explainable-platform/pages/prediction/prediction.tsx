@@ -237,6 +237,9 @@ export function PredictionListPage() {
                     </TableCell>
                     <TableCell className="max-w-[16rem] truncate">
                       {prediction.modelName}
+                      {prediction.modelVersion && (
+                        <span className="text-muted-foreground"> v{prediction.modelVersion}</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <PredictionProgress records={prediction.records} />

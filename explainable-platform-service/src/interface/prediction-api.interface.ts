@@ -19,6 +19,15 @@ export interface IPredictResponse {
     proba: number;
     class: number;
   }[];
+  /** The registry version that answered. */
+  model_version?: string | null;
+}
+
+/** GET /v1/models/<name>/production */
+export interface IProductionVersionResponse {
+  name: string;
+  version: string;
+  run_id: string;
 }
 
 export interface IDataframeSplitRequest {

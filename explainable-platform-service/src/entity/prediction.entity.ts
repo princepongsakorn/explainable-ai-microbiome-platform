@@ -16,6 +16,15 @@ export class Prediction {
   @Column()
   modelName: string;
 
+  /**
+   * The registry version of `modelName` this Prediction is pinned to: the one in
+   * Production when it was submitted. Every record, the Explanation, and any
+   * re-predict or rebuild ask the inference service for this version. Null for
+   * Predictions made before versions were pinned; those follow Production.
+   */
+  @Column({ type: 'text', nullable: true })
+  modelVersion?: string | null;
+
   @Column('jsonb')
   dfColumns: string[];
 

@@ -114,6 +114,12 @@ One queue job per Prediction. Within the job, call the Python explain endpoint i
 Samples**, concatenating results in NestJS. Each chunk is retried independently, 3 attempts with
 exponential backoff. Progress is published as `{done, total}`.
 
+Every chunk names the model version the Prediction is pinned to (§2.4):
+`POST /v1/explain/values/<model_name>?version=<N>`. The runtime echoes it as `model_version`. The
+job refuses to join chunks whose `model_version` differs, and refuses the joined payload if its
+`model_version` is not the pinned one; either way the Explanation fails with `explainError` set
+instead of storing a mixed or mismatched result.
+
 Chunking is safe because the Explainer's background is fixed inside the model artifact, so a Sample's
 SHAP values do not depend on which other Samples share its request. Nothing that requires seeing all
 Samples at once happens in Python — ordering, colour scaling and instance ordering are all computed
@@ -127,6 +133,29 @@ in the browser.
   `explainContractVersion`. **No existing column is removed** — `synchronize: true` would drop the
   column and its data.
 * `explainEtag` is the SHA-256 of the uncompressed payload bytes, stored at write time.
+
+### 2.4 Model version pinning
+
+A Prediction is pinned to one model version from submission to the end of every job that touches it.
+
+* **When it is pinned.** On upload, before anything is saved, the API asks the inference service
+  `GET /v1/models/<model_name>/production`, which reads the registry directly rather than the
+  runtime's 60 s version cache. The answer is stored in `Prediction.modelVersion`. A model with no
+  version in `Production` is refused at this point (400); an unreachable registry is a 503.
+* **How it is used.** Every inference call for the Prediction carries `?version=<N>`:
+  `/v1/predict/<model_name>`, `/v1/explain/values/<model_name>`, and the PNG endpoints. With it, the
+  runtime loads `models:/<model_name>/<N>` whatever that version's stage is now; without it, the
+  version currently in `Production`, as before. A `version` that is not a positive integer is a 400;
+  one the registry does not have is a 404.
+* **What is recorded.** `/v1/predict` answers `{"predict": [...], "model_version": "<N>"}`. Each
+  `PredictionRecord.modelVersion` stores the version that answered, and a record whose answer came
+  from any version other than the pinned one ends in `ERROR`. The Explanation stores its version in
+  `explainModelVersion` and is checked the same way (§2.2).
+* **Re-predict and rebuild** reuse `Prediction.modelVersion`, even if that version has since been
+  archived, so a rerun is computed by the same model as the original.
+* **Predictions made before pinning** have `modelVersion = null`. They send no `version` and follow
+  `Production`, exactly as before. The API reports their version as `explainModelVersion` when one
+  was recorded.
 
 ```
 GET /predict/:id/explain
