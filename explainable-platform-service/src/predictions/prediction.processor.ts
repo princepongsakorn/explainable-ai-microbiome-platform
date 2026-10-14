@@ -26,6 +26,7 @@ import {
   concatPayloads,
   sampleLabelsFor,
 } from './explain.builder';
+import { pinnedVersionQuery, versionMismatch } from './model-version';
 
 /**
  * A real matplotlib SHAP plot of ~200 features is tens of KB. A blank/failed
@@ -98,6 +99,7 @@ export class PredictionProcessor {
       status: record.status,
       proba: record.proba,
       class: record.class,
+      modelVersion: record.modelVersion ?? null,
       errorMsg: record.errorMsg,
       waterfall: record.waterfall
         ? await this.storageService.getPresignedUrl(record.waterfall)
@@ -129,7 +131,7 @@ export class PredictionProcessor {
    */
   private async runExplain(
     endpoint: ExplainEndpoint,
-    modelName: string,
+    prediction: Prediction,
     dataframeSplit: IDataframeSplitRequest,
     extractBase64: (data: unknown) => string | undefined,
     storagePath: string,
@@ -138,7 +140,8 @@ export class PredictionProcessor {
     let base64: string | undefined;
     try {
       const observable = this.httpService.post(
-        `${this.inferenceServiceURL}/v1/explain/${endpoint}/${modelName}`,
+        `${this.inferenceServiceURL}/v1/explain/${endpoint}/${prediction.modelName}` +
+          pinnedVersionQuery(prediction.modelVersion),
         dataframeSplit,
         { timeout: PLOT_TIMEOUT_MS },
       );
@@ -253,6 +256,14 @@ export class PredictionProcessor {
       // join relies on. The records were fetched in record_number order above,
       // so the labels line up with the payload's rows by position.
       const joined = concatPayloads(chunks);
+      // concatPayloads already refuses chunks from different versions; this
+      // refuses a whole explanation from a version other than the pinned one.
+      const mismatch = versionMismatch(
+        prediction.modelVersion,
+        joined.model_version,
+        'The explanation',
+      );
+      if (mismatch) throw new Error(mismatch);
       const payload: ExplainPayload = {
         ...joined,
         ...sampleLabelsFor(
@@ -311,7 +322,9 @@ export class PredictionProcessor {
     prediction: Prediction,
     records: PredictionRecord[],
   ): Promise<ExplainPayload> {
-    const url = `${this.inferenceServiceURL}/v1/explain/values/${prediction.modelName}`;
+    const url =
+      `${this.inferenceServiceURL}/v1/explain/values/${prediction.modelName}` +
+      pinnedVersionQuery(prediction.modelVersion);
     const body: IDataframeSplitRequest = {
       dataframe_split: {
         columns: prediction.dfColumns,
@@ -372,7 +385,7 @@ export class PredictionProcessor {
     if (!only || only === 'heatmap') {
       const heatmap = await this.runExplain(
         'heatmap',
-        prediction.modelName,
+        prediction,
         dataframeSplit,
         (data) => (data as { explain?: string })?.explain,
         prediction.id,
@@ -385,7 +398,7 @@ export class PredictionProcessor {
     if (!only || only === 'beeswarm') {
       const beeswarm = await this.runExplain(
         'beeswarm',
-        prediction.modelName,
+        prediction,
         dataframeSplit,
         (data) => (data as { explain?: string })?.explain,
         prediction.id,
@@ -466,7 +479,8 @@ export class PredictionProcessor {
       let predictionFailed = false;
       try {
         const observable = this.httpService.post<IPredictResponse>(
-          `${this.inferenceServiceURL}/v1/predict/${prediction.modelName}`,
+          `${this.inferenceServiceURL}/v1/predict/${prediction.modelName}` +
+            pinnedVersionQuery(prediction.modelVersion),
           dataframeSplit,
         );
         const response = await lastValueFrom(observable);
@@ -483,6 +497,13 @@ export class PredictionProcessor {
         ) {
           throw new Error('Prediction service returned an empty result');
         }
+        record.modelVersion = response.data.model_version ?? null;
+        const mismatch = versionMismatch(
+          prediction.modelVersion,
+          record.modelVersion,
+          'This result',
+        );
+        if (mismatch) throw new Error(mismatch);
         record.proba = parseFloat(Number(result.proba).toFixed(4));
         record.class = result.class;
       } catch (error) {
@@ -492,7 +513,8 @@ export class PredictionProcessor {
           (error as Error).message,
         );
         record.status = PredictionStatus.ERROR;
-        record.errorMsg = (error as Error).message;
+        // The runtime's own words, e.g. that the pinned version is gone.
+        record.errorMsg = inferenceErrorMessage(error);
         await this.recordsRepository.save(record);
         this.eventsHub.publishPrediction(
           record.prediction.id,
@@ -508,7 +530,7 @@ export class PredictionProcessor {
       if (this.generatePngPlots && !predictionFailed) {
         const waterfall = await this.runExplain(
           'waterfall',
-          prediction.modelName,
+          prediction,
           dataframeSplit,
           (data) =>
             (data as { explain?: { waterfall?: string }[] })?.explain?.[0]
@@ -594,7 +616,7 @@ export class PredictionProcessor {
     };
     const waterfall = await this.runExplain(
       'waterfall',
-      prediction.modelName,
+      prediction,
       dataframeSplit,
       (data) =>
         (data as { explain?: { waterfall?: string }[] })?.explain?.[0]

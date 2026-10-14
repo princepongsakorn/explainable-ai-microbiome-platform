@@ -29,6 +29,10 @@ export class PredictionRecord {
   @Column({ nullable: true })
   class?: number;
 
+  /** The model version the inference service says produced `proba` and `class`. */
+  @Column({ type: 'text', nullable: true })
+  modelVersion?: string | null;
+
   @Column({ type: 'text', nullable: true })
   waterfall?: string | null;
 

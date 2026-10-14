@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -28,6 +29,7 @@ import {
   PredictionStatus,
 } from 'src/interface/prediction-class.enum';
 import { EventsHub } from 'src/events/events.hub';
+import { ModelsService } from 'src/models/models.service';
 import { gunzipSync } from 'node:zlib';
 import {
   ExplainPayload,
@@ -40,6 +42,16 @@ import {
  * to 500 x ~900 values twice over, tens of MB once parsed — so only a couple.
  */
 const PARSED_PAYLOAD_CACHE_SIZE = 2;
+
+/**
+ * The version a Prediction is shown as made by: the one it is pinned to, else,
+ * for one made before pinning, the version its Explanation recorded.
+ */
+function displayedModelVersion(
+  prediction: Pick<Prediction, 'modelVersion' | 'explainModelVersion'>,
+): string | null {
+  return prediction.modelVersion ?? prediction.explainModelVersion ?? null;
+}
 
 @Injectable()
 export class PredictionsService {
@@ -54,6 +66,7 @@ export class PredictionsService {
     private readonly queueService: QueueService,
     private storageService: StorageService,
     private readonly eventsHub: EventsHub,
+    private readonly modelsService: ModelsService,
   ) {}
 
   /**
@@ -61,6 +74,10 @@ export class PredictionsService {
    * queues the work: one job for the whole Prediction (the Explanation) and one
    * job per record (class and probability). Nothing is saved if the file is
    * empty, has non-numeric cells, or has more rows than one Prediction allows.
+   *
+   * The Prediction is pinned to the model version in Production now. Every job
+   * for it, including later re-predicts and rebuilds, asks for that version, so
+   * a version published while it runs changes nothing.
    */
   async createPrediction(file: Multer.File, modelName: string) {
     let dfColumns: string[];
@@ -91,6 +108,8 @@ export class PredictionsService {
       throw new BadRequestException('The file has a header but no data rows.');
     }
 
+    const modelVersion = await this.resolveProductionVersion(modelName);
+
     const lastPrediction = await this.predictionsRepository
       .createQueryBuilder('prediction')
       .orderBy('prediction.prediction_number', 'DESC')
@@ -106,6 +125,7 @@ export class PredictionsService {
       id: predictionId,
       prediction_number: predictionNumber,
       modelName,
+      modelVersion,
       dfColumns: dfColumns,
     });
 
@@ -140,9 +160,34 @@ export class PredictionsService {
     return { message: 'Prediction Created', predictionId: prediction.id };
   }
 
+  /** The version to pin a new Prediction to, asked once at submission. */
+  private async resolveProductionVersion(modelName: string): Promise<string> {
+    let version: string | null;
+    try {
+      version = await this.modelsService.fetchProductionVersion(modelName);
+    } catch (error) {
+      console.error(
+        `[PredictionsService] Production lookup for '${modelName}' failed:`,
+        (error as Error)?.message,
+      );
+      throw new ServiceUnavailableException(
+        'The model registry could not be reached, so the prediction was not ' +
+          'started. Try again in a moment.',
+      );
+    }
+    if (!version) {
+      throw new BadRequestException(
+        `The model "${modelName}" has no published version, so it cannot make ` +
+          `predictions. Publish a version of it first, or choose another model.`,
+      );
+    }
+    return version;
+  }
+
   /**
    * Re-queues every record of a Prediction that ended in error or was
-   * cancelled. Records that already succeeded are left alone.
+   * cancelled. Records that already succeeded are left alone. They are
+   * re-predicted with the version the Prediction is pinned to, never a newer one.
    */
   async rePredictRecords(predictionId: string) {
     const failedRecords = await this.recordsRepository.find({
@@ -168,6 +213,7 @@ export class PredictionsService {
         status: record.status,
         proba: record.proba,
         class: record.class,
+        modelVersion: record.modelVersion ?? null,
         errorMsg: record.errorMsg,
         waterfall: record.waterfall
           ? await this.storageService.getPresignedUrl(record.waterfall)
@@ -200,6 +246,7 @@ export class PredictionsService {
         status: record.status,
         proba: record.proba,
         class: record.class,
+        modelVersion: record.modelVersion ?? null,
         errorMsg: record.errorMsg,
         waterfall: record.waterfall
           ? await this.storageService.getPresignedUrl(record.waterfall)
@@ -284,6 +331,7 @@ export class PredictionsService {
       status: record.status,
       proba: record.proba,
       class: record.class,
+      modelVersion: record.modelVersion ?? null,
       errorMsg: record.errorMsg,
       waterfall: null,
       waterfallError: null,
@@ -382,7 +430,8 @@ export class PredictionsService {
   }
 
   /**
-   * Queue a rebuild of the Explanation artifact.
+   * Queue a rebuild of the Explanation artifact, from the version the
+   * Prediction is pinned to.
    *
    * Clearing the fields first makes the in-progress state server-truth, the same
    * way the plot regeneration methods above do it.
@@ -431,6 +480,7 @@ export class PredictionsService {
         'beeswarmError',
         'createdAt',
         'prediction_number',
+        'modelVersion',
         'explainModelVersion',
       ],
       take: limit,
@@ -465,7 +515,7 @@ export class PredictionsService {
           id: prediction.id,
           predictionNumber: prediction.prediction_number,
           modelName: prediction.modelName,
-          modelVersion: prediction.explainModelVersion ?? null,
+          modelVersion: displayedModelVersion(prediction),
           records: countsById.get(predictionId) ?? emptyRecordCounts(),
           createdAt: prediction.createdAt,
           heatmap: prediction.heatmap
@@ -529,6 +579,7 @@ export class PredictionsService {
         'prediction_number',
         'modelName',
         'dfColumns',
+        'modelVersion',
         'explainModelVersion',
       ],
     });
@@ -565,6 +616,7 @@ export class PredictionsService {
         'record.record_number',
         'record.proba',
         'record.class',
+        'record.modelVersion',
         'record.waterfall',
         'record.waterfallError',
         'record.status',
@@ -617,7 +669,7 @@ export class PredictionsService {
         predictionNumber: prediction.prediction_number,
         ...prediction,
         // The version that made it, so the page can open that model's run.
-        modelVersion: prediction.explainModelVersion ?? null,
+        modelVersion: displayedModelVersion(prediction),
       },
       meta,
     };
