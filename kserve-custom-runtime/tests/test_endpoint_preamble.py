@@ -34,7 +34,7 @@ def loadable(server, monkeypatch):
     """A model that loads cleanly, so failures come from the body, not the load."""
 
     class Stub:
-        def __init__(self, model_name):
+        def __init__(self, model_name, version=None):
             pass
 
         def load(self):
@@ -68,7 +68,7 @@ def test_an_index_of_the_wrong_length_is_rejected_identically(client, loadable, 
 @pytest.mark.parametrize("url", ENDPOINTS)
 def test_a_model_not_in_production_is_a_404_everywhere(client, server, monkeypatch, url):
     class Stub:
-        def __init__(self, model_name):
+        def __init__(self, model_name, version=None):
             pass
 
         def load(self):
@@ -86,7 +86,7 @@ def test_any_other_value_error_while_loading_is_a_503(client, server, monkeypatc
     """A malformed artifact must not read as "no such model"."""
 
     class Stub:
-        def __init__(self, model_name):
+        def __init__(self, model_name, version=None):
             pass
 
         def load(self):
@@ -106,7 +106,7 @@ def test_json_that_is_not_an_object_is_a_400(client, loadable, url, body):
 
 def test_the_loaded_version_is_kept_for_the_request(server, monkeypatch):
     class Stub:
-        def __init__(self, model_name):
+        def __init__(self, model_name, version=None):
             self.version = "7"
 
         def load(self):
@@ -122,7 +122,7 @@ def test_the_loaded_version_is_kept_for_the_request(server, monkeypatch):
 @pytest.mark.parametrize("url", ENDPOINTS)
 def test_a_model_that_fails_to_load_is_a_503_everywhere(client, server, monkeypatch, url):
     class Stub:
-        def __init__(self, model_name):
+        def __init__(self, model_name, version=None):
             pass
 
         def load(self):
