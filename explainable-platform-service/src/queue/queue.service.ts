@@ -5,6 +5,13 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { PredictionRecord } from 'src/entity/prediction-record.entity';
 import { PredictionStatus } from 'src/interface/prediction-class.enum';
+import { chunkIndices } from 'src/predictions/explain.builder';
+
+/**
+ * Records predicted per runtime call. The runtime's cost per call is mostly
+ * fixed, so this mainly sets how often a running Prediction reports progress.
+ */
+export const PREDICT_CHUNK_SIZE = 50;
 
 @Injectable()
 export class QueueService {
@@ -18,11 +25,17 @@ export class QueueService {
     await this.predictionQueue.add('processPrediction', { predictionId });
   }
 
-  async addPredictionRecordJob(predictionId: string, recordId: string) {
-    await this.predictionQueue.add('processPredictionRecord', {
-      predictionId,
-      recordId,
-    });
+  /** Queues the records in chunks of PREDICT_CHUNK_SIZE, in the order given. */
+  async addPredictionRecordJobs(predictionId: string, recordIds: string[]) {
+    for (const [start, end] of chunkIndices(
+      recordIds.length,
+      PREDICT_CHUNK_SIZE,
+    )) {
+      await this.predictionQueue.add('processPredictionRecords', {
+        predictionId,
+        recordIds: recordIds.slice(start, end),
+      });
+    }
   }
 
   // --- Targeted plot re-generation (without re-running the prediction) ---
@@ -46,7 +59,7 @@ export class QueueService {
   }
 
   /**
-   * Removes a Prediction's per-record jobs that have not finished yet, then
+   * Removes a Prediction's record jobs that have not finished yet, then
    * marks every record still pending or in progress as cancelled. A job a
    * worker is already running can still finish and write its result.
    */
@@ -58,8 +71,15 @@ export class QueueService {
     ]);
 
     for (const job of jobs) {
-      const jobData = job.data as { predictionId: string; recordId?: string };
-      if (jobData.predictionId === predictionId && jobData.recordId) {
+      const jobData = job.data as {
+        predictionId: string;
+        recordId?: string;
+        recordIds?: string[];
+      };
+      if (
+        jobData.predictionId === predictionId &&
+        (jobData.recordId || jobData.recordIds)
+      ) {
         try {
           const jobInstance = await this.predictionQueue.getJob(job.id);
           if (!jobInstance) {
@@ -76,7 +96,7 @@ export class QueueService {
           if (isActive || isWaiting || isDelayed) {
             await jobInstance.remove();
             console.log(
-              `[QueueService] cancelPredictionJob: Canceled Job: ${job.id} (PredictionID: ${predictionId}, RecordID: ${jobData.recordId})`,
+              `[QueueService] cancelPredictionJob: Canceled Job: ${job.id} (PredictionID: ${predictionId}, records: ${jobData.recordIds?.length ?? 1})`,
             );
           } else {
             console.warn(

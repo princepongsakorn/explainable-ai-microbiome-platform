@@ -4,7 +4,7 @@ import { Processor, Process } from '@nestjs/bull';
 import { Job } from 'bull';
 import { HttpService } from '@nestjs/axios';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Prediction } from '../entity/prediction.entity';
 import { PredictionRecord } from '../entity/prediction-record.entity';
 import { StorageService } from '../storage/storage.service';
@@ -424,114 +424,95 @@ export class PredictionProcessor {
   // ------------------------------------------------------------------
   // Record-level: prediction (proba/class) + waterfall
   // ------------------------------------------------------------------
+
+  /**
+   * Predict a chunk of records with one call to the runtime.
+   *
+   * Every call costs the runtime about the same fixed work whatever its size
+   * (1.4 s for one Sample, 2.2 s for 331 on the deployed VM), so one call per
+   * record made a 331-Sample upload take minutes. Each record still gets its
+   * own status, result and error.
+   */
+  @Process('processPredictionRecords')
+  async handlePredictionRecords(
+    job: Job<{ predictionId: string; recordIds: string[] }>,
+  ) {
+    await this.predictRecordsJob(job, job.data.recordIds);
+  }
+
+  /** One record per job: what was queued before chunking, and may still be waiting. */
   @Process('processPredictionRecord')
   async handlePredictionRecord(
     job: Job<{ predictionId: string; recordId: string }>,
   ) {
-    const { recordId } = job.data;
-    const record = await this.recordsRepository.findOne({
-      where: { id: recordId },
+    await this.predictRecordsJob(job, [job.data.recordId]);
+  }
+
+  private async predictRecordsJob(job: Job, recordIds: string[]) {
+    // Ordered so a chunk's rows, and its log lines, follow the upload.
+    const records = await this.recordsRepository.find({
+      where: { id: In(recordIds) },
       relations: ['prediction'],
+      order: { record_number: 'ASC' },
     });
 
-    if (!record) {
+    if (records.length < recordIds.length) {
+      const found = new Set(records.map((record) => record.id));
       console.error(
-        `[PredictionProcessor] error: Prediction Record ID ${recordId} not found.`,
+        `[PredictionProcessor] error: Prediction Record IDs not found: ` +
+          recordIds.filter((id) => !found.has(id)).join(', '),
       );
-      return;
     }
+    if (records.length === 0) return;
 
+    const prediction = records[0].prediction;
     try {
-      console.log(`[PredictionProcessor] processing Record ID: ${record.id}`);
-      record.status = PredictionStatus.IN_PROGRESS;
-      await this.recordsRepository.save(record);
-      this.eventsHub.publishPrediction(
-        record.prediction.id,
-        'record:update',
-        await this.toRecordEvent(record),
+      console.log(
+        `[PredictionProcessor] processing ${records.length} record(s) of prediction ${prediction.id}`,
       );
+      for (const record of records) {
+        record.status = PredictionStatus.IN_PROGRESS;
+      }
+      await this.recordsRepository.save(records);
+      await this.publishRecords(prediction.id, records);
 
       const activeJob = await job.queue.getJob(job.id);
       if (!activeJob) {
         console.log(
-          `[PredictionProcessor] Job was terminated for Record ID: ${record.id}`,
+          `[PredictionProcessor] Job was terminated for prediction ${prediction.id}`,
         );
-        record.status = PredictionStatus.CANCELED;
-        record.errorMsg = 'Job was terminated';
-        await this.recordsRepository.save(record);
-        this.eventsHub.publishPrediction(
-          record.prediction.id,
-          'record:update',
-          await this.toRecordEvent(record),
-        );
+        for (const record of records) {
+          record.status = PredictionStatus.CANCELED;
+          record.errorMsg = 'Job was terminated';
+        }
+        await this.recordsRepository.save(records);
+        await this.publishRecords(prediction.id, records);
         return;
       }
 
-      const prediction = record.prediction;
-      const dataframeSplit: IDataframeSplitRequest = {
-        dataframe_split: {
-          columns: prediction.dfColumns,
-          data: [record.dfData],
-        },
-      };
-
       // --- Prediction (proba & class) ---
-      let predictionFailed = false;
-      try {
-        const observable = this.httpService.post<IPredictResponse>(
-          `${this.inferenceServiceURL}/v1/predict/${prediction.modelName}` +
-            pinnedVersionQuery(prediction.modelVersion),
-          dataframeSplit,
-        );
-        const response = await lastValueFrom(observable);
-        const result = response?.data?.predict?.[0];
-        // The service may answer 200 with a missing/empty body when it is
-        // unhealthy. Treat a non-numeric result as a hard failure rather
-        // than silently saving an empty record as SUCCESS.
-        if (
-          !result ||
-          result.proba === null ||
-          result.proba === undefined ||
-          result.class === null ||
-          result.class === undefined
-        ) {
-          throw new Error('Prediction service returned an empty result');
-        }
-        record.modelVersion = response.data.model_version ?? null;
-        const mismatch = versionMismatch(
-          prediction.modelVersion,
-          record.modelVersion,
-          'This result',
-        );
-        if (mismatch) throw new Error(mismatch);
-        record.proba = parseFloat(Number(result.proba).toFixed(4));
-        record.class = result.class;
-      } catch (error) {
-        predictionFailed = true;
-        console.error(
-          `[PredictionProcessor] error: prediction API failed for Record ID ${record.id}:`,
-          (error as Error).message,
-        );
-        record.status = PredictionStatus.ERROR;
-        // The runtime's own words, e.g. that the pinned version is gone.
-        record.errorMsg = inferenceErrorMessage(error);
-        await this.recordsRepository.save(record);
-        this.eventsHub.publishPrediction(
-          record.prediction.id,
-          'record:update',
-          await this.toRecordEvent(record),
-        );
-      }
+      await this.predictInto(prediction, records);
 
       // --- Waterfall plot (only when PNGs are on and the prediction succeeded) ---
       // A waterfall failure does NOT fail the record: the prediction itself
       // is valid, the user just needs to re-generate the plot. The failure
       // is recorded in `waterfallError` so the UI can show a re-gen button.
-      if (this.generatePngPlots && !predictionFailed) {
+      for (const record of records) {
+        if (
+          !this.generatePngPlots ||
+          record.status === PredictionStatus.ERROR
+        ) {
+          continue;
+        }
         const waterfall = await this.runExplain(
           'waterfall',
           prediction,
-          dataframeSplit,
+          {
+            dataframe_split: {
+              columns: prediction.dfColumns,
+              data: [record.dfData],
+            },
+          },
           (data) =>
             (data as { explain?: { waterfall?: string }[] })?.explain?.[0]
               ?.waterfall,
@@ -545,7 +526,8 @@ export class PredictionProcessor {
       // --- Final status ---
       // SUCCESS requires a real prediction result. This closes the bug where
       // a record could end up SUCCESS with empty proba/class.
-      if (!predictionFailed) {
+      for (const record of records) {
+        if (record.status === PredictionStatus.ERROR) continue;
         const hasResult =
           record.proba !== null &&
           record.proba !== undefined &&
@@ -559,32 +541,128 @@ export class PredictionProcessor {
           record.errorMsg =
             'Prediction completed without a result (the inference service may have been unavailable)';
         }
-        await this.recordsRepository.save(record);
       }
-
-      this.eventsHub.publishPrediction(
-        record.prediction.id,
-        'record:update',
-        await this.toRecordEvent(record),
-      );
+      await this.recordsRepository.save(records);
+      await this.publishRecords(prediction.id, records);
     } catch (error) {
       console.error(
-        `[PredictionProcessor] error: unexpected error processing Record ID ${record.id}:`,
+        `[PredictionProcessor] error: unexpected error processing records of prediction ${prediction.id}:`,
         (error as Error).message,
       );
+      for (const record of records) {
+        record.status = PredictionStatus.ERROR;
+        record.errorMsg = (error as Error).message;
+      }
+      await this.recordsRepository.save(records);
+      await this.publishRecords(prediction.id, records);
+    }
+
+    console.log(
+      `[PredictionProcessor] ${records.length} record(s) of prediction ${prediction.id} completed.`,
+    );
+  }
+
+  /**
+   * Ask the runtime for every record's proba and class in one call, writing
+   * each answer onto its record. A record the runtime gave no usable answer
+   * for is set to ERROR with the reason.
+   */
+  private async predictInto(
+    prediction: Prediction,
+    records: PredictionRecord[],
+  ): Promise<void> {
+    const fail = (record: PredictionRecord, message: string) => {
       record.status = PredictionStatus.ERROR;
-      record.errorMsg = (error as Error).message;
-      await this.recordsRepository.save(record);
+      record.errorMsg = message;
+    };
+
+    let response: { data: IPredictResponse };
+    try {
+      response = await lastValueFrom(
+        this.httpService.post<IPredictResponse>(
+          `${this.inferenceServiceURL}/v1/predict/${prediction.modelName}` +
+            pinnedVersionQuery(prediction.modelVersion),
+          {
+            dataframe_split: {
+              columns: prediction.dfColumns,
+              data: records.map((record) => record.dfData),
+              // The runtime answers each row under its index, so results are
+              // matched to records by id rather than by position.
+              index: records.map((record) => record.id),
+            },
+          },
+        ),
+      );
+    } catch (error) {
+      const status = isAxiosError(error) ? error.response?.status : undefined;
+      // A 400 is the runtime refusing the input, such as a value that is not a
+      // number, and one bad row refuses the whole chunk. Asking again a record
+      // at a time fails only the rows that are actually bad.
+      if (status === 400 && records.length > 1) {
+        for (const record of records) {
+          await this.predictInto(prediction, [record]);
+        }
+        return;
+      }
+      console.error(
+        `[PredictionProcessor] error: prediction API failed for ${records.length} record(s) ` +
+          `of prediction ${prediction.id}:`,
+        (error as Error).message,
+      );
+      // The runtime's own words, e.g. that the pinned version is gone.
+      const message = inferenceErrorMessage(error);
+      for (const record of records) fail(record, message);
+      return;
+    }
+
+    const modelVersion = response?.data?.model_version ?? null;
+    const mismatch = versionMismatch(
+      prediction.modelVersion,
+      modelVersion,
+      'This result',
+    );
+    const byId = new Map(
+      (response?.data?.predict ?? []).map((result) => [
+        String(result.id),
+        result,
+      ]),
+    );
+    for (const record of records) {
+      record.modelVersion = modelVersion;
+      if (mismatch) {
+        fail(record, mismatch);
+        continue;
+      }
+      const result = byId.get(record.id);
+      // The service may answer 200 with a missing/empty body when it is
+      // unhealthy. Treat a non-numeric result as a hard failure rather
+      // than silently saving an empty record as SUCCESS.
+      if (
+        !result ||
+        result.proba === null ||
+        result.proba === undefined ||
+        result.class === null ||
+        result.class === undefined
+      ) {
+        fail(record, 'Prediction service returned an empty result');
+        continue;
+      }
+      record.proba = parseFloat(Number(result.proba).toFixed(4));
+      record.class = result.class;
+    }
+  }
+
+  private async publishRecords(
+    predictionId: string,
+    records: PredictionRecord[],
+  ) {
+    for (const record of records) {
       this.eventsHub.publishPrediction(
-        record.prediction.id,
+        predictionId,
         'record:update',
         await this.toRecordEvent(record),
       );
     }
-
-    console.log(
-      `[PredictionProcessor] Record ID ${recordId} processing completed.`,
-    );
   }
 
   // ------------------------------------------------------------------

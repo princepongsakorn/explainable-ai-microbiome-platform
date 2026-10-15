@@ -28,7 +28,7 @@ function build(productionVersion: () => Promise<string | null>) {
   };
   const queue = {
     addPredictionJob: jest.fn(async () => undefined),
-    addPredictionRecordJob: jest.fn(async () => undefined),
+    addPredictionRecordJobs: jest.fn(async () => undefined),
   };
   const models = { fetchProductionVersion: jest.fn(productionVersion) };
   const events = { publishPrediction: jest.fn() };
@@ -105,6 +105,6 @@ describe('PredictionsService.rePredictRecords', () => {
     await service.rePredictRecords('p1');
 
     expect(models.fetchProductionVersion).not.toHaveBeenCalled();
-    expect(queue.addPredictionRecordJob).toHaveBeenCalledWith('p1', 'r1');
+    expect(queue.addPredictionRecordJobs).toHaveBeenCalledWith('p1', ['r1']);
   });
 });
