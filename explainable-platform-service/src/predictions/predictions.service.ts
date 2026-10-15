@@ -152,10 +152,12 @@ export class PredictionsService {
     await this.queueService.addPredictionJob(prediction.id);
     const records = await this.recordsRepository.find({
       where: { prediction: { id: predictionId } },
+      order: { record_number: 'ASC' },
     });
-    for (const record of records) {
-      await this.queueService.addPredictionRecordJob(predictionId, record.id);
-    }
+    await this.queueService.addPredictionRecordJobs(
+      predictionId,
+      records.map((record) => record.id),
+    );
 
     return { message: 'Prediction Created', predictionId: prediction.id };
   }
@@ -220,8 +222,11 @@ export class PredictionsService {
           : null,
         waterfallError: record.waterfallError ?? null,
       });
-      await this.queueService.addPredictionRecordJob(predictionId, record.id);
     }
+    await this.queueService.addPredictionRecordJobs(
+      predictionId,
+      failedRecords.map((record) => record.id),
+    );
 
     return {
       message: `Re-prediction started for ${failedRecords.length} failed records.`,
