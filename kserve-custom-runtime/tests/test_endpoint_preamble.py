@@ -144,3 +144,21 @@ def test_non_numeric_input_is_rejected_before_it_becomes_nan(client, loadable, u
     })
     assert response.status_code == 400
     assert "a" in response.get_json()["error"]
+
+
+def test_transformer_coerces_only_the_columns_that_are_text(server):
+    """Numbers sent as strings still become numbers, and a cell that is not a
+    number still becomes NaN, while columns that arrived numeric are left as
+    they are instead of being converted again one by one."""
+    import pandas as pd
+
+    df = pd.DataFrame({"a": ["2.5", "x"], "b": [1.0, 2.0], "c": [3, 4]})
+
+    out = server.transformer(df, ["c", "a", "b", "missing"])
+
+    assert list(out.columns) == ["c", "a", "b", "missing"]
+    assert out["a"].iloc[0] == 2.5 and pd.isna(out["a"].iloc[1])
+    assert out["b"].tolist() == [1.0, 2.0]
+    assert out["c"].dtype == df["c"].dtype
+    assert out["missing"].tolist() == [0, 0]
+    assert all(pd.api.types.is_numeric_dtype(t) for t in out.dtypes)

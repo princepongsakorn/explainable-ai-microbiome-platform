@@ -671,7 +671,17 @@ def transformer(input_df, input_columns, defualt_value=0):
         transformed_df = pd.concat([transformed_df, missing_df], axis=1)
 
     transformed_df = transformed_df[input_columns]
-    transformed_df = transformed_df.apply(pd.to_numeric, errors="coerce")
+    # Only the columns that are not numeric already. JSON numbers arrive as
+    # numeric columns, and pd.to_numeric over all 865 of them, one call per
+    # column, cost about as much as a 1000-tree forest predicting the row.
+    text_cols = [
+        c for c, dtype in transformed_df.dtypes.items()
+        if not pd.api.types.is_numeric_dtype(dtype)
+    ]
+    if text_cols:
+        transformed_df[text_cols] = transformed_df[text_cols].apply(
+            pd.to_numeric, errors="coerce"
+        )
     logger.info("Transformed input DataFrame to match trained model schema")
     return transformed_df
 
