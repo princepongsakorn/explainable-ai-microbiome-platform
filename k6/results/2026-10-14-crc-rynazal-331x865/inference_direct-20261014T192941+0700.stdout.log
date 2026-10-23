@@ -1,0 +1,33 @@
+time="2026-10-14T19:29:43+07:00" level=info msg="K6SCHEMA {\"samples\":331,\"csvFeatures\":865,\"modelFeatures\":865,\"missing\":0,\"extra\":0,\"modelVersion\":\"1\"}" source=console
+time="2026-10-14T19:31:25+07:00" level=info msg="K6RUN {\"iteration\":0,\"chunkSize\":50,\"chunksMs\":[14645.544,14633.946,14151.684,14303.086,14037.168,14852.837,11965.08],\"ok\":true,\"predictStatus\":200,\"predictMs\":3343.756,\"modelVersion\":\"1\",\"explainMs\":98589.345}" source=console
+time="2026-10-14T19:33:08+07:00" level=info msg="K6RUN {\"iteration\":1,\"chunkSize\":50,\"chunksMs\":[15176.267,15347.579,15913.386,15108.616,13856.26,15115.727,9893.576],\"ok\":true,\"predictStatus\":200,\"predictMs\":2039.682,\"modelVersion\":\"1\",\"explainMs\":100411.411}" source=console
+time="2026-10-14T19:34:56+07:00" level=info msg="K6RUN {\"iteration\":2,\"chunkSize\":50,\"chunksMs\":[14533.676,15688.184,16369.713,15993.411,16889.758,16755.795,9998.608],\"ok\":true,\"predictStatus\":200,\"predictMs\":1730.911,\"modelVersion\":\"1\",\"explainMs\":106229.14499999999}" source=console
+time="2026-10-14T19:36:58+07:00" level=info msg="K6RUN {\"iteration\":3,\"chunkSize\":50,\"chunksMs\":[17921.636,16348.936,20039.74,16296.709,16208.128,19847.86,12333.508],\"ok\":true,\"predictStatus\":200,\"predictMs\":2233.922,\"modelVersion\":\"1\",\"explainMs\":118996.517}" source=console
+time="2026-10-14T19:38:43+07:00" level=info msg="K6RUN {\"iteration\":4,\"chunkSize\":50,\"chunksMs\":[17644.514,15657.236,15143.363,14774.6,15314.752,15155.678,10100.983],\"ok\":true,\"predictStatus\":200,\"predictMs\":1766.431,\"modelVersion\":\"1\",\"explainMs\":103791.12599999999}" source=console
+
+
+  █ TOTAL RESULTS 
+
+    CUSTOM
+    direct_explain_chunk_ms.................................................: avg=15.08s min=9.89s med=15.15s max=20.03s p(90)=17.34s p(95)=18.49s
+    direct_explain_ms.......................................................: avg=1m45s  min=1m38s med=1m43s  max=1m58s  p(90)=1m53s  p(95)=1m56s 
+    direct_predict_ms.......................................................: avg=2.22s  min=1.73s med=2.03s  max=3.34s  p(90)=2.89s  p(95)=3.12s 
+
+    HTTP
+    http_req_duration.......................................................: avg=13.18s min=1.53s med=15.1s  max=20.03s p(90)=16.88s p(95)=17.92s
+      { expected_response:true }............................................: avg=13.18s min=1.53s med=15.1s  max=20.03s p(90)=16.88s p(95)=17.92s
+    http_req_failed.........................................................: 0.00% 0 out of 41
+    http_reqs...............................................................: 41    0.075693/s
+
+    EXECUTION
+    iteration_duration......................................................: avg=1m47s  min=1m42s med=1m45s  max=2m1s   p(90)=1m56s  p(95)=1m58s 
+    iterations..............................................................: 5     0.009231/s
+    vus.....................................................................: 1     min=0       max=1
+    vus_max.................................................................: 1     min=1       max=1
+
+    NETWORK
+    data_received...........................................................: 18 MB 33 kB/s
+    data_sent...............................................................: 12 MB 22 kB/s
+
+
+

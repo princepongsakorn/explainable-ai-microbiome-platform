@@ -1,0 +1,38 @@
+time="2026-10-14T18:43:43+07:00" level=info msg="K6UPLOAD {\"iteration\":0,\"predictionId\":\"e986dfe9-671b-4c6d-903b-391733d9fdeb\",\"uploadMs\":6309}" source=console
+time="2026-10-14T18:52:34+07:00" level=info msg="K6RUN {\"iteration\":0,\"predictionId\":\"e986dfe9-671b-4c6d-903b-391733d9fdeb\",\"ok\":true,\"uploadMs\":6309,\"uploadStatus\":201,\"explanationMs\":105695.437,\"etag\":\"\\\"a2fd3bae8f6102e8459c96a47a92b6fc4b19911191a08f98e013f626a8e403a8\\\"\",\"predictionMs\":534152,\"modelVersion\":\"1\",\"recordSuccess\":331,\"recordError\":0,\"downloadStatus\":200,\"downloadMs\":1710.35,\"uncompressedBytes\":2768092}" source=console
+time="2026-10-14T18:52:37+07:00" level=info msg="K6UPLOAD {\"iteration\":1,\"predictionId\":\"2061a48c-d5ad-4693-8f62-bde30d5d5f12\",\"uploadMs\":3835}" source=console
+time="2026-10-14T19:02:11+07:00" level=info msg="K6RUN {\"iteration\":1,\"predictionId\":\"2061a48c-d5ad-4693-8f62-bde30d5d5f12\",\"ok\":true,\"uploadMs\":3835,\"uploadStatus\":201,\"explanationMs\":106462.949,\"etag\":\"\\\"12f0d851019e1cebde99939d200a01f0d44beca1a569203fbdbfd2bd743d876f\\\"\",\"predictionMs\":574300,\"modelVersion\":\"1\",\"recordSuccess\":331,\"recordError\":0,\"downloadStatus\":200,\"downloadMs\":1873.539,\"uncompressedBytes\":2768092}" source=console
+time="2026-10-14T19:02:15+07:00" level=info msg="K6UPLOAD {\"iteration\":2,\"predictionId\":\"6793b1c2-f1dc-4228-8dd6-2c41a2b4cad3\",\"uploadMs\":3889}" source=console
+time="2026-10-14T19:11:42+07:00" level=info msg="K6RUN {\"iteration\":2,\"predictionId\":\"6793b1c2-f1dc-4228-8dd6-2c41a2b4cad3\",\"ok\":true,\"uploadMs\":3889,\"uploadStatus\":201,\"explanationMs\":109898.627,\"etag\":\"\\\"d6ed15be83e67040341b19b1700169c27b3560c1d751d23c2dedf8c734226261\\\"\",\"predictionMs\":565022,\"modelVersion\":\"1\",\"recordSuccess\":331,\"recordError\":0,\"downloadStatus\":200,\"downloadMs\":5586.819,\"uncompressedBytes\":2768092}" source=console
+time="2026-10-14T19:11:47+07:00" level=info msg="K6UPLOAD {\"iteration\":3,\"predictionId\":\"733032f6-7167-438c-9345-0de5c61409e9\",\"uploadMs\":4901}" source=console
+time="2026-10-14T19:21:08+07:00" level=info msg="K6RUN {\"iteration\":3,\"predictionId\":\"733032f6-7167-438c-9345-0de5c61409e9\",\"ok\":true,\"uploadMs\":4901,\"uploadStatus\":201,\"explanationMs\":115103.603,\"etag\":\"\\\"277cba7e26c2d5aac9e18dd4084f22f6665fc1eb1ff45279eb5b18f334bcb43f\\\"\",\"predictionMs\":563166,\"modelVersion\":\"1\",\"recordSuccess\":331,\"recordError\":0,\"downloadStatus\":200,\"downloadMs\":1738.369,\"uncompressedBytes\":2768092}" source=console
+time="2026-10-14T19:21:13+07:00" level=info msg="K6UPLOAD {\"iteration\":4,\"predictionId\":\"a58d1b16-9fd3-4d18-895c-5a6f219dfae3\",\"uploadMs\":4441}" source=console
+time="2026-10-14T19:29:07+07:00" level=info msg="K6RUN {\"iteration\":4,\"predictionId\":\"a58d1b16-9fd3-4d18-895c-5a6f219dfae3\",\"ok\":true,\"uploadMs\":4441,\"uploadStatus\":201,\"explanationMs\":102359.042,\"etag\":\"\\\"51fec34e8302ff986f07c21e737a0ce1a273aa11fcbe5d81257191c951326eb7\\\"\",\"predictionMs\":476107,\"modelVersion\":\"1\",\"recordSuccess\":331,\"recordError\":0,\"downloadStatus\":200,\"downloadMs\":1857.832,\"uncompressedBytes\":2768092}" source=console
+
+
+  █ TOTAL RESULTS 
+
+    CUSTOM
+    e2e_explanation_ms......................................................: avg=1m47s    min=1m42s    med=1m46s    max=1m55s p(90)=1m53s    p(95)=1m54s   
+    e2e_prediction_ms.......................................................: avg=9m2s     min=7m56s    med=9m23s    max=9m34s p(90)=9m30s    p(95)=9m32s   
+    e2e_upload_ms...........................................................: avg=4.67s    min=3.83s    med=4.44s    max=6.3s  p(90)=5.74s    p(95)=6.02s   
+    payload_download_ms.....................................................: avg=2.55s    min=1.71s    med=1.85s    max=5.58s p(90)=4.1s     p(95)=4.84s   
+
+    HTTP
+    http_req_duration.......................................................: avg=630.7ms  min=232.51ms med=633.88ms max=6.43s p(90)=776.46ms p(95)=837.35ms
+      { expected_response:true }............................................: avg=692.62ms min=382.29ms med=642.81ms max=6.43s p(90)=800.06ms p(95)=840.39ms
+    http_req_failed.........................................................: 14.16% 261 out of 1842
+    http_reqs...............................................................: 1842   0.674438/s
+
+    EXECUTION
+    iteration_duration......................................................: avg=9m6s     min=7m58s    med=9m25s    max=9m37s p(90)=9m34s    p(95)=9m36s   
+    iterations..............................................................: 5      0.001831/s
+    vus.....................................................................: 1      min=1           max=1
+    vus_max.................................................................: 1      min=1           max=1
+
+    NETWORK
+    data_received...........................................................: 47 MB  17 kB/s
+    data_sent...............................................................: 8.7 MB 3.2 kB/s
+
+
+
