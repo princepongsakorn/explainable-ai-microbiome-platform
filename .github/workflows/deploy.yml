@@ -1,19 +1,20 @@
-# Deploy to the application VM when main changes.
+# Test, then deploy to the application VM.
 #
-# Each push to main deploys only what it changed:
-#   kserve-custom-runtime/                        -> deployment/deploy_inference.sh
+# On every push to main: run CI (ci.yml), then deploy only the parts the push
+# changed.
+#   kserve-custom-runtime/                          -> deployment/deploy_inference.sh
 #   explainable-platform-service/, explainable-platform/,
-#   docker-compose.prod.yml, deployment/nginx.conf -> deployment/deploy_all.sh
-# The tests of a part run first and a failure stops its deploy. The Inference
-# Service goes first, because a new Control Plane may call routes only the new
-# runtime has. "Run workflow" deploys a chosen part by hand.
+#   docker-compose.prod.yml, deployment/nginx.conf  -> deployment/deploy_all.sh
+# The Inference Service goes first, because a new Control Plane may call routes
+# only the new runtime has.
 #
-# The scripts are the same ones used from a laptop; this workflow only gives
-# them an SSH key in place of a password. The VM side is set up once, see
-# deployment/README-github-actions.md. Secrets: VM_HOST, VM_USER, VM_SSH_KEY,
-# VM_KNOWN_HOSTS.
+# Run workflow deploys by hand: choose all, inference or app, and optionally a
+# commit, tag or branch. Deploying an older commit is the rollback.
+#
+# A repository without DEPLOY_HOST set (a fresh fork, for example) only runs
+# the tests. Setup for your own VM: deployment/README-github-actions.md.
 
-name: Deploy to VM
+name: Deploy
 
 on:
   push:
@@ -25,33 +26,46 @@ on:
         type: choice
         options: [all, inference, app]
         default: all
+      ref:
+        description: Commit, tag or branch to deploy (an older commit rolls back). Empty means the branch chosen above.
+        type: string
+        default: ""
 
-# One deploy at a time; a second push waits instead of interrupting a build.
+# One deploy at a time per repository. A deploy in progress is never cancelled;
+# a newer one waits for it.
 concurrency:
-  group: deploy-vm
+  group: deploy-${{ github.repository }}
   cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
-  changes:
+  plan:
+    name: Plan
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
-      inference: ${{ steps.pick.outputs.inference }}
-      app: ${{ steps.pick.outputs.app }}
+      sha: ${{ steps.plan.outputs.sha }}
+      enabled: ${{ steps.plan.outputs.enabled }}
+      inference: ${{ steps.plan.outputs.inference }}
+      app: ${{ steps.plan.outputs.app }}
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.ref || github.sha }}
           fetch-depth: 0
-      - id: pick
+      - id: plan
         env:
           EVENT: ${{ github.event_name }}
           TARGET: ${{ inputs.target }}
           BEFORE: ${{ github.event.before }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
         run: |
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+          inference=false; app=false
           if [ "$EVENT" = workflow_dispatch ]; then
-            inference=false; app=false
             case "$TARGET" in
               all) inference=true; app=true ;;
               inference) inference=true ;;
@@ -59,97 +73,81 @@ jobs:
             esac
           else
             # Everything the push brought in, however many commits it was.
-            if git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
-              base="$BEFORE"
-            else
-              base="HEAD~1"
-            fi
+            if git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then base="$BEFORE"; else base="HEAD~1"; fi
             files="$(git diff --name-only "$base" HEAD)"
             echo "Changed since ${base}:"; echo "$files"
-            inference=false; app=false
-            grep -q '^kserve-custom-runtime/' <<<"$files" && inference=true
-            grep -qE '^(explainable-platform-service/|explainable-platform/|docker-compose\.prod\.yml$|deployment/nginx\.conf$)' <<<"$files" && app=true
+            if grep -q '^kserve-custom-runtime/' <<<"$files"; then inference=true; fi
+            if grep -qE '^(explainable-platform-service/|explainable-platform/|docker-compose\.prod\.yml$|deployment/nginx\.conf$)' <<<"$files"; then app=true; fi
           fi
           echo "inference=$inference" >> "$GITHUB_OUTPUT"
           echo "app=$app" >> "$GITHUB_OUTPUT"
-          echo "deploy inference=$inference app=$app"
 
-  test-runtime:
-    needs: changes
-    if: needs.changes.outputs.inference == 'true'
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: kserve-custom-runtime
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: kserve-custom-runtime/requirements.txt
-      - name: Install dependencies
-        # The CPU build of torch first, as in the Dockerfile, so pip does not
-        # fetch the CUDA wheel.
-        run: |
-          python -m pip install --upgrade pip
-          pip install --index-url https://download.pytorch.org/whl/cpu torch
-          pip install -r requirements.txt pytest
-      - name: pytest
-        run: python -m pytest tests -q
+          if [ -n "$DEPLOY_HOST" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Deploy not configured::Tests run, nothing is deployed. Set the DEPLOY_HOST variable to deploy; see deployment/README-github-actions.md."
+          fi
+          echo "### Plan" >> "$GITHUB_STEP_SUMMARY"
+          echo "Commit \`$(git rev-parse --short HEAD)\` — inference: **$inference**, app: **$app**, deploy configured: **$([ -n "$DEPLOY_HOST" ] && echo yes || echo no)**" >> "$GITHUB_STEP_SUMMARY"
 
-  test-backend:
-    needs: changes
-    if: needs.changes.outputs.app == 'true'
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: explainable-platform-service
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: npm
-          cache-dependency-path: explainable-platform-service/package-lock.json
-      - run: npm ci
-      - run: npx tsc --noEmit -p tsconfig.json
-      - run: npx jest --ci --no-watchman
+  ci:
+    name: CI
+    needs: plan
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.plan.outputs.sha }}
 
   deploy-inference:
-    needs: [changes, test-runtime]
-    if: needs.changes.outputs.inference == 'true'
+    name: Deploy Inference Service
+    needs: [plan, ci]
+    if: needs.plan.outputs.enabled == 'true' && needs.plan.outputs.inference == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: ${{ vars.DEPLOY_URL }}
     steps:
       - uses: actions/checkout@v4
-      - name: SSH key and host
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+      - name: SSH access
         env:
-          VM_HOST: ${{ secrets.VM_HOST }}
-          VM_USER: ${{ secrets.VM_USER }}
-          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
-          VM_KNOWN_HOSTS: ${{ secrets.VM_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          INFERENCE_IMAGE: ${{ vars.INFERENCE_IMAGE }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
         run: bash deployment/ci_ssh_setup.sh
-      - name: deploy_inference.sh
-        run: bash deployment/deploy_inference.sh
+      - run: bash deployment/deploy_inference.sh
 
   deploy-app:
-    needs: [changes, test-backend, deploy-inference]
-    # Runs when the app changed and its tests passed, after the inference
-    # deploy succeeded or was not needed.
+    name: Deploy Control Plane + web app
+    needs: [plan, ci, deploy-inference]
+    # After the inference deploy succeeded or was not needed.
     if: >-
       always() &&
-      needs.changes.outputs.app == 'true' &&
-      needs.test-backend.result == 'success' &&
-      (needs.deploy-inference.result == 'success' || needs.deploy-inference.result == 'skipped')
+      needs.plan.outputs.enabled == 'true' &&
+      needs.plan.outputs.app == 'true' &&
+      needs.ci.result == 'success' &&
+      contains(fromJSON('["success", "skipped"]'), needs.deploy-inference.result)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: ${{ vars.DEPLOY_URL }}
     steps:
       - uses: actions/checkout@v4
-      - name: SSH key and host
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+      - name: SSH access
         env:
-          VM_HOST: ${{ secrets.VM_HOST }}
-          VM_USER: ${{ secrets.VM_USER }}
-          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
-          VM_KNOWN_HOSTS: ${{ secrets.VM_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          INFERENCE_IMAGE: ${{ vars.INFERENCE_IMAGE }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
         run: bash deployment/ci_ssh_setup.sh
-      - name: deploy_all.sh
-        run: bash deployment/deploy_all.sh
+      - run: bash deployment/deploy_all.sh

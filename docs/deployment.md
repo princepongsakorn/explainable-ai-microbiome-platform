@@ -164,6 +164,8 @@ VM_SSH=<user>@<app-vm-host> bash deployment/deploy_all.sh         # API, nginx a
 
 The scripts assume the repository on the VM is at `/home/<user>/explainable-ai-microbiome-platform`. Set `VM_PROJECT_DIR` if it is elsewhere.
 
+GitHub Actions can run these scripts on every push to `main` instead, after the tests pass. To turn that on for your repository, follow [deployment/README-github-actions.md](../deployment/README-github-actions.md).
+
 ## 4. First model
 
 1. Open the web UI, sign up, and go to the Developer page. Generate an access token there. It is the password of your MLflow account, and the page shows it in full only once.

@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Deploy the inference service (Flask + SHAP) to VM #2.
 #
-# Use this whenever kserve-custom-runtime/ changes — e.g. the beeswarm/heatmap
-# italic fix. The inference service runs as a Docker container managed by the
+# Use this whenever kserve-custom-runtime/ changes. The inference service runs as a Docker container managed by the
 # systemd unit `inference.service`; that unit does `docker run <IMAGE>`, so a
 # code change only takes effect once the image is rebuilt and the service is
 # restarted.
@@ -27,8 +26,9 @@
 # Override the SSH target / image tag if they change:
 #   VM_SSH=<user>@<app-vm-host> IMAGE=myrepo/img:tag bash deploy_inference.sh
 #
-# Requires: ssh + rsync on the Mac, the matching SSH key loaded, and sudo
-# rights for the SSH user on the VM (for docker + systemctl).
+# Requires: ssh + rsync on the Mac, and sudo rights for the SSH user on the VM
+# (for docker + systemctl). GitHub Actions runs this same script; see
+# deployment/README-github-actions.md.
 
 set -euo pipefail
 
@@ -40,6 +40,10 @@ IMAGE="${IMAGE:-pongsakornpongsutiyakorn/kserve-shap-model:latest}"
 INFERENCE_PORT="${INFERENCE_PORT:-8080}"
 
 RUNTIME_DIR="${VM_PROJECT_DIR}/kserve-custom-runtime"
+# A terminal for sudo's password prompt when run by hand; none in CI, where the
+# sudoers rule makes sudo passwordless.
+SSH_TTY_FLAG=""
+if [ -t 0 ]; then SSH_TTY_FLAG="-t"; fi
 
 echo "==> Target VM : ${VM_SSH}"
 echo "==> Runtime   : ${RUNTIME_DIR}"
@@ -53,6 +57,7 @@ echo "==> [1/3] rsync kserve-custom-runtime to VM"
 rsync -avz --delete \
     --exclude '__pycache__' \
     --exclude '.DS_Store' \
+    --exclude '.pytest_cache' \
     "${MAC_REPO_DIR}/kserve-custom-runtime/" \
     "${VM_SSH}:${RUNTIME_DIR}/"
 echo
@@ -61,7 +66,7 @@ echo
 # Plain `docker build` (no --pull) so the cached torch / requirements layers
 # are reused — a code-only change then rebuilds just the final COPY layer.
 echo "==> [2/3] build image + restart inference.service on VM"
-ssh -t "${VM_SSH}" "
+ssh ${SSH_TTY_FLAG} "${VM_SSH}" "
     set -e
     cd '${RUNTIME_DIR}'
     echo '--- docker build ---'
@@ -79,7 +84,7 @@ echo
 # ---------- 3. Health check ----------
 # The unit loads the model + SHAP on startup, so allow a generous window.
 echo "==> [3/3] health check"
-ssh -t "${VM_SSH}" "
+ssh ${SSH_TTY_FLAG} "${VM_SSH}" "
     READY=0
     for i in \$(seq 1 40); do
         if curl -sf 'http://127.0.0.1:${INFERENCE_PORT}/v1/mlflow/tracking_uri' >/dev/null 2>&1; then
@@ -105,5 +110,4 @@ ssh -t "${VM_SSH}" "
 "
 
 echo
-echo "Done. The beeswarm/heatmap italic fix applies to plots generated from"
-echo "now on — re-generate an existing plot to see it on older predictions."
+echo "Done."
