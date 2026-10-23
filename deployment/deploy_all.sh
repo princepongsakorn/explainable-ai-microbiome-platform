@@ -31,8 +31,9 @@
 # Override the SSH target / paths if they change:
 #   VM_SSH=<user>@<app-vm-host> bash deploy_all.sh
 #
-# Requires: ssh + rsync on the Mac, the matching SSH key already loaded, and
-# sudo rights for the SSH user on the VM (for nginx + docker).
+# Requires: ssh + rsync on the Mac, and sudo rights for the SSH user on the VM
+# (for nginx + docker). GitHub Actions runs this same script; see
+# deployment/README-github-actions.md.
 
 set -euo pipefail
 
@@ -41,6 +42,10 @@ VM_HOST="${VM_SSH#*@}"
 VM_PROJECT_DIR="${VM_PROJECT_DIR:-/home/${VM_SSH%@*}/explainable-ai-microbiome-platform}"
 MAC_REPO_DIR="${MAC_REPO_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 COMPOSE_FILE="docker-compose.prod.yml"
+# A terminal for sudo's password prompt when run by hand; none in CI, where the
+# sudoers rule makes sudo passwordless.
+SSH_TTY_FLAG=""
+if [ -t 0 ]; then SSH_TTY_FLAG="-t"; fi
 
 echo "==> Target VM : ${VM_SSH}"
 echo "==> Remote dir: ${VM_PROJECT_DIR}"
@@ -86,7 +91,7 @@ echo
 
 # ---------- 4. Build + recreate backend ----------
 echo "==> [4/7] build + force-recreate backend on VM"
-ssh -t "${VM_SSH}" "
+ssh ${SSH_TTY_FLAG} "${VM_SSH}" "
     set -e
     cd '${VM_PROJECT_DIR}'
     sudo docker compose -f ${COMPOSE_FILE} build backend
@@ -102,7 +107,7 @@ echo
 # `nginx -t` first — set -e aborts the deploy if the config is invalid,
 # so a bad nginx.conf can never take down the running reverse proxy.
 echo "==> [5/7] apply nginx.conf + reload nginx"
-ssh -t "${VM_SSH}" '
+ssh ${SSH_TTY_FLAG} "${VM_SSH}" '
     set -e
     sudo cp /tmp/platform-nginx.conf /etc/nginx/sites-available/platform
     sudo nginx -t
@@ -113,7 +118,7 @@ echo
 
 # ---------- 6. Build + recreate frontend ----------
 echo "==> [6/7] build + force-recreate frontend on VM"
-ssh -t "${VM_SSH}" "
+ssh ${SSH_TTY_FLAG} "${VM_SSH}" "
     set -e
     cd '${VM_PROJECT_DIR}'
     sudo docker compose -f ${COMPOSE_FILE} build frontend
@@ -126,24 +131,34 @@ ssh -t "${VM_SSH}" "
 echo
 
 # ---------- 7. Health check ----------
-# Layers 1-4 are the original checks. Layer 5 confirms the SSE route is
-# wired end-to-end: a 401 is the SUCCESS case here — it means nginx routed
-# the request and JwtAuthGuard rejected the missing token (route exists,
-# backend up). A 404 means the route isn't registered; 502 means backend
-# is down; a hang means nginx is still buffering (proxy_buffering not off).
+# Any status below 500 means the layer answers; 000 means nothing listens. The
+# SSE check wants exactly 401: nginx routed the request and JwtAuthGuard turned
+# away the missing token. 404 means the route is not registered, 502 that the
+# backend is down, and a timeout that nginx is buffering the stream.
 echo "==> [7/7] health check"
-ssh -t "${VM_SSH}" '
-    echo "=== [1] backend direct        ==="; curl -sI  http://127.0.0.1:3000/api || true
-    echo
-    echo "=== [2] frontend direct       ==="; curl -sI  http://127.0.0.1:3001/    || true
-    echo
-    echo "=== [3] nginx -> frontend     ==="; curl -sI  http://127.0.0.1/         || true
-    echo
-    echo "=== [4] nginx -> backend      ==="; curl -sI  http://127.0.0.1/api      || true
-    echo
-    echo "=== [5] nginx -> SSE endpoint (expect HTTP 401) ==="
-    curl -s -o /dev/null -w "HTTP %{http_code}\n" --max-time 5 \
-        http://127.0.0.1/api/events/predictions/healthcheck || true
+ssh ${SSH_TTY_FLAG} "${VM_SSH}" '
+    code() { curl -s -o /dev/null -w "%{http_code}" --max-time 5 "$1"; }
+    # The backend can take a few seconds after the container starts.
+    for i in $(seq 1 20); do
+        c=$(code http://127.0.0.1:3000/api); [ "$c" != 000 ] && break; sleep 3
+    done
+    FAIL=0
+    check() {
+        c=$(code "$2")
+        if [ "$c" = 000 ] || [ "$c" -ge 500 ]; then ok="FAIL"; FAIL=1; else ok="ok"; fi
+        if [ -n "$3" ] && [ "$c" != "$3" ]; then ok="FAIL (expected $3)"; FAIL=1; fi
+        printf "%-28s HTTP %s  %s\n" "$1" "$c" "$ok"
+    }
+    check "[1] backend direct"     http://127.0.0.1:3000/api
+    check "[2] frontend direct"    http://127.0.0.1:3001/
+    check "[3] nginx -> frontend"  http://127.0.0.1/
+    check "[4] nginx -> backend"   http://127.0.0.1/api
+    check "[5] nginx -> SSE"       http://127.0.0.1/api/events/predictions/healthcheck 401
+    if [ $FAIL -ne 0 ]; then
+        echo
+        echo "--- backend logs (tail) ---"; sudo docker logs backend 2>&1 | tail -30
+        exit 1
+    fi
 '
 
 echo

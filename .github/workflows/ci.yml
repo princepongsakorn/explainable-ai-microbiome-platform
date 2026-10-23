@@ -1,0 +1,92 @@
+# Tests for every part of XAIServe.
+#
+# Runs on every pull request (forks included) and every push to a branch other
+# than main. Pushes to main run it through deploy.yml, which calls this file
+# and deploys only when it passes. Nothing here needs a secret.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches-ignore: [main]
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit to test; defaults to the commit that triggered the caller
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+# A newer push to a pull request makes its older run pointless. Other runs are
+# never cancelled: called from deploy.yml, a cancelled test would fail a deploy.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  inference-service:
+    name: Inference Service (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: kserve-custom-runtime
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: kserve-custom-runtime/requirements.txt
+      - name: Install dependencies
+        # The CPU build of torch first, as in the Dockerfile, so pip does not
+        # fetch the CUDA wheel.
+        run: |
+          python -m pip install --upgrade pip
+          pip install --index-url https://download.pytorch.org/whl/cpu torch
+          pip install -r requirements.txt pytest
+      - run: python -m pytest tests -q
+
+  control-plane:
+    name: Control Plane (tsc + jest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: explainable-platform-service
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: explainable-platform-service/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit -p tsconfig.json
+      - run: npx jest --ci --no-watchman
+
+  web:
+    name: Web app (tsc)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: explainable-platform
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: explainable-platform/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit -p tsconfig.json
