@@ -22,6 +22,14 @@ When both changed, the Inference Service goes first. Nothing is deployed if any 
 
 Before you start, have the two VMs running as described in [docs/deployment.md](../docs/deployment.md) (steps 1 and 2), and the repository cloned on the application VM.
 
+**The quick way:** from your clone, after you have logged in to the VM over SSH once by hand:
+
+```bash
+bash deployment/setup_github_deploy.sh <user>@<app-vm-host> [http://<web-ui-address>]
+```
+
+It does steps 1 to 3 below. It asks for the VM password once and the sudo password once, and checks that the key and passwordless sudo work. The steps below describe the same thing done by hand.
+
 ### 1. A deploy key
 
 On your own machine, create a key that only GitHub Actions will use:
