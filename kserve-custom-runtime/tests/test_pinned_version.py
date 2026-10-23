@@ -161,7 +161,7 @@ def test_explain_values_reports_the_pinned_version(client, server, registry, mon
         base_values = np.array([0.5])
         explanation = type("E", (), {"data": np.array([[1.0]])})()
 
-    monkeypatch.setattr(server, "get_shap_value", lambda impl, X, aggregate_by=None: Shap())
+    monkeypatch.setattr(server, "get_shap_value", lambda impl, X, aggregate_by=None, model_uri=None: Shap())
     response = client.post("/v1/explain/values/m?version=1", json=BODY)
 
     assert response.status_code == 200
