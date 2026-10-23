@@ -152,6 +152,20 @@ echo "POSTGRES_PASSWORD=$NEW_PASSWORD" > .env && chmod 600 .env
 sudo deployment/setup_app.sh   # rewrites DATABASE_URL with the new password
 ```
 
+### Setting or rotating `JWT_SECRET`
+
+The API signs login tokens with `JWT_SECRET` from `explainable-platform-service/.env`. `setup_app.sh` generates it only when the line is missing or still holds the `replace-me` placeholder from `.env.example`, so it never replaces a secret that is already set. To set it by hand, or to rotate it after it may have leaked:
+
+```bash
+cd ~/explainable-ai-microbiome-platform
+NEW_SECRET=$(openssl rand -hex 32)
+sed -i "s|^JWT_SECRET=.*|JWT_SECRET=$NEW_SECRET|" explainable-platform-service/.env
+chmod 600 explainable-platform-service/.env
+sudo docker compose -f docker-compose.prod.yml up -d --force-recreate backend
+```
+
+Compose reads `env_file` only when it creates the container, so `docker restart backend` is not enough. Every token signed with the old secret stops working, so all users have to log in again. Do not commit `.env` or paste the secret anywhere.
+
 ## 3. Deploying changes
 
 Three scripts push local changes to the application VM over SSH and rsync. Each one takes the VM from `VM_SSH`, rebuilds what changed and runs a health check. None of them touches the `.env` files on the VM.

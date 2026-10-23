@@ -188,7 +188,7 @@ For a Kubernetes cluster with KServe, [`kserve-custom-runtime/deployment/`](kser
 
 ## Citation
 
-The paper describing XAIServe is in preparation and will be listed here once it is published. To cite the software itself, use its Zenodo DOI: [10.5281/zenodo.23346969](https://doi.org/10.5281/zenodo.23346969) for v1.0.0, or [10.5281/zenodo.23346968](https://doi.org/10.5281/zenodo.23346968) for every version. [`CITATION.cff`](CITATION.cff) has the same details, and GitHub offers them under "Cite this repository".
+The paper describing XAIServe is in preparation and will be listed here once it is published. To cite the software itself, use its Zenodo DOI [10.5281/zenodo.23346968](https://doi.org/10.5281/zenodo.23346968), which covers every version and resolves to the latest one. Each release also has a DOI of its own, listed on that Zenodo page. [`CITATION.cff`](CITATION.cff) has the same details, and GitHub offers them under "Cite this repository".
 
 ## License
 
