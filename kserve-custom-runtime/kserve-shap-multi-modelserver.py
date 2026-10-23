@@ -13,8 +13,11 @@ import base64
 import json
 import logging
 import os
+import multiprocessing
 import threading
 import time
+from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 from functools import lru_cache
 from io import BytesIO
 
@@ -340,6 +343,8 @@ class ModelLoader:
             self.model_name, self.requested_version
         )
         self.version = version
+        # What a SHAP worker process loads the same version by.
+        self.model_uri = f"models:/{self.model_name}/{version}"
         logger.info(f"Loaded ExplainableModel '{self.model_name}' (run {run_id})")
 
         try:
@@ -426,7 +431,82 @@ def _positive_class_base(base, n_rows, per_class_values):
     return base
 
 
-def get_shap_value(impl, X, aggregate_by: str | None = None):
+# ---------------------------------------------------------------------------
+# SHAP worker process
+# ---------------------------------------------------------------------------
+# TreeExplainer computes in C without releasing the GIL, so while one chunk is
+# being explained no other thread in this process runs. On the deployed 2-vCPU
+# VM that held every /v1/predict behind the explanation until it timed out, and
+# a predict for one sample waited as long as one for fifty. SHAP therefore runs
+# in a separate process, and everything else stays in this one.
+#
+# The worker is forked once, at startup, before Flask serves anything: forking
+# later would copy a process whose other threads may hold locks. Fork rather
+# than spawn also matters for the model cache. A spawned child re-imports this
+# file as `__mp_main__` instead of `__main__`, and joblib names its disk cache
+# after the module, so the child would miss the cache and download every model
+# from MLflow again. A forked child keeps the module and hits the cache.
+#
+# One worker: SHAP uses one core, and on a 2-vCPU machine that leaves the other
+# for predictions, the API and the Control Plane. Explanations queue for it.
+_shap_pool: ProcessPoolExecutor | None = None
+_shap_pool_lock = threading.Lock()
+
+
+class ShapWorkerUnavailable(RuntimeError):
+    """The SHAP worker process died; a new one was started for the next request."""
+
+
+def _shap_explain_in_worker(model_uri, X):
+    """Runs in the worker. Loads the model once per worker, from the disk cache."""
+    mlflow_url = os.getenv("MLFLOW_URL")
+    if mlflow_url:
+        # Only needed when the disk cache misses and the artifact is fetched.
+        mlflow.set_tracking_uri(mlflow_url)
+    with _single_flight(f"load:{model_uri}"):
+        _loaded, impl = _load_explainable_cached(model_uri)
+    return impl.shap_explain(X)
+
+
+def start_shap_worker():
+    """Fork the SHAP worker. Call before serving, while this process has one thread."""
+    global _shap_pool
+    pool = ProcessPoolExecutor(
+        max_workers=1, mp_context=multiprocessing.get_context("fork")
+    )
+    # A pool creates its process on the first submit; make that happen now.
+    pool.submit(int).result()
+    _shap_pool = pool
+    logger.info("SHAP worker process started")
+
+
+def _restart_shap_worker(broken):
+    """Replace a dead worker. This forks a running process, the one case the
+    startup rule above cannot avoid; the alternative is no explanations at all."""
+    global _shap_pool
+    with _shap_pool_lock:
+        if _shap_pool is not broken:
+            return  # another request already replaced it
+        broken.shutdown(wait=False, cancel_futures=True)
+        logger.error("SHAP worker process died; starting a new one")
+        start_shap_worker()
+
+
+def _shap_explain(impl, X, model_uri):
+    """``impl.shap_explain(X)``, in the worker process when there is one."""
+    pool = _shap_pool
+    if pool is None or model_uri is None:
+        return impl.shap_explain(X)
+    try:
+        return pool.submit(_shap_explain_in_worker, model_uri, X).result()
+    except BrokenProcessPool as e:
+        _restart_shap_worker(pool)
+        raise ShapWorkerUnavailable(
+            "The SHAP worker process stopped while explaining; try again."
+        ) from e
+
+
+def get_shap_value(impl, X, aggregate_by: str | None = None, model_uri=None):
     """Call ``impl.shap_explain(X)`` and reshape into the legacy
     ``ShapValueObject`` so the plotting helpers can stay unchanged.
 
@@ -434,8 +514,11 @@ def get_shap_value(impl, X, aggregate_by: str | None = None):
     single per-genus attribution before plotting — recommended for the
     GCN-backed model, where per-species SHAP looks diffuse because the
     GCN aggregates information across the bacterial graph internally.
+
+    With ``model_uri`` the values are computed in the SHAP worker process, which
+    loads that version itself; ``impl`` is then used only without a worker.
     """
-    out = impl.shap_explain(X)
+    out = _shap_explain(impl, X, model_uri)
     values = out["values"]
     base = out["base_values"]
     data = out["data"]
@@ -778,6 +861,7 @@ def _load_model_or_error(model_name):
         loaded, impl, input_columns = loader.load()
         # Read back by explain_values, so a payload names the version behind it.
         g.model_version = getattr(loader, "version", None)
+        g.model_uri = getattr(loader, "model_uri", None)
         return loaded, impl, input_columns, None
     except (NoProductionVersionError, ModelVersionNotFoundError) as e:
         # Only a registry answer is a 404. Any other ValueError while loading —
@@ -855,7 +939,9 @@ def explain_values(model_name):
 
     try:
         aggregate_by = request.args.get("aggregate_by")
-        shap_object = get_shap_value(impl, X=input_data, aggregate_by=aggregate_by)
+        shap_object = get_shap_value(
+            impl, X=input_data, aggregate_by=aggregate_by, model_uri=g.get("model_uri")
+        )
 
         payload = build_payload(
             values=shap_object.shap_df.values,
@@ -867,6 +953,9 @@ def explain_values(model_name):
             model_version=g.get("model_version"),
         )
         return jsonify(payload)
+    except ShapWorkerUnavailable as e:
+        logger.error("explain_values: %s", e)
+        return jsonify({"error": str(e)}), 503
     except PayloadError as e:
         # The caller sent something transformer() could not coerce to a number.
         # Narrowly typed on purpose: a bare ValueError here would also catch
@@ -889,9 +978,14 @@ def explain_beeswarm(model_name):
 
     try:
         aggregate_by = request.args.get("aggregate_by")
-        shap_object = get_shap_value(impl, X=input_data, aggregate_by=aggregate_by)
+        shap_object = get_shap_value(
+            impl, X=input_data, aggregate_by=aggregate_by, model_uri=g.get("model_uri")
+        )
         beeswarm = get_beeswarm(shap_object.explanation)
         return jsonify({"explain": beeswarm})
+    except ShapWorkerUnavailable as e:
+        logger.error("explain_beeswarm: %s", e)
+        return jsonify({"error": str(e)}), 503
     except Exception as e:
         logger.exception("explain_beeswarm failed")
         return jsonify({"error": str(e)}), 500
@@ -905,9 +999,14 @@ def explain_heatmap(model_name):
 
     try:
         aggregate_by = request.args.get("aggregate_by")
-        shap_object = get_shap_value(impl, X=input_data, aggregate_by=aggregate_by)
+        shap_object = get_shap_value(
+            impl, X=input_data, aggregate_by=aggregate_by, model_uri=g.get("model_uri")
+        )
         heatmap = get_heatmap(shap_object.explanation)
         return jsonify({"explain": heatmap})
+    except ShapWorkerUnavailable as e:
+        logger.error("explain_heatmap: %s", e)
+        return jsonify({"error": str(e)}), 503
     except Exception as e:
         logger.exception("explain_heatmap failed")
         return jsonify({"error": str(e)}), 500
@@ -924,7 +1023,9 @@ def explain_waterfall(model_name):
             return jsonify({"error": "Waterfall explanation requires exactly one row of input"}), 400
 
         aggregate_by = request.args.get("aggregate_by")
-        shap_object = get_shap_value(impl, X=input_data, aggregate_by=aggregate_by)
+        shap_object = get_shap_value(
+            impl, X=input_data, aggregate_by=aggregate_by, model_uri=g.get("model_uri")
+        )
         explain = [
             {
                 "id": idx,
@@ -935,6 +1036,9 @@ def explain_waterfall(model_name):
             for idx in input_data.index
         ]
         return jsonify({"explain": explain})
+    except ShapWorkerUnavailable as e:
+        logger.error("explain_waterfall: %s", e)
+        return jsonify({"error": str(e)}), 503
     except Exception as e:
         logger.exception("explain_waterfall failed")
         return jsonify({"error": str(e)}), 500
@@ -1304,4 +1408,6 @@ def get_mlflow_user(username):
 
 
 if __name__ == "__main__":
+    if os.getenv("SHAP_WORKER_PROCESS", "1") != "0":
+        start_shap_worker()
     app.run(host="0.0.0.0", port=8080)
