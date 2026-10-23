@@ -5,7 +5,7 @@ Measured on 2026-10-23 (Asia/Bangkok) against the Google Cloud deployment. This 
 - **The Control Plane predicts records in chunks of 50** instead of one request per record (PR #9).
 - **The Inference Service computes SHAP in a separate worker process** (PR #10).
 
-Setup is the same: one virtual user and five iterations run one after another. This measures response time, not load or scalability. Hardware, software and network path are in [environment.md](environment.md).
+Setup is the same: one virtual user and five iterations run one after another. This measures response time, not load or scalability. Both the end-to-end and the direct measurement were run. Hardware, software and network path are in [environment.md](environment.md).
 
 ## End to end through the Control Plane
 
@@ -52,12 +52,30 @@ Run 1 started on a freshly restarted Inference Service: the model had not been l
 
 - **One request per record.** On 2026-10-14 the Control Plane sent one `/v1/predict` per Sample, and each request cost about 1.4 s whatever its size. 331 × 1.41 s is most of the 542 s measured. PR #9 sends records in chunks of 50, so 7 requests instead of 331.
 - **SHAP blocked predictions.** With chunking alone, a rerun on 2026-10-15 timed out 300 of 331 records at the Control Plane's 120 s limit; those results are not used. SHAP's TreeExplainer computes in C without releasing Python's global interpreter lock, so while a 50-Sample chunk was being explained (about 15 s on this VM) no other request in the Inference Service could run. PR #10 moves SHAP to a separate worker process, forked at startup. Predictions now run while an explanation is being computed. The API and the deployment are unchanged.
-- **Explanation is a little faster** because it no longer shares the Inference Service process with 331 prediction requests.
+- **Explanation is about 12 % faster**, both end to end and when the Inference Service is called directly with no prediction running. So the gain does not come from removing competing prediction requests. The SHAP computation itself is unchanged; the cause was not isolated.
 - **Memory cost** of the worker process: after the runs, the Inference Service's main process held 474 MB and the SHAP worker 353 MB (RSS). The VM used 1.9 of 5.9 GB in total.
 
-## Not repeated
+## Inference Service called directly
 
-The direct Inference Service measurement (`inference_direct.js`) was not run this time. The 2026-10-14 figures (`/v1/predict` of 331 Samples in one request: 2.22 s; `/v1/explain/values` in 7 chunks: 105.60 s) were taken on the earlier runtime.
+`k6/scripts/inference_direct.js`, through an SSH tunnel to the VM's `127.0.0.1:8080`, so the Control Plane, database and queue are not involved. Every call pins `?version=1`. The schema check before timing passed: 865 features in the CSV and in the model, none missing or extra.
+
+| Measure | Mean (s) | Median (s) | Min (s) | Max (s) | Failed runs |
+|---|---|---|---|---|---|
+| `/v1/predict`, all 331 Samples in one request | 2.37 | 2.18 | 2.00 | 3.39 | 0 / 5 |
+| `/v1/explain/values`, 331 Samples as 7 chunks in sequence | 92.59 | 93.15 | 91.34 | 93.57 | 0 / 5 |
+| one 50-Sample explain chunk (30 full chunks) | 13.88 | 13.83 | 12.84 | 14.88 | 0 |
+
+The last chunk of 31 Samples took 9.0–10.0 s. `http_req_failed` was 0 of 41.
+
+| Run | Predict 331 | Explain 7 chunks | Each chunk (50, 50, 50, 50, 50, 50, 31) |
+|---|---|---|---|
+| 1 (cold) | 3.39 | 91.34 | 14.5, 13.6, 13.6, 13.5, 13.2, 14.0, 9.0 |
+| 2 | 2.18 | 93.53 | 13.9, 13.9, 13.7, 13.6, 13.6, 14.9, 10.0 |
+| 3 | 2.24 | 93.57 | 14.7, 14.5, 14.0, 13.9, 13.6, 13.8, 9.0 |
+| 4 | 2.00 | 93.15 | 14.2, 14.1, 13.8, 14.0, 13.7, 14.0, 9.4 |
+| 5 | 2.01 | 91.36 | 13.9, 13.8, 13.6, 14.3, 12.8, 13.7, 9.2 |
+
+Explaining directly takes 92.6 s, against 94.7 s through the whole platform. As on 2026-10-14, the platform (upload, queue, gzip, storage) adds about 2 s to the SHAP computation. On 2026-10-14 the direct figures were 2.22 s for predict and 105.60 s for explain (15.79 s per chunk).
 
 ## Notes
 
@@ -67,14 +85,17 @@ The direct Inference Service measurement (`inference_direct.js`) was not run thi
 ## How it was run
 
 ```bash
+ssh -f -N -o ExitOnForwardFailure=yes -L 18080:127.0.0.1:8080 <user>@<app-vm-host>
 ENV_FILE=~/.xaiserve-k6.env bash k6/scripts/run.sh e2e_prediction 2026-10-23-crc-rynazal-331x865-shap-worker
+ENV_FILE=~/.xaiserve-k6.env bash k6/scripts/run.sh inference_direct 2026-10-23-crc-rynazal-331x865-shap-worker
 python3 k6/scripts/summarize.py k6/results/2026-10-23-crc-rynazal-331x865-shap-worker/e2e_prediction-*.stdout.log
+python3 k6/scripts/summarize.py k6/results/2026-10-23-crc-rynazal-331x865-shap-worker/inference_direct-*.stdout.log
 ```
 
-`ENV_FILE` sets `BASE_URL`, `K6_USERNAME` and `K6_PASSWORD`. It lives outside the repository.
+`ENV_FILE` sets `BASE_URL`, `K6_USERNAME`, `K6_PASSWORD` and `INFERENCE_URL` (here `http://127.0.0.1:18080`). It lives outside the repository.
 
 ## Files
 
-- `e2e_prediction-*.stdout.log`: k6 output, one `K6RUN` line per iteration
-- `e2e_prediction-*.summary.json`: k6 `--summary-export`, with the login token redacted
+- `e2e_prediction-*.stdout.log`, `inference_direct-*.stdout.log`: k6 output, one `K6RUN` line per iteration (the direct log also has the `K6SCHEMA` check)
+- `*.summary.json`: k6 `--summary-export`, with the login token redacted
 - `environment.md`: VM specs, software versions, model and data

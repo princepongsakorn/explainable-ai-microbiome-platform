@@ -41,4 +41,5 @@ Specs not collected: no SSH access to this VM at the time of measurement.
 | k6 | v1.0.0 (go1.24.2, darwin/arm64) |
 | Host | The owner's laptop (Apple M1, macOS 14.6.1), outside Google Cloud |
 | End-to-end path | laptop → public internet → nginx (HTTP, port 80) on the application VM → Control Plane |
+| Direct path | laptop → SSH tunnel → Inference Service on the VM's `127.0.0.1:8080` |
 | Users | 1 virtual user, 5 iterations run one after another per measurement |
