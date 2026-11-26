@@ -18,11 +18,11 @@ RUN apt-get update && apt-get install -y \
 # (~2 GB). Doing this as a separate layer also keeps the cache warm across
 # changes to requirements.txt.
 RUN python -m pip install --upgrade pip \
- && pip install --index-url https://download.pytorch.org/whl/cpu torch
+ && pip install --index-url https://download.pytorch.org/whl/cpu torch==2.12.0
 
 # Install the remaining production dependencies.
-COPY requirements.txt ./
-RUN pip install -r ./requirements.txt
+COPY requirements.txt constraints.txt ./
+RUN pip install -r ./requirements.txt -c ./constraints.txt
 
 # Copy local code to container image
 COPY kserve-shap-multi-modelserver.py explain_payload.py ./
